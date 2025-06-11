@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+env/
+venv/
+ENV/
+.VENV/
+
+# Distribution / packaging
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Logs and databases
+*.log
+*.sqlite3
+
+
+# IDE-specific files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Python testing files
+.pytest_cache/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py[cod]
+.cache/
+
+# Vercel
+.vercel/
+.vercel

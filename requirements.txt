@@ -1,0 +1,14 @@
+fastapi[standard]
+uvicorn
+pymongo
+mongoengine
+pydantic
+mangum
+python-dotenv
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2        
+pyjwt
+requests
+python-jose[cryptography]
+Pillow>=9.0.0
+starlette

@@ -1,0 +1,125 @@
+
+from fastapi import HTTPException, status, Depends, Request
+from jose import JWTError, jwt
+from core.config import SECRET_KEY
+from pydantic import BaseModel
+from datetime import datetime, timedelta
+import os
+import requests
+from dotenv import load_dotenv
+from fastapi.security import OAuth2PasswordBearer
+from passlib.context import CryptContext
+from typing import Annotated
+from mongoengine.queryset.visitor import Q
+from modules.user.model import UserDocument
+
+load_dotenv()
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/request_authentication")
+
+class AuthenticationService(object):
+    
+    def __init__(self) -> None:
+        self.SECRET_KEY = SECRET_KEY
+        self.ALGORITHM = "HS256"
+        self.ACCESS_TOKEN_EXPIRE_MINUTES = 300
+        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        
+    
+    def verify_password(self, plain_password, hashed_password):
+        """
+        Verifies a plain password against its hash.
+        Returns (is_valid: bool, error: str | None)
+        """
+        if not plain_password or not hashed_password:
+            return False, "Missing password or hash"
+
+        try:
+            result = self.pwd_context.verify(plain_password, hashed_password)
+            print(f"Password match: {result}")
+            return result, None
+        except Exception as e:
+            print(f"Error during password verification: {e}")
+            return False, "Invalid password format"
+
+    def get_password_hash(self,password):
+        return self.pwd_context.hash(password)
+
+    def get_user(self, username: str):
+        user = UserDocument.objects(username=username).first()
+        return user
+    
+    def get_user_by_id(self, id: str):
+        user = UserDocument.objects(id=id).first()
+        return user
+            
+    def authenticate_user(self, username: str, password: str):
+        user = self.get_user(username=username)
+
+        if not user:
+            return None, "Wrong credentials"
+        if user.is_deleted:
+            return None, "Your account has been disabled by Admins"
+        if not user.is_active:
+            return None, "Your account is not active please set your password"
+
+        is_valid, error_msg = self.verify_password(password, user.hashed_password)
+        
+        if not is_valid:
+            print("Authentication failed:", error_msg or "Invalid password")
+            return None, error_msg or "Wrong credentials"
+
+        return self.create_access_token(data={"sub": user.username}), "SUCCESS"
+
+    def create_access_token(self, data: dict):
+        to_encode = data.copy()
+        expire = datetime.utcnow() + timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES)
+        to_encode.update({"exp": expire})
+        encoded_jwt = jwt.encode(to_encode, self.SECRET_KEY, algorithm=self.ALGORITHM)
+        token = Token(access_token=encoded_jwt, token_type="bearer")
+        return token
+
+
+    async def verify_authentication(
+        self,
+        request: Request,
+        token: Annotated[str, Depends(oauth2_scheme)]
+    ):
+        # ✅ 1. Skip authentication for CORS preflight
+        if request.method == "OPTIONS":
+            return None  # Let the request pass
+
+        try:
+            payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            username: str = payload.get("sub")
+
+            if username is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="No username found in token",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+        except JWTError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="JWT Error",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user = self.get_user(username=username)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        return user.to_response_model()
+
+authentication_service = AuthenticationService()
