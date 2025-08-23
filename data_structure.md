@@ -16,8 +16,7 @@ This document defines the complete data structure for the BitGPT MLM platform ba
   "upline_id": "ObjectId (reference)",
   "wallet_address": "string (blockchain wallet)",
   "name": "string",
-  "email": "string",
-  "phone": "string",
+  "role": "enum: user|admin|shareholder",
   "status": "enum: active|inactive|blocked",
   "created_at": "DateTime",
   "updated_at": "DateTime"
@@ -471,12 +470,22 @@ This data structure supports all the complex MLM logic described in the BitGPT d
 ## 🌟 **Matrix Distribution (Total 100%)**
 ```
 🌟 স্পার্ক বোনাস: 8% → SparkCycle collection
- রয়েল ক্যাপ্টেন: 4% → IncomeEvent collection  
+🌟 রয়েল ক্যাপ্টেন: 4% → IncomeEvent collection  
 🌟 প্রেসিডেন্ট রিওয়ার্ড: 3% → IncomeEvent collection
- লিডারশিপ stipend: 5% → LeadershipStipend collection
- জ্যাকপট এন্ট্রি: 5% → JackpotFund collection
- পার্টনার ইনসেনটিভ: 10% → IncomeEvent collection
- লেভেল পেআউট: 60% → IncomeEvent collection (level_payout)
+🌟 শেয়ারহোল্ডার: 5% → IncomeEvent collection
+🌟 নিউকামার গ্রোথ সাপোর্ট: 20% → IncomeEvent collection
+🌟 মেন্টরশিপ বোনাস: 10% → IncomeEvent collection
+🌟 পার্টনার ইনসেনটিভ: 10% → IncomeEvent collection
+🌟 লেভেল পেআউট: 40% → IncomeEvent collection (level_payout)
+```
+
+## 🌍 **Global Matrix Distribution (Total 110%)**
+```
+🌟 লেভেল + পার্টনার ইনসেনটিভ: 30% + 10% = 40% → IncomeEvent collection
+🌟 প্রফিট: 30% → IncomeEvent collection
+🌟 রয়েল ক্যাপ্টেন বোনাস: 15% → IncomeEvent collection
+🌟 প্রেসিডেন্ট রিওয়ার্ড: 15% → IncomeEvent collection
+🌟 Triple Entry Reward: 5% → TripleEntryReward collection
 🌟 শেয়ারহোল্ডার: 5% → IncomeEvent collection
 ```
 
