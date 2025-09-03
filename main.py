@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from auth.router import auth_router
 from modules.user.router import user_router
 from modules.image.router import image_router
+from modules.tree.router import router as tree_router
 
 # DB connection
 from core.db import connect_to_db
@@ -42,6 +43,7 @@ connect_to_db()
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/user", tags=["User Management"])
 app.include_router(image_router, prefix="/image", tags=["Image"])
+app.include_router(tree_router, prefix="/tree", tags=["Tree Management"])
 
 @app.get("/")
 async def root():
