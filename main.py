@@ -8,6 +8,9 @@ from auth.router import auth_router
 from modules.user.router import user_router
 from modules.image.router import image_router
 
+# DB connection
+from core.db import connect_to_db
+
 # Import all models to ensure they are registered
 from modules.user import User, PartnerGraph
 from modules.slot import SlotCatalog, SlotActivation
@@ -17,7 +20,9 @@ from modules.income.bonus_fund import BonusFund, FundDistribution
 from modules.wallet import UserWallet, ReserveLedger, WalletLedger
 from modules.jackpot import JackpotTicket, JackpotFund
 from modules.spark import SparkCycle, TripleEntryReward
-from modules.global_ import GlobalPhaseState
+import importlib as _importlib
+_global_module = _importlib.import_module('modules.global')
+GlobalPhaseState = getattr(_global_module, 'GlobalPhaseState')
 from modules.qualification import Qualification
 from modules.blockchain import BlockchainEvent, SystemConfig
 
@@ -29,6 +34,9 @@ app = FastAPI(title="BitGPT MLM Platform", version="1.0.0")
 
 # Mount static files
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+# Connect to MongoDB
+connect_to_db()
 
 # Include routers
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])

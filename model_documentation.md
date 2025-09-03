@@ -302,7 +302,7 @@
 |---------|----------|-------------|-------------|
 | `uid` | StringField | User এর unique identifier | `"USER123456"` - System generated unique ID |
 | `refer_code` | StringField | User এর unique referral code | `"REF789"` - Referral code for inviting others |
-| `upline_id` | ObjectIdField | কোন user এর referral এ join করেছে | `ObjectId("507f1f77bcf86cd799439012")` - Sponsor/upline |
+| `refered_by` | ObjectIdField | কোন user এর referral এ join করেছে | `ObjectId("507f1f77bcf86cd799439012")` - Sponsor/upline |
 | `wallet_address` | StringField | User এর blockchain wallet address | `"0x742d35Cc6634C0532925a3b8D404e35b0C93D77E"` - USDT wallet |
 | `name` | StringField | User এর নাম | `"John Doe"` - User's full name |
 | `role` | StringField | User এর role (user/admin/shareholder) | `"user"` - Regular platform user |

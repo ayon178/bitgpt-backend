@@ -5,10 +5,12 @@ class User(Document):
     """Core user model for BitGPT platform"""
     uid = StringField(required=True, unique=True)
     refer_code = StringField(required=True, unique=True)
-    upline_id = ObjectIdField(required=True)
+    refered_by = ObjectIdField(required=True)
     wallet_address = StringField(required=True, unique=True)
     name = StringField(required=True)
     role = StringField(choices=['user', 'admin', 'shareholder'], default='user')
+    email = StringField(required=False)
+    password = StringField(required=False)
     status = StringField(choices=['active', 'inactive', 'blocked'], default='active')
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)
@@ -19,7 +21,7 @@ class User(Document):
             'uid',
             'refer_code', 
             'wallet_address',
-            'upline_id',
+            'refered_by',
             'role'
         ]
     }

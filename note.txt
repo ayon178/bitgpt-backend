@@ -1,0 +1,19 @@
+kon user koto tarikh koto amount paiche kon event theke destribution er somoy doc create hobe with new model
+
+jackpot entry te referer er id thakbe, j join koraiche user k
+JackpotTicket Model theke count bad jabe
+
+JackpotFund Model top seller hobe jara refferer r tader join korano user ticket kinche. jar refer kora user ra besi ticket kinche tarai basically top seller. eita db te rakhte hobe. top 10 jon
+
+newcomer_pool 1 week_id er vitor 7 din a thakle tara jackpot a entry korle tader theke 10 jon
+
+
+
+top seller r top buyer get api
+
+
+TripleEntryReward Model eikhane same din a 3 ta program a join hobe tara eligible_users
+
+user er login korte wallet address r admin and shareholder er jonno email/wallet and pass lagbe
+
+New commer fund every user er under a create hobe. every user er jonno 1 ta kore new commer fund hobe

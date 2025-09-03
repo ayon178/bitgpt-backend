@@ -1,7 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from utils.response import create_response
 from auth.service import authentication_service
-from modules.user.model import UserResponse
 from PIL import Image
 import os
 import uuid
@@ -9,6 +8,7 @@ from io import BytesIO
 from typing import Annotated
 
 router = APIRouter()
+image_router = router
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -16,7 +16,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/upload", response_model=dict)
 async def upload_image(
-    current_user: Annotated[UserResponse, Depends(authentication_service.verify_authentication)],
+    current_user: Annotated[dict, Depends(authentication_service.verify_authentication)],
     file: UploadFile = File(...),
 ):
     """

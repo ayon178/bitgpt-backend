@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from typing import Annotated
 from mongoengine.queryset.visitor import Q
-from modules.user.model import UserDocument
+from modules.user.model import User
 
 load_dotenv()
 
@@ -51,30 +51,40 @@ class AuthenticationService(object):
         return self.pwd_context.hash(password)
 
     def get_user(self, username: str):
-        user = UserDocument.objects(username=username).first()
+        # In this project, we use uid as the username subject
+        user = User.objects(uid=username).first()
         return user
     
     def get_user_by_id(self, id: str):
-        user = UserDocument.objects(id=id).first()
+        user = User.objects(id=id).first()
         return user
+
+    def get_user_by_wallet(self, wallet_address: str):
+        if not wallet_address:
+            return None
+        return User.objects(wallet_address=wallet_address).first()
+
+    def get_user_by_email(self, email: str):
+        if not email:
+            return None
+        return User.objects(email=email).first()
             
     def authenticate_user(self, username: str, password: str):
         user = self.get_user(username=username)
 
         if not user:
             return None, "Wrong credentials"
-        if user.is_deleted:
-            return None, "Your account has been disabled by Admins"
-        if not user.is_active:
+
+        # For this codebase, password may be absent
+        if not user.password:
             return None, "Your account is not active please set your password"
 
-        is_valid, error_msg = self.verify_password(password, user.hashed_password)
-        
+        # Verify hashed password
+        is_valid, error_msg = self.verify_password(password, user.password)
         if not is_valid:
-            print("Authentication failed:", error_msg or "Invalid password")
             return None, error_msg or "Wrong credentials"
 
-        return self.create_access_token(data={"sub": user.username}), "SUCCESS"
+        return self.create_access_token(data={"sub": user.uid}), "SUCCESS"
 
     def create_access_token(self, data: dict):
         to_encode = data.copy()
@@ -120,6 +130,80 @@ class AuthenticationService(object):
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        return user.to_response_model()
+        # Return minimal user info
+        return {
+            "_id": str(user.id),
+            "uid": user.uid,
+            "name": user.name,
+            "wallet_address": user.wallet_address,
+            "role": user.role,
+            "email": user.email,
+            "status": user.status,
+        }
+
+    def login_with_rules(self, wallet_address: str | None, email: str | None, password: str | None):
+        """
+        Login rules:
+        - role == 'user': wallet-only login (no password)
+        - role in ['admin','shareholder']: must provide password and (email or wallet)
+        Returns (result_dict, error_message)
+        result_dict contains { user: {...without password...}, token: Token }
+        """
+        user = None
+        # Prefer wallet lookup; fallback to email
+        if wallet_address:
+            user = self.get_user_by_wallet(wallet_address)
+        if not user and email:
+            user = self.get_user_by_email(email)
+
+        if not user:
+            return None, "User not found"
+
+        if user.role == 'user':
+            # Wallet must match if provided
+            if wallet_address and user.wallet_address != wallet_address:
+                return None, "Wallet mismatch"
+            token = self.create_access_token({"sub": user.uid, "user_id": str(user.id)} )
+            return {
+                "user": {
+                    "_id": str(user.id),
+                    "uid": user.uid,
+                    "name": user.name,
+                    "wallet_address": user.wallet_address,
+                    "role": user.role,
+                    "email": user.email,
+                    "status": user.status,
+                },
+                "token": {
+                    "access_token": token.access_token,
+                    "token_type": token.token_type,
+                }
+            }, None
+
+        # Admin/shareholder: require password
+        if user.role in ["admin", "shareholder"]:
+            if not password:
+                return None, "Password required"
+            is_valid, error_msg = self.verify_password(password, user.password)
+            if not is_valid:
+                return None, error_msg or "Wrong credentials"
+            token = self.create_access_token({"sub": user.uid, "user_id": str(user.id)} )
+            return {
+                "user": {
+                    "_id": str(user.id),
+                    "uid": user.uid,
+                    "name": user.name,
+                    "wallet_address": user.wallet_address,
+                    "role": user.role,
+                    "email": user.email,
+                    "status": user.status,
+                },
+                "token": {
+                    "access_token": token.access_token,
+                    "token_type": token.token_type,
+                }
+            }, None
+
+        return None, "Unsupported role"
 
 authentication_service = AuthenticationService()
