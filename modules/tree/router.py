@@ -3,8 +3,37 @@ from typing import Optional
 from ..tree.service import TreeService
 from ...auth.service import authentication_service
 from ..utils.response import ResponseModel
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/tree", tags=["Tree Management"])
+
+
+class CreateTreePlacementRequest(BaseModel):
+    user_id: str
+    referrer_id: str
+    program: str = 'binary'
+    slot_no: int = 1
+
+
+@router.post("/placement", response_model=ResponseModel)
+async def create_tree_placement(
+    request: CreateTreePlacementRequest,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """
+    Create tree placement with binary tree logic
+    """
+    try:
+        result = await TreeService.create_tree_placement(
+            user_id=request.user_id,
+            referrer_id=request.referrer_id,
+            program=request.program,
+            slot_no=request.slot_no
+        )
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{user_id}/binary", response_model=ResponseModel)

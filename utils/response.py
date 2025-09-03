@@ -2,6 +2,12 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from typing import Optional, Dict, Any
 
+class ResponseModel:
+    def __init__(self, success: bool, message: str, data: Any = None):
+        self.success = success
+        self.message = message
+        self.data = data
+
 def create_response(
     status: str,
     status_code: int,

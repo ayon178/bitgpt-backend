@@ -2,11 +2,247 @@ from typing import List, Dict, Any, Optional
 from bson import ObjectId
 from ..tree.model import TreePlacement
 from ..user.model import User
-from ..user.service import UserService
-from ..utils.response import ResponseModel
+from utils.response import ResponseModel
 
 
 class TreeService:
+    
+    @staticmethod
+    async def create_tree_placement(
+        user_id: str,
+        referrer_id: str,
+        program: str = 'binary',
+        slot_no: int = 1
+    ) -> ResponseModel:
+        """
+        Create tree placement with binary tree logic
+        Scenario 1: Direct referral - check if referrer has 2 positions filled
+        Scenario 2: Indirect referral - find lowest level available position
+        """
+        try:
+            user_object_id = ObjectId(user_id)
+            referrer_object_id = ObjectId(referrer_id)
+            
+            # Check if user already has placement in this program and slot
+            existing_placement = TreePlacement.objects(
+                user_id=user_object_id,
+                program=program,
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            if existing_placement:
+                return ResponseModel(
+                    success=False,
+                    message="User already has placement in this program and slot",
+                    data=None
+                )
+            
+            # Scenario 1: Direct referral placement
+            placement_result = await TreeService._handle_direct_referral_placement(
+                user_object_id, referrer_object_id, program, slot_no
+            )
+            
+            if placement_result:
+                return ResponseModel(
+                    success=True,
+                    message="Tree placement created successfully (direct referral)",
+                    data=placement_result
+                )
+            
+            # Scenario 2: Indirect referral placement (spillover)
+            placement_result = await TreeService._handle_indirect_referral_placement(
+                user_object_id, referrer_object_id, program, slot_no
+            )
+            
+            if placement_result:
+                return ResponseModel(
+                    success=True,
+                    message="Tree placement created successfully (indirect referral)",
+                    data=placement_result
+                )
+            
+            return ResponseModel(
+                success=False,
+                message="No available position found in the tree",
+                data=None
+            )
+            
+        except Exception as e:
+            print(f"Error creating tree placement: {e}")
+            return ResponseModel(
+                success=False,
+                message=f"Error creating tree placement: {str(e)}",
+                data=None
+            )
+    
+    @staticmethod
+    async def _handle_direct_referral_placement(
+        user_id: ObjectId,
+        referrer_id: ObjectId,
+        program: str,
+        slot_no: int
+    ) -> Optional[TreePlacement]:
+        """
+        Handle direct referral placement logic
+        Check if referrer has less than 2 positions filled
+        """
+        # Get referrer's existing placements in this program and slot
+        referrer_placements = TreePlacement.objects(
+            parent_id=referrer_id,
+            program=program,
+            slot_no=slot_no,
+            is_active=True
+        ).order_by('position')
+        
+        # Count existing children
+        left_child = referrer_placements.filter(position='left').first()
+        right_child = referrer_placements.filter(position='right').first()
+        
+        # Determine position
+        if not left_child:
+            # First position available - place on left
+            position = 'left'
+            level = await TreeService._calculate_level(referrer_id, program, slot_no) + 1
+        elif not right_child:
+            # Second position available - place on right
+            position = 'right'
+            level = await TreeService._calculate_level(referrer_id, program, slot_no) + 1
+        else:
+            # Both positions filled - cannot place directly under referrer
+            return None
+        
+        # Create placement
+        placement = TreePlacement(
+            user_id=user_id,
+            program=program,
+            parent_id=referrer_id,
+            position=position,
+            level=level,
+            slot_no=slot_no,
+            is_active=True
+        )
+        placement.save()
+        
+        return placement
+    
+    @staticmethod
+    async def _handle_indirect_referral_placement(
+        user_id: ObjectId,
+        referrer_id: ObjectId,
+        program: str,
+        slot_no: int
+    ) -> Optional[TreePlacement]:
+        """
+        Handle indirect referral placement logic (spillover)
+        Find lowest level available position
+        """
+        # Get all placements in this program and slot
+        all_placements = TreePlacement.objects(
+            program=program,
+            slot_no=slot_no,
+            is_active=True
+        ).order_by('level', 'position')
+        
+        # Find the lowest level
+        max_level = 0
+        if all_placements:
+            max_level = all_placements.aggregate([
+                {'$group': {'_id': None, 'max_level': {'$max': '$level'}}}
+            ]).next()['max_level']
+        
+        # Find available position at lowest level
+        for level in range(1, max_level + 2):  # +2 to include next level
+            level_placements = all_placements.filter(level=level)
+            
+            # Check first position (left)
+            left_position = level_placements.filter(position='left').first()
+            if not left_position:
+                # Find parent for this position
+                parent = await TreeService._find_parent_for_position(level, 'left', program, slot_no)
+                if parent:
+                    placement = TreePlacement(
+                        user_id=user_id,
+                        program=program,
+                        parent_id=parent,
+                        position='left',
+                        level=level,
+                        slot_no=slot_no,
+                        is_active=True
+                    )
+                    placement.save()
+                    return placement
+            
+            # Check last position (right)
+            right_position = level_placements.filter(position='right').first()
+            if not right_position:
+                # Find parent for this position
+                parent = await TreeService._find_parent_for_position(level, 'right', program, slot_no)
+                if parent:
+                    placement = TreePlacement(
+                        user_id=user_id,
+                        program=program,
+                        parent_id=parent,
+                        position='right',
+                        level=level,
+                        slot_no=slot_no,
+                        is_active=True
+                    )
+                    placement.save()
+                    return placement
+        
+        return None
+    
+    @staticmethod
+    async def _calculate_level(parent_id: ObjectId, program: str, slot_no: int) -> int:
+        """
+        Calculate level based on parent's level
+        """
+        parent_placement = TreePlacement.objects(
+            user_id=parent_id,
+            program=program,
+            slot_no=slot_no,
+            is_active=True
+        ).first()
+        
+        if parent_placement:
+            return parent_placement.level
+        return 1  # Default level if no parent found
+    
+    @staticmethod
+    async def _find_parent_for_position(level: int, position: str, program: str, slot_no: int) -> Optional[ObjectId]:
+        """
+        Find parent for a specific position at a given level
+        """
+        if level == 1:
+            # Root level - no parent needed
+            return None
+        
+        # Calculate parent level
+        parent_level = level - 1
+        
+        # Get all parents at parent level
+        parent_placements = TreePlacement.objects(
+            program=program,
+            slot_no=slot_no,
+            level=parent_level,
+            is_active=True
+        )
+        
+        # Find parent that doesn't have this position filled
+        for parent in parent_placements:
+            existing_child = TreePlacement.objects(
+                parent_id=parent.user_id,
+                program=program,
+                slot_no=slot_no,
+                position=position,
+                is_active=True
+            ).first()
+            
+            if not existing_child:
+                return parent.user_id
+        
+        return None
     
     @staticmethod
     async def get_tree_data(user_id: str, program: str = 'binary') -> ResponseModel:
