@@ -1,0 +1,1194 @@
+# BitGPT Project Documentation
+
+## Overview
+This document contains comprehensive details about the BitGPT project's earning programs and business logic, extracted from the project documentation images.
+
+---
+
+## 1. EARNING PROGRAMMES OVERVIEW
+
+### Introduction
+As a community building up platforms we strongly suggest everyone to bring at least 5 partners with global package to maximise your fund and team growth.
+
+### Available Earning Programs
+The platform offers 14 different earning programs organized in three rows:
+
+#### First Row (5 programs):
+- **Dual Tree Earning**
+- **Binary Partner Incentive**
+- **Leadership Stipend**
+- **Dream Matrix**
+- **Matrix Partner Incentive**
+
+#### Second Row (5 programs):
+- **New Commer Growth Support**
+- **MENTORSHIP BONUS**
+- **Spark Bonus**
+- **PHASE-1 AND PHASE-2**
+- **Global Partner Incentive**
+
+#### Third Row (4 programs):
+- **Royal captain Bonus**
+- **President Reward**
+- **TOP LEADER GIFT**
+- **Jackpot Programme**
+
+---
+
+## 2. BINARY PROGRAM OVERVIEW
+
+### Joining Requirement
+- **0.0066 BNB** will be needed to join this programme.
+
+### Membership Tiers and Costs (BNB)
+
+| Tier Name    | BNB Cost     |
+| :----------- | :----------- |
+| EXPLORER     | 0.0022 BNB   |
+| COTRIBUTOR   | 0.0044 BNB   |
+| SUBSCRIBER   | 0.0088 BNB   |
+| DREAMER      | 0.0176 BNB   |
+| PLANNER      | 0.0352 BNB   |
+| CHALLENGER   | 0.0704 BNB   |
+| ADVENTURER   | 0.1408 BNB   |
+| GAME-SHIFTER | 0.2816 BNB   |
+| ORGANIGER    | 0.5632 BNB   |
+| LEADER       | 1.1264 BNB   |
+| VANGURD      | 2.2528 BNB   |
+| CENTER       | 4.5056 BNB   |
+| CLIMAX       | 9.0112 BNB   |
+| ENTERNITY    | 18.0224 BNB  |
+| KING         | 36.0448 BNB  |
+| COMMENDER    | 72.0896 BNB  |
+
+### Binary Earning Chart
+**FROM BINARY, A PERSON CAN EARN ACCORDING TO THE CHART BELOW:**
+
+| SL.NO | SLOT NAME    | SLOT VALUE | LEVEL | MEMBER | TOTAL INCOME | UPGRADE COST | WALLET      |
+| :---- | :----------- | :--------- | :---- | :----- | :----------- | :----------- | :---------- |
+| 1     | EXPLORER     | 0.0022     | -     | -      | -            | -            | -           |
+| 2     | CONTRIBUTOR  | 0.0044     | 1     | 2      | -            | -            | -           |
+| 3     | SUBSCRIBER   | 0.0088     | 2     | 4      | 0.02288      | 0.0176       | 0.00528     |
+| 4     | DREAMER      | 0.0176     | 3     | 8      | 0.06688      | 0.0352       | 0.03168     |
+| 5     | PLANNER      | 0.0352     | 4     | 16     | 0.21824      | 0.0704       | 0.14784     |
+| 6     | CHALLENGER   | 0.0704     | 5     | 32     | 0.7744       | 0.1408       | 0.6336      |
+| 7     | ADVENTURER   | 0.1408     | 6     | 64     | 2.90048      | 0.2816       | 2.61888     |
+| 8     | GAME-SHIFTER | 0.2816     | 7     | 128    | 11.20768     | 0.5632       | 10.64448    |
+| 9     | ORGANIGER    | 0.5632     | 8     | 256    | 44.04224     | 1.1264       | 42.91584    |
+| 10    | LEADER       | 1.1264     | 9     | 512    | 174.592      | 2.2528       | 172.3392    |
+| 11    | VANGURD      | 2.2528     | 10    | 1024   | 695.21408    | 4.5056       | 690.70848   |
+| 12    | CENTER       | 4.5056     | 11    | 2048   | 2774.54848   | 9.0112       | 2765.53728  |
+| 13    | CLIMAX       | 9.0112     | 12    | 4096   | 11085.5782   | 18.0224      | 11067.5558  |
+| 14    | ENTERNITY    | 18.0224    | 13    | 8192   | 44317.0816   | 36.0448      | 44281.0368  |
+| 15    | KING         | 36.0448    | 14    | 16384  | 177217.864   | 72.0896      | 177145.774  |
+| 16    | COMMENDER    | 72.0896    | 15    | 32768  | 708669.603   | +139.656     | 708669.603  |
+
+### Binary Program Patterns
+- **SLOT VALUE**: Each slot value doubles from the previous one
+- **LEVEL**: Starts from 1 for CONTRIBUTOR, increments by 1
+- **MEMBER**: Follows 2^Level pattern (2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768)
+- **UPGRADE COST**: Generally equals the SLOT VALUE of the next tier
+- **WALLET**: Calculated as TOTAL INCOME minus UPGRADE COST
+
+---
+
+## 3. MATRIX PROGRAM OVERVIEW
+
+### Joining Requirement
+- **$11 WILL BE NEEDED TO JOIN THIS PROGRAMME**
+
+### Membership Tiers and Costs (USDT)
+
+#### First Row:
+- **STARTER**: 11 USDT
+- **BRONZE**: 33 USDT
+- **SILVER**: 99 USDT
+- **GOLD**: 297 USDT
+- **PLATINUM**: 891 USDT
+
+#### Second Row:
+- **DIAMOND**: 2673 USDT
+- **RUBY**: 8019 USDT
+- **EMERALD**: 24057 USDT
+- **SAPPHIRE**: 72171 USDT
+- **TOPAZ**: 216513 USDT
+
+#### Third Row:
+- **PEARL**: 649539 USDT
+- **AMETHYST**: 1948617 USDT
+- **OBSIDIAN**: 5845851 USDT
+- **TITANIUM**: 17537553 USDT
+- **STAR**: 52612659 USDT
+
+### Matrix Earning Chart
+**FROM MATRIX, A PERSON CAN EARN ACCORDING TO THE CHART BELOW:**
+
+| SL.NO | SLOT NAME | SLOT VALUE | LEVEL | MEMBER | TOTAL INCOME | UPGRADE COST | WALLET   |
+| :---- | :-------- | :--------- | :---- | :----- | :----------- | :----------- | :------- |
+| 1     | STARTER   | $11        | 1     | 3      | -            | -            | -        |
+| 2     | BRONZE    | $33        | 2     | 9      | $158.4       | $99          | $59.4    |
+| 3     | SILVER    | $99        | 3     | 27     | $1039.5      | $297         | $742.5   |
+| 4     | GOLD      | $297       | 4     | 81     | $7929.9      | $891         | $7038.9  |
+| 5     | PLATINUM  | $891       | 5     | 243    | $67092.3     | $2673        | $64419.3 |
+
+### Matrix Program Patterns
+- **SLOT VALUE**: Each tier costs 3x the previous tier
+- **LEVEL**: Increments by 1 for each tier
+- **MEMBER**: Follows 3^Level pattern (3, 9, 27, 81, 243)
+- **UPGRADE COST**: Generally equals the SLOT VALUE of the next tier
+- **WALLET**: Calculated as TOTAL INCOME minus UPGRADE COST
+
+---
+
+## 4. GLOBAL PROGRAM OVERVIEW
+
+### Joining Requirement
+- **$33 WILL BE NEEDED TO JOIN THIS PROGRAMME**
+
+### Program Structure
+The Global Program is organized into two phases:
+
+#### PHASE-1 Levels:
+- **FOUNDATION**: 30
+- **HORIZON**: 247
+- **PINNACLE**: 2047
+- **VERTEX**: 16984
+- **SUMMIT**: 86
+- **CATALYST**: 711
+- **MOMENTUM**: 5897
+- **ASCEND**: 48918
+
+#### PHASE-2 Levels:
+- **APEX**: 36
+- **PARADIGM**: 296
+- **PRIME**: 2457
+- **LEGACY**: 20381
+- **RADIANCE**: 103
+- **ODYSSEY**: 853
+- **CREST**: 7076
+- **EVEREST**: 58697
+
+### Global Earning Chart
+**FROM GLOBAL, A PERSON CAN EARN ACCORDING TO THE CHART BELOW:**
+
+| SL.NO | LEVEL NAME | SLOT NAME  | SLOT VALUE | LEVEL | MEMBER | TOTAL INCOME | UPGRADE COST | WALLET   |
+| :---- | :--------- | :--------- | :--------- | :---- | :----- | :----------- | :----------- | :------- |
+| 1     | PHASE-1    | FOUNDATION | 30         | 1     | 4      | 72           | 36           | 36       |
+| 2     | PHASE-2    | APEX       | 36         | 2     | 8      | 172          | 86           | 86       |
+| 3     | PHASE-1    | SUMMIT     | 86         | 3     | 4      | 206          | 103          | 103      |
+| 4     | PHASE-2    | RADIANCE   | 103        | 4     | 8      | 494          | 247          | 247      |
+| 5     | PHASE-1    | HORIZON    | 247        | 5     | 4      | 592          | 296          | 296      |
+| 6     | PHASE-2    | PARAMOUNT  | 296        | 6     | 8      | 1420         | 710          | 710      |
+| 7     | PHASE-1    | CATALYST   | 710        | 7     | 4      | 1704         | 852          | 852      |
+| 8     | PHASE-2    | ODYSSEY    | 852        | 8     | 8      | 4089         | 2044         | 2044     |
+| 9     | PHASE-1    | PINNACLE   | 2044       | 9     | 4      | 4905         | 2452         | 2452     |
+| 10    | PHASE-2    | PRIME      | 2452       | 10    | 8      | 11769        | 5884         | 5884     |
+| 11    | PHASE-1    | MOMENTUM   | 5884       | 11    | 4      | 14121        | 7060         | 7060     |
+| 12    | PHASE-2    | CREST      | 7060       | 12    | 8      | 33888        | 16944        | 16944    |
+| 13    | PHASE-1    | VERTEX     | 16944      | 13    | 4      | 40665        | 20332        | 20332    |
+| 14    | PHASE-2    | LEGACY     | 20332      | 14    | 8      | 97593        | 48796        | 48796    |
+| 15    | PHASE-1    | ASCEND     | 48796      | 15    | 4      | 117110       | 58555        | 58555    |
+| 16    | PHASE-2    | EVEREST    | 58555      | 16    | 8      | 281064       | 140532       | 140532   |
+
+### Global Program Summary
+- **TOTAL INCOME**: 609864
+- **UPGRADE COST**: -304929
+- **WALLET**: -304929
+
+### Global Program Patterns
+- **Alternating Phases**: Levels alternate between PHASE-1 and PHASE-2
+- **MEMBER Pattern**: PHASE-1 levels have 4 members, PHASE-2 levels have 8 members
+- **SLOT VALUE**: Increases progressively through levels
+- **UPGRADE COST**: Generally equals the SLOT VALUE of the next level
+- **WALLET**: Calculated as TOTAL INCOME minus UPGRADE COST
+
+---
+
+## 5. DEVELOPMENT REQUIREMENTS
+
+### Key Business Logic Points
+
+1. **User Creation Success**:
+   - When a user is successfully created, they should be added to the binary tree with 1 position
+   - This triggers the binary tree placement logic
+
+2. **User Join Process**:
+   - When a user joins, the first 2 slots of the binary program should become active
+   - This means activating EXPLORER and CONTRIBUTOR levels
+
+3. **Tree Placement Logic**:
+   - Direct referral placement (when referrer has available positions)
+   - Indirect referral placement (spillover when referrer's positions are full)
+
+4. **Program Integration**:
+   - Binary Program (BNB-based)
+   - Matrix Program (USDT-based)
+   - Global Program (USD-based)
+
+### Implementation Priority
+
+1. **Phase 1**: Binary Tree Placement System ✅ (Already implemented and tested)
+2. **Phase 2**: User Creation Integration with Binary Tree
+3. **Phase 3**: Slot Activation Logic (First 2 slots on user join)
+4. **Phase 4**: Matrix Program Implementation
+5. **Phase 5**: Global Program Implementation
+6. **Phase 6**: Earning Calculation and Distribution
+7. **Phase 7**: Multi-program Integration
+
+---
+
+## 6. NEXT STEPS
+
+### Immediate Actions Needed
+
+1. **Integrate User Creation with Binary Tree**:
+   - Modify user creation process to automatically create binary tree placement
+   - Ensure proper referrer assignment
+
+2. **Implement Slot Activation Logic**:
+   - When user joins, activate first 2 binary slots (EXPLORER and CONTRIBUTOR)
+   - Update user status and available positions
+
+3. **Create Program Models**:
+   - Binary Program Model
+   - Matrix Program Model
+   - Global Program Model
+
+4. **Implement Earning Calculations**:
+   - Binary earning calculations based on the chart
+   - Matrix earning calculations
+   - Global earning calculations
+
+### Technical Implementation
+
+1. **Database Models**:
+   - Extend existing TreePlacement model
+   - Create Program models for each earning program
+   - Create Earning models for tracking income
+
+2. **API Endpoints**:
+   - User creation with tree placement
+   - Slot activation endpoints
+   - Earning calculation endpoints
+   - Program status endpoints
+
+3. **Business Logic**:
+   - Tree placement algorithms
+   - Earning calculation algorithms
+   - Program progression logic
+
+---
+
+## 7. BITGPT RANK SYSTEM
+
+### Rank Overview
+BitGPT has 15 special ranks, made from the combination of Binary and Matrix slots. Every time you activate a slot, you reach a new rank — showing your growth and leadership.
+
+### 15 Special Ranks
+
+#### Row 1 (Ranks 1-5):
+1. **Bitron**
+2. **Cryzen**
+3. **Neura**
+4. **Glint**
+5. **Stellar**
+
+#### Row 2 (Ranks 6-10):
+6. **Ignis**
+7. **Quanta**
+8. **Lumix**
+9. **Arion**
+10. **Nexus**
+
+#### Row 3 (Ranks 11-15):
+11. **Fyre**
+12. **Axion**
+13. **Trion**
+14. **Spectra**
+15. **Omega**
+
+### Rank System Logic
+- Each rank is achieved by activating slots in Binary and Matrix programs
+- Ranks represent leadership and growth within the platform
+- Higher ranks indicate more active participation and team building
+
+---
+
+## 8. BINARY PARTNER INCENTIVE
+
+### Core Incentive System
+**IF A PERSON JOINS THE BINARY WITH 0.0066 BNB, THEIR UPLINE WILL RECEIVE A 10% COMMISSION FROM THE JOINING AND FROM EACH SLOT UPGRADE.**
+
+### Binary Tree Structure
+The system uses a binary tree structure where:
+- Each user can have 2 direct referrals (left and right positions)
+- Upline receives commissions from all downline activities
+- Spillover occurs when direct positions are filled
+
+### Commission Flow
+- **Joining Commission**: 10% of joining fee (0.0066 BNB)
+- **Upgrade Commission**: 10% of each slot upgrade
+- **Upline Benefits**: Receives commissions from all levels below
+
+---
+
+## 9. DUAL TREE EARNING
+
+### Level Income System
+**Here is the list of Level Incomes that a person will receive when they upgrade a slot in the Binary.**
+
+### Bonus Structure (From Level 2-16)
+**Every Slot Upgrade (Bonus)**
+
+| Level    | Percentage (%) |
+| :------- | :------------- |
+| Level 1  | 30%            |
+| Level 2-3| 10%            |
+| Level 4-10| 5%            |
+| Level 11-13| 3%           |
+| Level 14-16| 2%           |
+| **Total** | **=100%**     |
+
+### Dual Tree Logic
+- Level 1 receives the highest bonus (30%)
+- Bonuses decrease as levels increase
+- Total bonus distribution equals 100%
+- Encourages early participation and team building
+
+---
+
+## 10. AUTO UPGRADE SYSTEM
+
+### Core Auto Upgrade Rule
+**IN BITGPT, ALL UPGRADES WILL BE AUTOMATIC.**
+**THE EARNINGS FROM THE FIRST TWO PEOPLE AT EACH LEVEL WILL BE USED FOR THE NEXT SLOT UPGRADE.**
+
+### Auto Upgrade Mechanism
+- **Requirement**: User needs 2 partners to activate their ID
+- **Process**: Earnings from first 2 partners are used for next slot upgrade
+- **Result**: User automatically goes to next level (2) with profit
+
+### Auto Upgrade Flow
+1. User ("ME") gets 2 direct referrals
+2. First 2 partners generate earnings
+3. Earnings are automatically used for next slot upgrade
+4. User advances to next level with profit
+
+### Activation Condition
+**YOU MUST NEED 2 PARTNERS TO ACTIVATE YOUR ID AND YOU WILL GO NEXT LEVEL (2) WITH PROFIT!**
+
+---
+
+## 11. UPGRADE COMMISSION SYSTEM
+
+### Commission Distribution Rule
+**Whenever a partner upgrades to a specific slot, the upline at that exact level (corresponding to the slot number) will receive 30% upgrade commission. Rest of the 100% money is distributed 1-16 level.**
+
+### Example
+**If a partner upgrades to Slot 5, the 5th upline will receive 30% upgrade commission from that slot's value.**
+
+### Commission Flow Structure
+- **Direct Commission**: 30% goes to upline at corresponding level
+- **Distribution**: Remaining 70% distributed across levels 1-16
+- **Level Matching**: Slot number must match upline level for 30% commission
+
+### Upgrade Commission Logic
+- When downline upgrades Slot 1 → Immediate upline gets 30% commission
+- When downline upgrades Slot 2 → Immediate upline gets 30% commission
+- When user upgrades Slot 3 → 3rd upline gets 30% commission
+- When user upgrades Slot 4 → 4th upline gets 30% commission
+
+---
+
+## 12. BINARY MISSED PROFIT & LEVEL REWARDS
+
+### Missed Rewards Scenarios
+**MISSED REWARDS USUALLY OCCUR FOR TWO REASONS:**
+
+1. **Account Inactivity**: The account is inactive and does not have two personal partners
+2. **Level Advancement**: A member advances to a higher level than their sponsor
+
+### Missed Profit Handling
+**SUCH REWARDS ARE ACCUMULATED IN THE LEADERSHIP STIPEND AND DISTRIBUTED AMONG MEMBERS WHO ACHIEVE THE TARGETS.**
+
+### Missed Commission Example
+- **Scenario**: If you are on Level-4 and your team upgrades Slot-5 from Level-5
+- **Result**: You will not get a commission because your level is lower than the upgrade slot
+- **Handling**: Those missed profits go to the Leadership Stipend as reward
+
+### Leadership Stipend System
+- Missed profits are not lost
+- Accumulated in Leadership Stipend pool
+- Distributed to members who achieve targets
+- Rewards active and successful members
+
+---
+
+## 13. UPDATED DEVELOPMENT REQUIREMENTS
+
+### Critical Business Logic Points
+
+1. **User Creation Success**:
+   - When a user is successfully created, they should be added to the binary tree with 1 position
+   - This triggers the binary tree placement logic
+
+2. **User Join Process**:
+   - When a user joins, the first 2 slots of the binary program should become active
+   - User needs 2 partners to activate their ID
+   - Earnings from first 2 partners are used for auto-upgrade
+
+3. **Auto Upgrade System**:
+   - All upgrades are automatic
+   - First 2 partners' earnings fund next slot upgrade
+   - User advances to next level with profit
+
+4. **Commission Structure**:
+   - 10% commission on joining and slot upgrades
+   - 30% upgrade commission to corresponding level upline
+   - Remaining 70% distributed across levels 1-16
+
+5. **Rank System**:
+   - 15 special ranks (Bitron to Omega)
+   - Achieved by activating Binary and Matrix slots
+   - Represents leadership and growth
+
+6. **Missed Profit Handling**:
+   - Missed profits go to Leadership Stipend
+   - Distributed to members who achieve targets
+   - Prevents loss of commissions due to inactivity or level mismatches
+
+### Implementation Priority (Updated)
+
+1. **Phase 1**: Binary Tree Placement System ✅ (Already implemented and tested)
+2. **Phase 2**: User Creation Integration with Binary Tree
+3. **Phase 3**: Auto Upgrade System Implementation
+4. **Phase 4**: Commission Calculation and Distribution
+5. **Phase 5**: Rank System Implementation
+6. **Phase 6**: Missed Profit and Leadership Stipend System
+7. **Phase 7**: Matrix Program Implementation
+8. **Phase 8**: Global Program Implementation
+9. **Phase 9**: Multi-program Integration
+
+---
+
+## 14. TECHNICAL IMPLEMENTATION REQUIREMENTS
+
+### Database Models Needed
+
+1. **User Model** (Already exists)
+   - Add rank field
+   - Add activation status
+   - Add partner count tracking
+
+2. **BinaryTree Model** (Already exists)
+   - Extend with slot activation tracking
+   - Add upgrade history
+   - Add commission tracking
+
+3. **Commission Model** (New)
+   - Track commission types (joining, upgrade, missed)
+   - Store commission amounts and recipients
+   - Track commission status (pending, paid, missed)
+
+4. **Rank Model** (New)
+   - Define 15 ranks with requirements
+   - Track user rank progression
+   - Store rank benefits and privileges
+
+5. **LeadershipStipend Model** (New)
+   - Track missed profits
+   - Manage stipend distribution
+   - Track target achievements
+
+### API Endpoints Required
+
+1. **User Management**:
+   - `POST /users/create` - Create user with binary tree placement
+   - `POST /users/activate` - Activate user with 2 partners
+   - `GET /users/rank` - Get user rank information
+
+2. **Binary Tree Operations**:
+   - `POST /binary/place` - Place user in binary tree
+   - `POST /binary/upgrade` - Process slot upgrade
+   - `GET /binary/structure` - Get tree structure
+
+3. **Commission Management**:
+   - `POST /commissions/calculate` - Calculate commissions
+   - `POST /commissions/distribute` - Distribute commissions
+   - `GET /commissions/history` - Get commission history
+
+4. **Auto Upgrade System**:
+   - `POST /auto-upgrade/process` - Process auto upgrade
+   - `GET /auto-upgrade/status` - Get upgrade status
+
+5. **Rank System**:
+   - `POST /ranks/update` - Update user rank
+   - `GET /ranks/list` - Get all ranks
+   - `GET /ranks/requirements` - Get rank requirements
+
+### Business Logic Implementation
+
+1. **Auto Upgrade Logic**:
+   ```python
+   def process_auto_upgrade(user_id):
+       # Check if user has 2 active partners
+       # Calculate earnings from first 2 partners
+       # Determine next slot upgrade cost
+       # Process automatic upgrade
+       # Update user level and rank
+   ```
+
+2. **Commission Calculation**:
+   ```python
+   def calculate_commissions(upgrade_user_id, slot_number):
+       # Calculate 30% commission for corresponding level upline
+       # Calculate remaining 70% distribution across levels 1-16
+       # Handle missed profits
+       # Update commission records
+   ```
+
+3. **Rank Progression**:
+   ```python
+   def update_user_rank(user_id):
+       # Check activated slots in Binary and Matrix
+       # Determine current rank based on slot activations
+       # Update user rank
+       # Trigger rank-based benefits
+   ```
+
+---
+
+## 15. ROYAL CAPTAIN BONUS
+
+### Overview
+The Royal Captain Bonus is a special reward program for members who refer others with both Matrix and Global packages.
+
+### Bonus Structure
+**IF A PERSON JOINS WITH BOTH THE MATRIX AND GLOBAL PACKAGES AND REFERS 5 PEOPLE WHO ALSO JOIN WITH BOTH MATRIX AND GLOBAL, THEY WILL RECEIVE $200 FROM THE ROYAL CAPTAIN FUND.**
+
+**IF THE SAME PERSON REFERS ANOTHER 5 PEOPLE WITH BOTH MATRIX AND GLOBAL PACKAGES, THEY WILL RECEIVE ANOTHER $200.**
+
+**IN THIS WAY, THE SAME PERSON CAN CONTINUE EARNING BONUSES FOR REFERRING MEMBERS WITH BOTH MATRIX AND GLOBAL PACKAGES ACCORDING TO THE CHART BELOW:**
+
+### Royal Captain Bonus Chart
+
+| Directly Invited Partner | Global Team | Amount Of Dollar |
+| :---------------------- | :---------- | :-------------- |
+| 5                       | -           | $200            |
+| = (Maintaining 5)       | 10          | $200            |
+| = (Maintaining 5)       | 20          | $200            |
+| = (Maintaining 5)       | 30          | $200            |
+| = (Maintaining 5)       | 40          | $250            |
+| = (Maintaining 5)       | 50          | $250            |
+
+### Royal Captain Logic
+- Requires both Matrix and Global package participation
+- Must maintain 5 directly invited partners
+- Bonus increases with global team growth
+- Continuous earning potential
+
+---
+
+## 16. PRESIDENT REWARD
+
+### Overview
+The President Reward is a special bonus program for members who achieve specific milestones in direct invitations and global team size.
+
+### Qualification Criteria
+**If a person directly invites 30 people in both Global and Matrix, they will qualify for the President Reward and receive bonuses according to the chart below.**
+
+### President Reward Tiers
+
+| Tier | Directly Invited Partner | Global Team | Amount Of Dollar |
+| :--- | :---------------------- | :---------- | :-------------- |
+| 1    | 10                      | 80          | $500            |
+| 2    | -                       | 150         | $700            |
+| 3    | -                       | 200         | $700            |
+| 4    | -                       | 250         | $700            |
+| 5    | -                       | 300         | $700            |
+| 6    | 15                      | 400         | $800            |
+| 7    | -                       | 500         | $800            |
+| 8    | -                       | 600         | $800            |
+| 9    | -                       | 700         | $800            |
+| 10   | 20                      | 1000        | $1500           |
+| 11   | -                       | 1500        | $1500           |
+| 12   | -                       | 2000        | $1500           |
+| 13   | -                       | 2500        | $1500           |
+| 14   | -                       | 3000        | $2000           |
+| 15   | 30                      | 40000       | $3000           |
+
+### President Reward Logic
+- Requires 30 direct invitations in both Global and Matrix
+- Progressive bonus structure based on team size
+- Higher rewards for larger global teams
+- Tier-based achievement system
+
+---
+
+## 17. LEADERSHIP STIPEND
+
+### Overview
+The Leadership Stipend provides daily returns for members who upgrade to higher-level slots (10-16).
+
+### Stipend Rules
+**If a person upgrades to any slot between 10 and 16, they will receive double the value of that slot as a daily return. However, if someone upgrades to another slot before receiving the full double amount from the previous slot, they will start receiving double the value of the new slot as a daily return.**
+
+### Leadership Stipend Tiers
+
+| Tier Name  | Slot Value (BNB) |
+| :--------- | :--------------- |
+| LEADER     | 1.1264 BNB       |
+| VANGURD    | 2.2528 BNB       |
+| CENTER     | 4.5056 BNB       |
+| CLIMAX     | 9.0112 BNB       |
+| ENTERNITY  | 18.0224 BNB      |
+| KING       | 36.0448 BNB      |
+| COMMENDER  | 72.0896 BNB      |
+
+### Stipend Logic
+- Double slot value as daily return
+- Applies to slots 10-16 only
+- New slot upgrade resets the return calculation
+- Progressive daily income system
+
+---
+
+## 18. MATRIX PARTNER INCENTIVE
+
+### Overview
+The Matrix Partner Incentive provides commission structure for Matrix program participation.
+
+### Incentive Structure
+**IF A PERSON JOINS THE MATRIX WITH $11, THEIR UPLINE WILL RECEIVE A 10% COMMISSION FROM THE JOINING AND FROM EACH SLOT UPGRADE.**
+
+### Matrix System Features
+- **MATRIX HAS RECYCLE SYSTEM** - Special recycling mechanism
+- **3x Matrix Structure** - Each level has 3 members under each parent
+- **10% Commission** - On joining and slot upgrades
+- **Upline Benefits** - Receives commissions from all downline activities
+
+### Matrix Tree Structure
+- **Level 1**: 3 members directly under you
+- **Level 2**: 9 members (3 under each Level 1 member)
+- **Level 3**: 27 members (3 under each Level 2 member)
+- **Recycle System**: Special mechanism for matrix completion
+
+---
+
+## 19. DREAM MATRIX
+
+### Overview
+The Dream Matrix is a mandatory program with specific earning requirements and profit calculations.
+
+### Joining Requirements
+**A PERSON MUST JOIN THE MATRIX BY PURCHASING THE FIRST SLOT, AND TO START EARNING, THEY MUST HAVE 3 DIRECT PARTNERS AS A MANDATORY REQUIREMENT.**
+
+### Calculation Context
+**For illustration purposes, the matrix program calculation has been based solely on the 5th slot, with a total value of $800. This approach helps simplify the explanation of the process.**
+
+### Dream Matrix Profit Calculation
+
+| Level | Member | Percentage(%) | 800$ | Total-Profit |
+| :---- | :----- | :------------ | :--- | :----------- |
+| 1     | 3      | 10%           | $80  | $240         |
+| 2     | 9      | 10%           | $80  | $720         |
+| 3     | 27     | 15%           | $120 | $3240        |
+| 4     | 81     | 25%           | $200 | $16200       |
+| 5     | 243    | 40%           | $320 | $77760       |
+| **Total** | **363** | **100%** | **$800** | **$98160** |
+
+### Dream Matrix Logic
+- Mandatory 3 direct partners requirement
+- Progressive commission percentages
+- 3x matrix structure (3, 9, 27, 81, 243)
+- Total profit calculation based on slot value
+
+---
+
+## 20. MATRIX AUTO UPGRADE SYSTEM
+
+### Overview
+The Matrix Auto Upgrade System automatically uses earnings from specific members to fund next slot upgrades.
+
+### Auto Upgrade Rule
+**FROM LEVEL 1 TO LEVEL 15, THE 100% EARNINGS FROM THE MIDDLE 3 MEMBERS WILL BE USED FOR THE NEXT SLOT UPGRADE.**
+
+### Matrix Tree Structure
+- **YOU** are at the top of your personal matrix
+- **Level 1**: 3 members directly under you
+  - Left member
+  - **Upline Reserve** (middle)
+  - Right member
+- **Level 2**: 9 members (3 under each Level 1 member)
+  - **Middle 3 members** (one under each Level 1 member) contribute 100% earnings for auto-upgrade
+- **Level 3**: 27 members (3 under each Level 2 member)
+
+### Auto Upgrade Logic
+- 100% earnings from middle 3 members at each level
+- Automatic reinvestment for next slot upgrade
+- Applies from Level 1 to Level 15
+- Upline Reserve position for special handling
+
+---
+
+## 21. UPDATED IMPLEMENTATION PRIORITY
+
+### Phase-by-Phase Development Plan
+
+1. **Phase 1**: Binary Tree Placement System ✅ (Already implemented and tested)
+2. **Phase 2**: User Creation Integration with Binary Tree
+3. **Phase 3**: Binary Auto Upgrade System Implementation
+4. **Phase 4**: Commission Calculation and Distribution
+5. **Phase 5**: Rank System Implementation
+6. **Phase 6**: Matrix Program Implementation
+7. **Phase 7**: Matrix Auto Upgrade System
+8. **Phase 8**: Dream Matrix Implementation
+9. **Phase 9**: Global Program Implementation
+10. **Phase 10**: Royal Captain Bonus System
+11. **Phase 11**: President Reward System
+12. **Phase 12**: Leadership Stipend System
+13. **Phase 13**: Missed Profit and Leadership Stipend System
+14. **Phase 14**: Multi-program Integration
+15. **Phase 15**: Advanced Features and Optimization
+
+### Critical Business Logic Points (Updated)
+
+1. **User Creation Success**:
+   - When a user is successfully created, they should be added to the binary tree with 1 position
+   - This triggers the binary tree placement logic
+
+2. **User Join Process**:
+   - When a user joins, the first 2 slots of the binary program should become active
+   - User needs 2 partners to activate their ID
+   - Earnings from first 2 partners are used for auto-upgrade
+
+3. **Binary Auto Upgrade System**:
+   - All upgrades are automatic
+   - First 2 partners' earnings fund next slot upgrade
+   - User advances to next level with profit
+
+4. **Matrix Auto Upgrade System**:
+   - 100% earnings from middle 3 members fund next slot upgrade
+   - Applies from Level 1 to Level 15
+   - Upline Reserve position for special handling
+
+5. **Commission Structure**:
+   - 10% commission on joining and slot upgrades
+   - 30% upgrade commission to corresponding level upline
+   - Remaining 70% distributed across levels 1-16
+
+6. **Rank System**:
+   - 15 special ranks (Bitron to Omega)akhon
+   - Achieved by activating Binary and Matrix slots
+   - Represents leadership and growth
+
+7. **Special Bonus Programs**:
+   - Royal Captain Bonus for Matrix + Global referrals
+   - President Reward for 30 direct invitations
+   - Leadership Stipend for slots 10-16
+
+8. **Missed Profit Handling**:
+   - Missed profits go to Leadership Stipend
+   - Distributed to members who achieve targets
+   - Prevents loss of commissions due to inactivity or level mismatches
+
+---
+
+## 22. SPARK BONUS
+
+### Overview
+The Spark Bonus is a special fund distribution system that provides rewards across different levels of the Matrix program.
+
+### Spark Bonus Fund Structure
+**20% OF THE SPARK BONUS FUND, WHICH IS MADE UP OF 8% BINARY AND MATRIX, IS ALLOCATED TO THE TRIPLE ENTRY REWARD, AND THE REMAINING 100% IS DISTRIBUTED ACROSS THE 1ST TO 15TH LEVELS OF THE MATRIX ACCORDING TO THE CHART BELOW**
+
+### Spark Bonus Distribution Chart
+
+| Level   | Percentage (%) |
+| :------ | :------------- |
+| 1       | 15%            |
+| 2-5     | 10%            |
+| 6       | 7%             |
+| 7-9     | 6%             |
+| 10-14   | 4%             |
+| **Total** | **= 100%**     |
+
+### Spark Bonus Logic
+- Fund composed of 8% from Binary and Matrix programs
+- 20% allocated to Triple Entry Reward
+- Remaining 100% distributed across Matrix levels 1-14
+- Progressive distribution with higher percentages for lower levels
+
+---
+
+## 23. NEW COMMER GROWTH SUPPORT
+
+### Overview
+This program is designed to boost non-working income for new members joining the Matrix system.
+
+### Key Benefits
+
+1. **Instant Bonus**:
+   - Upon joining Matrix, members receive an Instant Bonus from Newcomer Growth Support (NGS)
+   - This bonus can be cashed out instantly
+
+2. **Extra Earning Opportunities (Monthly)**:
+   - At the end of the month (30 days), members gain extra earning opportunities
+   - These opportunities are based on the activity of their Upline
+
+3. **Upline Rank Bonus (10%)**:
+   - When a member achieves the same rank as their Upline, they receive an additional 10% Bonus
+   - This bonus is paid directly from the Upline
+   - This benefit applies from the very first joining to every subsequent Slot Upgrade
+
+### Summary of Earning Journey
+- Instant Reward
+- Extra Income
+- Long-Term Support
+
+All these benefits are combined into one program to ensure an immediate and sustained earning journey.
+
+---
+
+## 24. MENTORSHIP BONUS
+
+### Overview
+The Mentorship Bonus is a Direct-of-Direct income program within the Matrix program, designed to maximize funds from partners invited by your direct referrals.
+
+### Bonus Structure
+For every person you directly invite, and from the people they directly invite, the Super Upline will receive a 10% commission from their joining fees and all their slot upgrades. This is considered Direct-of-Direct income.
+
+### Example of Mentorship Bonus
+1. **A** is in the Matrix program
+2. **A** directly invites **B**
+3. **B** directly invites **C, D, and E**
+
+**Result:**
+When **C, D, and E** join the Matrix and upgrade their slots, 10% from all those upgrades will go to **A** as the Super Upline.
+
+### Visual Representation
+```
+MENTOR (A)
+   ↓ (10% commission from Upline's direct referrals)
+UPLINE (B)
+   ↓ (10% commission from Direct of Direct Partners)
+DIRECT OF DIRECT PARTNERS (C, D, E)
+```
+
+---
+
+## 25. GLOBAL PARTNER INCENTIVE
+
+### Overview
+The Global Partner Incentive provides commission structure for Global program participation.
+
+### Incentive Structure
+**IF A PERSON JOINS THE GLOBAL WITH $33, THEIR UPLINE WILL RECEIVE A 10% COMMISSION FROM THE JOINING AND FROM EACH SLOT UPGRADE.**
+
+### Global Tree Structure
+- **Global Tree**: Shows progression from 4 people to 8 people
+- **Slot-2**: Represents the second slot in the global system
+- **10% Commission**: On joining and slot upgrades
+- **Upline Benefits**: Receives commissions from all downline activities
+
+### Global System Features
+- $33 joining fee
+- 10% commission structure
+- Tree-based progression system
+- Multiple slot levels
+
+---
+
+## 26. PHASE-1 AND PHASE-2 SYSTEM
+
+### Overview
+The Phase-1 and Phase-2 system is a global pool progression mechanism that automatically upgrades users through different phases and slots.
+
+### System Rules
+
+1. **Joining**: **WHEN A PERSON JOINS THE GLOBAL POOL WITH $33, THEY ARE PLACED IN SLOT 1 OF PHASE 1.**
+
+2. **Phase 1 to Phase 2 Upgrade**: **ONCE 4 PEOPLE ARE PLACED GLOBALLY UNDER THEM, THEIR SLOT IS AUTOMATICALLY UP-GRADED, AND THEY MOVE TO PHASE 2, OCCUPYING SLOT 1 THERE.**
+
+3. **Phase 2 to Phase 1 Re-entry**: **WHEN THEIR SLOT 1 IN PHASE 2 IS COMPLETED WITH 8 PEOPLE GLOBALLY UNDER THEM, THEY RE-ENTER PHASE 1 AND ARE PLACED IN SLOT 2.**
+
+4. **Continuation**: **THIS PROCESS CONTINUES, FOLLOWING THE DIAGRAM BELOW, UNTIL REACHING SLOT 16.**
+
+### Phase Progression Flow
+```
+YOU
+↓
+PHASE-1, SLOT-1 (4 people) → UPGRADE
+↓
+PHASE-2, SLOT-1 (8 people) → UPGRADE
+↓
+PHASE-1, SLOT-2 (4 people) → UPGRADE
+↓
+PHASE-2, SLOT-2 (8 people) → UPGRADE
+↓
+...continues until SLOT 16
+```
+
+### Phase System Logic
+- Phase 1: Requires 4 people globally under user
+- Phase 2: Requires 8 people globally under user
+- Automatic progression between phases
+- Re-entry system for continuous advancement
+- Continues up to Slot 16
+
+---
+
+## 27. TOP LEADER GIFT
+
+### Overview
+The Top Leader Gift program rewards individuals who achieve specific targets with valuable prizes.
+
+### Qualification Criteria
+**When a person achieves a specific target, he will be considered as a Top Leader and will receive the following rewards:**
+
+### Top Leader Gift Rewards
+
+| SL NO | Self Rank | Direct Partners Rank | Total Team | Reward |
+| :---- | :-------- | :------------------ | :--------- | :----- |
+| 01    | 06        | 5 DIRECT PARTNERS WITH 5 RANK | 300 | LAPTOP ($3000) |
+| 02    | 08        | 7 DIRECT PARTNERS WITH 6 RANK | 500 | PRIVATE CAR ($30000) |
+| 03    | 11        | 8 DIRECT PARTNERS WITH 10 RANK | 1000 | GLOBAL TOUR PACKAGE ($3000000) |
+| 04    | 13        | 9 DIRECT PARTNERS WITH 13 RANK | 2000 | BUSINESS INVESTMENT FUND ($50000000) |
+| 05    | 15        | 10 DIRECT PARTNERS WITH 14 RANK | 3000 | SUPER LUXURY APARTMENT ($150000000) |
+
+### Top Leader Gift Logic
+- Progressive reward system based on rank achievement
+- Requires specific number of direct partners with certain ranks
+- Total team size requirements
+- Valuable physical and financial rewards
+- Highest reward: $150,000,000 Super Luxury Apartment
+
+---
+
+## 28. JACKPOT PROGRAM OVERVIEW
+
+### Overview
+The Jackpot Program is a raffle draw system that provides opportunities to win millions of dollars.
+
+### Program Description
+**JACKPOT IS A RAFFLE DRAW SYSTEM. ANYONE CAN JOIN WITH JUST $2 AND GET THE CHANCE TO WIN MILLIONS OF DOLLARS.**
+
+### Jackpot Fund Structure
+
+- **ENTRY FEES**: $2
+- **OPEN POOL**: 50%
+- **TOP DIRECT PROMOTERS POOL**: 30%
+- **TOP BUYERS POOL**: 10%
+
+### Free Coupons System
+**NOTE- FREE COUPONS FOR BINARY SLOT UPGRADES**
+
+- **SLOT 5**: 1 FREE COUPON
+- **SLOT 6**: 2 FREE COUPON
+- **AND IT CONTINUES UP TO SLOT 16**
+
+### Jackpot Program Logic
+- Low entry fee ($2) for high reward potential
+- Multiple pool distribution system
+- Free coupons for binary slot upgrades
+- Progressive coupon system up to Slot 16
+- Raffle-based winning mechanism
+
+---
+
+## 29. COMPREHENSIVE IMPLEMENTATION ROADMAP
+
+### Complete Phase-by-Phase Development Plan
+
+1. **Phase 1**: Binary Tree Placement System ✅ (Already implemented and tested)
+2. **Phase 2**: User Creation Integration with Binary Tree
+3. **Phase 3**: Binary Auto Upgrade System Implementation
+4. **Phase 4**: Commission Calculation and Distribution
+5. **Phase 5**: Rank System Implementation
+6. **Phase 6**: Matrix Program Implementation
+7. **Phase 7**: Matrix Auto Upgrade System
+8. **Phase 8**: Dream Matrix Implementation
+9. **Phase 9**: Global Program Implementation
+10. **Phase 10**: Phase-1 and Phase-2 System
+11. **Phase 11**: Royal Captain Bonus System
+12. **Phase 12**: President Reward System
+13. **Phase 13**: Leadership Stipend System
+14. **Phase 14**: Spark Bonus System
+15. **Phase 15**: New Commer Growth Support
+16. **Phase 16**: Mentorship Bonus System
+17. **Phase 17**: Global Partner Incentive
+18. **Phase 18**: Top Leader Gift System
+19. **Phase 19**: Jackpot Program Implementation
+20. **Phase 20**: Missed Profit and Leadership Stipend System
+21. **Phase 21**: Multi-program Integration
+22. **Phase 22**: Advanced Features and Optimization
+
+### Critical Business Logic Points (Final Update)
+
+1. **User Creation Success**:
+   - When a user is successfully created, they should be added to the binary tree with 1 position
+   - This triggers the binary tree placement logic
+
+2. **User Join Process**:
+   - When a user joins, the first 2 slots of the binary program should become active
+   - User needs 2 partners to activate their ID
+   - Earnings from first 2 partners are used for auto-upgrade
+
+3. **Binary Auto Upgrade System**:
+   - All upgrades are automatic
+   - First 2 partners' earnings fund next slot upgrade
+   - User advances to next level with profit
+
+4. **Matrix Auto Upgrade System**:
+   - 100% earnings from middle 3 members fund next slot upgrade
+   - Applies from Level 1 to Level 15
+   - Upline Reserve position for special handling
+
+5. **Global Phase System**:
+   - Phase 1: 4 people globally under user
+   - Phase 2: 8 people globally under user
+   - Automatic progression between phases
+   - Re-entry system for continuous advancement
+
+6. **Commission Structure**:
+   - 10% commission on joining and slot upgrades
+   - 30% upgrade commission to corresponding level upline
+   - Remaining 70% distributed across levels 1-16
+
+7. **Rank System**:
+   - 15 special ranks (Bitron to Omega)
+   - Achieved by activating Binary and Matrix slots
+   - Represents leadership and growth
+
+8. **Special Bonus Programs**:
+   - Royal Captain Bonus for Matrix + Global referrals
+   - President Reward for 30 direct invitations
+   - Leadership Stipend for slots 10-16
+   - Spark Bonus distribution system
+   - New Commer Growth Support
+   - Mentorship Bonus (Direct-of-Direct income)
+   - Top Leader Gift rewards
+
+9. **Jackpot System**:
+   - $2 entry fee raffle system
+   - Multiple pool distribution
+   - Free coupons for binary slot upgrades
+
+10. **Missed Profit Handling**:
+    - Missed profits go to Leadership Stipend
+    - Distributed to members who achieve targets
+    - Prevents loss of commissions due to inactivity or level mismatches
+
+---
+
+## 30. OUR ROAD MAP
+
+### Overview
+The "OUR ROAD MAP" diagram illustrates the various interconnected features and programs that form the core of the project's ecosystem, centered around a digital platform (represented by a laptop icon).
+
+### Key Components and Programs
+
+The roadmap is structured around a central platform, with different functionalities branching out:
+
+#### Core Platform (Central Laptop Icon)
+- Represents the central digital hub or application that integrates all other features.
+
+#### Left Side Features:
+- **NFT & GAMING PROGRAM**: A program focused on Non-Fungible Tokens and gaming.
+- **E-COMMERCE PLATFORM**: An online platform for buying and selling goods or services.
+- **EXCHANGER**: A system for exchanging assets, likely cryptocurrencies.
+- **NFT & GAMING PLATFORM**: A dedicated platform for NFT and gaming activities.
+
+#### Top Side Features:
+- **SINGLE LEG PROGRAM**: A specific type of referral or earning program.
+- **AI TRADING**: Automated trading functionalities powered by Artificial Intelligence.
+
+#### Right Side Features:
+- **GLOBAL AUTOPOOL BONUS 2**: A global bonus pool system, likely the second iteration or a specific type of autopool.
+- **SOCIAL MEDIA & OTHERS APPS**: Integration with social media and other applications.
+- **STAKING & MINING**: Features related to cryptocurrency staking and mining.
+- **DAILY GAME EARNING**: Opportunities for users to earn through daily gaming activities.
+
+#### Bottom Side Features:
+- **WEB3.0 PROJECTS**: Initiatives or developments related to the decentralized web (Web3).
+- **STAKING & MINING**: (Duplicate entry, indicating its importance or presence in multiple contexts) Features related to cryptocurrency staking and mining.
+
+### Interconnectivity
+All listed components are shown as directly connected to the central laptop icon, indicating that they are integrated parts of the main platform.
+
+### Extended Implementation Roadmap
+
+Based on the complete roadmap, the implementation phases should be expanded to include:
+
+23. **Phase 23**: NFT & Gaming Program Implementation
+24. **Phase 24**: E-Commerce Platform Development
+25. **Phase 25**: Exchanger System Implementation
+26. **Phase 26**: Single Leg Program Development
+27. **Phase 27**: AI Trading System
+28. **Phase 28**: Global Autopool Bonus 2
+29. **Phase 29**: Social Media Integration
+30. **Phase 30**: Staking & Mining Features
+31. **Phase 31**: Daily Game Earning System
+32. **Phase 32**: Web3.0 Projects Integration
+33. **Phase 33**: Complete Platform Integration
+34. **Phase 34**: Advanced Features and Optimization
+
+---
+
+## 31. COMPLETE PROJECT SUMMARY
+
+### BitGPT Platform Overview
+BitGPT is a comprehensive multi-program earning platform that combines:
+
+#### Core Earning Programs:
+1. **Binary Program** (BNB-based) - 16 tiers with auto-upgrade system
+2. **Matrix Program** (USDT-based) - 3x matrix structure with recycle system
+3. **Global Program** (USD-based) - Phase-1 and Phase-2 progression system
+4. **Dream Matrix** - Mandatory program with progressive commissions
+
+#### Special Bonus Systems:
+5. **Royal Captain Bonus** - Matrix + Global referrals
+6. **President Reward** - 30 direct invitations achievement
+7. **Leadership Stipend** - Daily returns for slots 10-16
+8. **Spark Bonus** - Fund distribution across Matrix levels
+9. **New Commer Growth Support** - Instant bonuses for new members
+10. **Mentorship Bonus** - Direct-of-Direct income program
+11. **Top Leader Gift** - Progressive reward system
+12. **Jackpot Program** - $2 raffle system with free coupons
+
+#### Advanced Features:
+13. **Rank System** - 15 special ranks (Bitron to Omega)
+14. **Commission Structure** - 10% joining, 30% upgrade commissions
+15. **Auto Upgrade Systems** - Both Binary and Matrix
+16. **Missed Profit Handling** - Leadership Stipend distribution
+
+#### Extended Platform Features:
+17. **NFT & Gaming Program**
+18. **E-Commerce Platform**
+19. **Exchanger System**
+20. **Single Leg Program**
+21. **AI Trading**
+22. **Social Media Integration**
+23. **Staking & Mining**
+24. **Daily Game Earning**
+25. **Web3.0 Projects**
+
+### Technical Implementation Status
+- ✅ **Binary Tree Placement System** - Implemented and tested
+- 🔄 **User Creation Integration** - In progress
+- ⏳ **Auto Upgrade Systems** - Pending implementation
+- ⏳ **Commission Calculation** - Pending implementation
+- ⏳ **Matrix Program** - Pending implementation
+- ⏳ **Global Program** - Pending implementation
+- ⏳ **All Bonus Systems** - Pending implementation
+
+### Next Development Priority
+1. **Binary Auto Upgrade System** - Core business logic
+2. **User Creation Integration** - Essential for platform functionality
+3. **Commission Calculation** - Revenue distribution system
+4. **Matrix Program Implementation** - Second major earning program
+5. **Global Program Implementation** - Third major earning program
+
+---
+
+*This comprehensive documentation now covers the complete BitGPT platform roadmap and all earning programs. The implementation will follow the extended phase-by-phase development plan outlined above.*
