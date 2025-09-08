@@ -9,7 +9,7 @@ from .model import (
     Commission, CommissionDistribution, MissedProfit, 
     LeadershipStipend, CommissionRule, CommissionAccumulation, CommissionPayment
 )
-from ..utils.response import success_response, error_response
+from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/commission", tags=["Commission Management"])
 

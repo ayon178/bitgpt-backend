@@ -10,7 +10,7 @@ from .model import (
     RankLeaderboard, RankSettings, RankMilestone,
     RankRequirement, RankBenefit
 )
-from ..utils.response import success_response, error_response
+from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/rank", tags=["Rank System"])
 

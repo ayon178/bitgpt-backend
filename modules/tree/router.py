@@ -15,7 +15,7 @@ class CreateTreePlacementRequest(BaseModel):
     slot_no: int = 1
 
 
-@router.post("/placement", response_model=ResponseModel)
+@router.post("/placement")
 async def create_tree_placement(
     request: CreateTreePlacementRequest,
     current_user: dict = Depends(authentication_service.verify_authentication)
@@ -36,7 +36,7 @@ async def create_tree_placement(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{user_id}/binary", response_model=ResponseModel)
+@router.get("/{user_id}/binary")
 async def get_binary_tree_data(
     user_id: str,
     current_user: dict = Depends(authentication_service.verify_authentication)
@@ -58,7 +58,7 @@ async def get_binary_tree_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{user_id}/matrix", response_model=ResponseModel)
+@router.get("/{user_id}/matrix")
 async def get_matrix_tree_data(
     user_id: str,
     current_user: dict = Depends(authentication_service.verify_authentication)
@@ -80,7 +80,7 @@ async def get_matrix_tree_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{user_id}/global", response_model=ResponseModel)
+@router.get("/{user_id}/global")
 async def get_global_tree_data(
     user_id: str,
     current_user: dict = Depends(authentication_service.verify_authentication)
@@ -102,7 +102,7 @@ async def get_global_tree_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{user_id}/all", response_model=ResponseModel)
+@router.get("/{user_id}/all")
 async def get_all_tree_data(
     user_id: str,
     current_user: dict = Depends(authentication_service.verify_authentication)
@@ -124,7 +124,7 @@ async def get_all_tree_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{user_id}/{program}", response_model=ResponseModel)
+@router.get("/{user_id}/{program}")
 async def get_tree_data_by_program(
     user_id: str,
     program: str,

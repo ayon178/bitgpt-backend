@@ -95,8 +95,7 @@ class DreamMatrixEligibility(Document):
         'indexes': [
             'user_id',
             'is_eligible_for_dream_matrix',
-            'has_matrix_first_slot',
-            'has_three_direct_partners'
+            'has_matrix_first_slot'
         ]
     }
 

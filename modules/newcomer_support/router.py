@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timedelta
@@ -10,7 +10,7 @@ from .model import (
     NewcomerSupportFund, NewcomerSupportSettings, NewcomerSupportLog, 
     NewcomerSupportStatistics, NewcomerSupportMonthlyOpportunity, NewcomerBonus
 )
-from ..utils.response import success_response, error_response
+from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/newcomer-support", tags=["Newcomer Growth Support"])
 

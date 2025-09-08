@@ -10,7 +10,7 @@ from .model import (
     RoyalCaptainFund, RoyalCaptainSettings, RoyalCaptainLog, RoyalCaptainStatistics,
     RoyalCaptainRequirement, RoyalCaptainBonus
 )
-from ..utils.response import success_response, error_response
+from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/royal-captain", tags=["Royal Captain Bonus"])
 
@@ -300,7 +300,7 @@ async def get_royal_captain_bonuses(user_id: str, limit: int = Query(50, le=100)
                         "failed_reason": bonus.failed_reason,
                         "created_at": bonus.created_at
                     } for bonus in bonuses
-                ]
+                ],
                 "total_bonuses": len(bonuses)
             },
             message="Royal Captain bonuses retrieved"

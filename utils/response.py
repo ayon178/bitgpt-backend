@@ -42,3 +42,34 @@ def create_response(
         content=jsonable_encoder(response_content),
         status_code=status_code
     )
+
+
+# Convenience wrappers so routers can call success_response / error_response
+def success_response(
+    data: dict | list | None = None,
+    message: str = "Ok",
+    status_code: int = 200,
+    meta: Optional[Dict[str, Any]] = None,
+):
+    return create_response(
+        status="Ok",
+        status_code=status_code,
+        message=message,
+        data=data,
+        meta=meta,
+    )
+
+
+def error_response(
+    message: str = "Error",
+    status_code: int = 500,
+    data: dict | list | None = None,
+    meta: Optional[Dict[str, Any]] = None,
+):
+    return create_response(
+        status="Error",
+        status_code=status_code,
+        message=message,
+        data=data,
+        meta=meta,
+    )

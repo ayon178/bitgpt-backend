@@ -11,7 +11,7 @@ from .model import (
     TopLeaderGiftFund, TopLeaderGiftSettings, TopLeaderGiftLog, 
     TopLeaderGiftStatistics, TopLeaderGiftTierProgress, TopLeaderGiftTier
 )
-from ..utils.response import success_response, error_response
+from utils.response import success_response, error_response
 from ..auth.service import authentication_service
 
 router = APIRouter(prefix="/top-leader-gift", tags=["Top Leader Gift"])

@@ -7,7 +7,7 @@ from .model import (
     MatrixTree, MatrixActivation, MatrixRecycle, 
     MatrixAutoUpgrade, MatrixCommission, MatrixUplineReserve
 )
-from ..utils.response import success_response, error_response
+from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/matrix", tags=["Matrix Program"])
 
