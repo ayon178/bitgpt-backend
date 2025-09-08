@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
-from ..tree.service import TreeService
-from ...auth.service import authentication_service
-from ..utils.response import ResponseModel
+from modules.tree.service import TreeService
+from auth.service import authentication_service
+from utils.response import ResponseModel
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/tree", tags=["Tree Management"])
