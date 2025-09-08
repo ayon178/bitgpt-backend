@@ -31,15 +31,13 @@ from core.db import connect_to_db
 # Import all models to ensure they are registered
 from modules.user import User, PartnerGraph
 from modules.slot import SlotCatalog, SlotActivation
-from modules.tree import TreePlacement, AutoUpgradeLog
+from modules.tree import TreePlacement
 from modules.income import IncomeEvent, SpilloverEvent, LeadershipStipend
 from modules.income.bonus_fund import BonusFund, FundDistribution
 from modules.wallet import UserWallet, ReserveLedger, WalletLedger
 from modules.jackpot import JackpotTicket, JackpotFund
 from modules.spark import SparkCycle, TripleEntryReward
-import importlib as _importlib
-_global_module = _importlib.import_module('modules.global')
-GlobalPhaseState = getattr(_global_module, 'GlobalPhaseState')
+# TODO: Re-enable GlobalPhaseState import when models are implemented in modules/global/model.py
 from modules.qualification import Qualification
 from modules.blockchain import BlockchainEvent, SystemConfig
 

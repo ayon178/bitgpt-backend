@@ -1,8 +1,11 @@
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 from ..tree.model import TreePlacement
+from ..slot.model import SlotCatalog
+from ..recycle.model import RecycleQueue, RecyclePlacement
 from ..user.model import User
 from utils.response import ResponseModel
+from modules.auto_upgrade.model import BinaryAutoUpgrade
 
 
 class TreeService:
@@ -123,6 +126,17 @@ class TreeService:
             is_active=True
         )
         placement.save()
+        # Update referrer's BinaryAutoUpgrade partner count
+        try:
+            status = BinaryAutoUpgrade.objects(user_id=referrer_id).first()
+            if status:
+                status.partners_available = (status.partners_available or 0) + 1
+                if str(user_id) not in [str(pid) for pid in (status.partner_ids or [])]:
+                    status.partner_ids = (status.partner_ids or []) + [user_id]
+                status.last_check_at = datetime.utcnow()
+                status.save()
+        except Exception:
+            pass
         
         return placement
     
@@ -171,6 +185,17 @@ class TreeService:
                         is_active=True
                     )
                     placement.save()
+                    # Update referrer's BinaryAutoUpgrade partner count for spillover root
+                    try:
+                        status = BinaryAutoUpgrade.objects(user_id=parent).first()
+                        if status:
+                            status.partners_available = (status.partners_available or 0) + 1
+                            if str(user_id) not in [str(pid) for pid in (status.partner_ids or [])]:
+                                status.partner_ids = (status.partner_ids or []) + [user_id]
+                            status.last_check_at = datetime.utcnow()
+                            status.save()
+                    except Exception:
+                        pass
                     return placement
             
             # Check last position (right)
@@ -415,24 +440,22 @@ class TreeService:
         """
         Get tree price based on program and slot
         """
-        # This should be fetched from your pricing configuration
-        # For now, returning mock data
-        base_prices = {
-            'binary': 500,
-            'matrix': 800,
-            'global': 1200
-        }
-        
-        return base_prices.get(program, 500) + (slot_no * 10)
+        catalog = SlotCatalog.objects(program=program, slot_no=slot_no, is_active=True).first()
+        if catalog and catalog.price is not None:
+            return float(catalog.price)
+        # Fallback: 0 if not configured
+        return 0.0
     
     @staticmethod
     async def _get_recycle_count(user_id: ObjectId, slot_no: int, program: str) -> int:
         """
         Get recycle count for a tree
         """
-        # This should be fetched from recycle logs
-        # For now, returning mock data
-        return 0
+        if program != 'matrix':
+            return 0
+        # Count completed recycle placements for this user/slot
+        count = RecyclePlacement.objects(user_id=user_id, slot_no=slot_no).count()
+        return int(count)
     
     @staticmethod
     async def _is_tree_completed(slot_no: int, program: str) -> bool:
@@ -456,18 +479,30 @@ class TreeService:
         """
         Check if tree is currently being processed
         """
-        # This should check processing status
-        # For now, returning False
-        return False
+        if program != 'matrix':
+            return False
+        # If any recycle queue is in processing for this slot, consider processing
+        queued = RecycleQueue.objects(slot_no=slot_no, status__in=['queued', 'processing']).first()
+        return bool(queued)
     
     @staticmethod
     async def _is_auto_upgrade_enabled(user_id: ObjectId, slot_no: int, program: str) -> bool:
         """
         Check if auto upgrade is enabled for this tree
         """
-        # This should check user settings
-        # For now, returning False
-        return False
+        try:
+            user = User.objects(id=user_id).first()
+            if not user:
+                return False
+            if program == 'binary':
+                return bool(getattr(user, 'binary_auto_upgrade_enabled', False))
+            if program == 'matrix':
+                return bool(getattr(user, 'matrix_auto_upgrade_enabled', False))
+            if program == 'global':
+                return bool(getattr(user, 'global_auto_upgrade_enabled', False))
+            return False
+        except Exception:
+            return False
     
     @staticmethod
     async def _is_manual_upgrade_enabled(user_id: ObjectId, slot_no: int, program: str) -> bool:
@@ -502,10 +537,12 @@ class TreeService:
         Get total number of positions in a tree based on program type
         """
         if program == 'binary':
-            return 7  # 3 levels: 1 + 2 + 4
-        elif program == 'matrix':
-            return 13  # 3x3 matrix + extra positions
-        elif program == 'global':
-            return 9  # 3x3 matrix
-        else:
-            return 7
+            # First 3 levels by default; could be extended based on slot
+            return 7  # 1 + 2 + 4
+        if program == 'matrix':
+            # Based on 3^levels; here use 1 + 3 + 9 for initial 3 levels
+            return 13
+        if program == 'global':
+            # Use 4 (PHASE-1) or 8 (PHASE-2); approximate both levels combined
+            return 12
+        return 7

@@ -1,1 +1,1 @@
-from .model import TreePlacement, AutoUpgradeLog
+from .model import TreePlacement

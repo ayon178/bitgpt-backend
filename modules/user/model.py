@@ -135,33 +135,6 @@ class PartnerGraph(Document):
         ]
     }
 
-class Commission(Document):
-    """Track commission transactions"""
-    user_id = ObjectIdField(required=True)
-    commission_type = StringField(choices=[
-        'joining', 'upgrade', 'binary_partner', 'matrix_partner', 
-        'global_partner', 'royal_captain', 'president_reward',
-        'leadership_stipend', 'spark_bonus', 'mentorship', 'missed_profit'
-    ], required=True)
-    program = StringField(choices=['binary', 'matrix', 'global'], required=True)
-    amount = FloatField(required=True)
-    currency = StringField(choices=['BNB', 'USDT', 'USD'], required=True)
-    from_user_id = ObjectIdField()  # Who generated this commission
-    slot_level = IntField()  # Which slot level generated this
-    status = StringField(choices=['pending', 'paid', 'missed'], default='pending')
-    created_at = DateTimeField(default=datetime.utcnow)
-    
-    meta = {
-        'collection': 'commissions',
-        'indexes': [
-            'user_id',
-            'commission_type',
-            'program',
-            'status',
-            'created_at'
-        ]
-    }
-
 class EarningHistory(Document):
     """Track all earning activities"""
     user_id = ObjectIdField(required=True)
@@ -188,23 +161,4 @@ class EarningHistory(Document):
         ]
     }
 
-class AutoUpgradeLog(Document):
-    """Track auto upgrade activities"""
-    user_id = ObjectIdField(required=True)
-    program = StringField(choices=['binary', 'matrix', 'global'], required=True)
-    from_slot = StringField(required=True)
-    to_slot = StringField(required=True)
-    upgrade_cost = FloatField(required=True)
-    currency = StringField(choices=['BNB', 'USDT', 'USD'], required=True)
-    earnings_used = FloatField(required=True)
-    partners_contributed = ListField(ObjectIdField())
-    created_at = DateTimeField(default=datetime.utcnow)
-    
-    meta = {
-        'collection': 'auto_upgrade_log',
-        'indexes': [
-            'user_id',
-            'program',
-            'created_at'
-        ]
-    }
+## Note: AutoUpgradeLog is centralized in modules/auto_upgrade/model.py

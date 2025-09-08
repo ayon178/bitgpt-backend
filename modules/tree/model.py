@@ -64,41 +64,7 @@ class TreePlacement(Document):
         ]
     }
 
-class AutoUpgradeLog(Document):
-    """Track automatic slot upgrades"""
-    user_id = ObjectIdField(required=True)
-    program = StringField(choices=['binary', 'matrix', 'global'], required=True)
-    from_slot = IntField(required=True)
-    to_slot = IntField(required=True)
-    upgrade_source = StringField(choices=['level_income', 'reserve', 'mixed', 'partners_earnings'], required=True)
-    triggered_by = StringField(choices=['first_two_people', 'middle_three', 'phase_completion', 'manual'], required=True)
-    amount_used = DecimalField(required=True, precision=8)
-    currency = StringField(choices=['BNB', 'USDT', 'USD'], required=True)
-    
-    # Partners who contributed to auto upgrade
-    partners_contributed = ListField(ObjectIdField())
-    earnings_from_partners = DecimalField(precision=8, default=0)
-    
-    # Transaction details
-    tx_hash = StringField(required=True)
-    blockchain_network = StringField(choices=['BSC', 'ETH', 'TRC20'], default='BSC')
-    
-    # Status
-    status = StringField(choices=['pending', 'processing', 'completed', 'failed'], default='pending')
-    processed_at = DateTimeField()
-    completed_at = DateTimeField()
-    created_at = DateTimeField(default=datetime.utcnow)
-    
-    meta = {
-        'collection': 'auto_upgrade_log',
-        'indexes': [
-            ('user_id', 'program'), 
-            'tx_hash',
-            'status',
-            'triggered_by',
-            'created_at'
-        ]
-    }
+## Note: AutoUpgradeLog is centralized in modules/auto_upgrade/model.py
 
 class TreeSpillover(Document):
     """Track spillover placements in Binary tree"""
@@ -123,35 +89,4 @@ class TreeSpillover(Document):
 
 ## NOTE: MatrixRecycle has been centralized under modules/matrix/model.py to avoid duplication.
 
-class GlobalPhaseProgress(Document):
-    """Track Global program phase progression"""
-    user_id = ObjectIdField(required=True)
-    current_phase = StringField(choices=['PHASE-1', 'PHASE-2'], required=True)
-    current_slot = IntField(required=True)
-    phase_position = IntField(required=True)
-    
-    # Phase completion tracking
-    phase_1_members_required = IntField(default=4)
-    phase_1_members_current = IntField(default=0)
-    phase_2_members_required = IntField(default=8)
-    phase_2_members_current = IntField(default=0)
-    
-    # Re-entry tracking
-    total_re_entries = IntField(default=0)
-    last_re_entry_at = DateTimeField()
-    
-    # Status
-    is_phase_complete = BooleanField(default=False)
-    phase_completed_at = DateTimeField()
-    created_at = DateTimeField(default=datetime.utcnow)
-    updated_at = DateTimeField(default=datetime.utcnow)
-    
-    meta = {
-        'collection': 'global_phase_progress',
-        'indexes': [
-            'user_id',
-            'current_phase',
-            'current_slot',
-            'is_phase_complete'
-        ]
-    }
+## Note: Global phase progression is centralized in modules/auto_upgrade/model.py (GlobalPhaseProgression)

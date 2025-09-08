@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, ObjectIdField, IntField, BooleanField, DateTimeField, FloatField, ListField, EmbeddedDocumentField, EmbeddedDocument, DictField
+from mongoengine import Document, StringField, ObjectIdField, IntField, BooleanField, DateTimeField, FloatField, DecimalField, ListField, EmbeddedDocumentField, EmbeddedDocument, DictField
 from datetime import datetime
 
 class DreamMatrixLevel(EmbeddedDocument):
@@ -7,8 +7,8 @@ class DreamMatrixLevel(EmbeddedDocument):
     level_name = StringField(required=True)  # Level 1, Level 2, etc.
     member_count = IntField(required=True)  # 3, 9, 27, 81, 243
     commission_percentage = FloatField(required=True)  # 10%, 10%, 15%, 25%, 40%
-    commission_amount = FloatField(required=True)  # $80, $80, $120, $200, $320
-    total_profit = FloatField(required=True)  # $240, $720, $3240, $16200, $77760
+    commission_amount = DecimalField(required=True, precision=8)  # $80, $80, $120, $200, $320
+    total_profit = DecimalField(required=True, precision=8)  # $240, $720, $3240, $16200, $77760
     is_active = BooleanField(default=False)
     activated_at = DateTimeField()
     total_earned = FloatField(default=0.0)
@@ -37,18 +37,18 @@ class DreamMatrix(Document):
     max_level_reached = IntField(default=0)
     
     # Profit tracking
-    total_profit_earned = FloatField(default=0.0)
-    total_profit_paid = FloatField(default=0.0)
-    pending_profit = FloatField(default=0.0)
+    total_profit_earned = DecimalField(precision=8, default=0)
+    total_profit_paid = DecimalField(precision=8, default=0)
+    pending_profit = DecimalField(precision=8, default=0)
     
     # Slot value (based on 5th slot = $800)
-    slot_value = FloatField(default=800.0)
+    slot_value = DecimalField(precision=8, default=800)
     currency = StringField(choices=['USDT'], default='USDT')
     
     # Commission tracking
-    total_commissions_earned = FloatField(default=0.0)
-    total_commissions_paid = FloatField(default=0.0)
-    pending_commissions = FloatField(default=0.0)
+    total_commissions_earned = DecimalField(precision=8, default=0)
+    total_commissions_paid = DecimalField(precision=8, default=0)
+    pending_commissions = DecimalField(precision=8, default=0)
     
     # Status
     last_updated = DateTimeField(default=datetime.utcnow)
@@ -108,12 +108,12 @@ class DreamMatrixCommission(Document):
     level_number = IntField(required=True)  # 1-5
     level_name = StringField(required=True)
     commission_percentage = FloatField(required=True)
-    commission_amount = FloatField(required=True)
+    commission_amount = DecimalField(required=True, precision=8)
     
     # Source details
     source_user_id = ObjectIdField(required=True)  # User who generated the commission
     source_level = IntField(required=True)  # Level where commission was generated
-    source_amount = FloatField(required=True)  # Original amount that generated commission
+    source_amount = DecimalField(required=True, precision=8)  # Original amount that generated commission
     
     # Payment details
     payment_status = StringField(choices=['pending', 'processing', 'paid', 'failed'], default='pending')
@@ -145,9 +145,9 @@ class DreamMatrixFund(Document):
     fund_name = StringField(default='Dream Matrix Fund', unique=True)
     
     # Fund details
-    total_fund_amount = FloatField(default=0.0)
-    available_amount = FloatField(default=0.0)
-    distributed_amount = FloatField(default=0.0)
+    total_fund_amount = DecimalField(precision=8, default=0)
+    available_amount = DecimalField(precision=8, default=0)
+    distributed_amount = DecimalField(precision=8, default=0)
     currency = StringField(choices=['USDT'], default='USDT')
     
     # Fund sources
@@ -166,7 +166,7 @@ class DreamMatrixFund(Document):
     # Statistics
     total_participants = IntField(default=0)
     total_commissions_paid = IntField(default=0)
-    total_amount_distributed = FloatField(default=0.0)
+    total_amount_distributed = DecimalField(precision=8, default=0)
     
     # Status
     is_active = BooleanField(default=True)
@@ -230,7 +230,7 @@ class DreamMatrixLog(Document):
     # Related entities
     related_user_id = ObjectIdField()  # For partner additions
     related_commission_id = ObjectIdField()  # For commission payments
-    commission_amount = FloatField()
+    commission_amount = DecimalField(precision=8)
     level_number = IntField()
     
     # Status
@@ -260,7 +260,7 @@ class DreamMatrixStatistics(Document):
     total_eligible_users = IntField(default=0)
     total_active_users = IntField(default=0)
     total_commissions_paid = IntField(default=0)
-    total_amount_distributed = FloatField(default=0.0)
+    total_amount_distributed = DecimalField(precision=8, default=0)
     
     # Commission breakdown by level
     level_1_commissions_paid = IntField(default=0)
@@ -313,9 +313,9 @@ class DreamMatrixLevelProgress(Document):
     progress_percentage = FloatField(default=0.0)
     
     # Commission tracking
-    commissions_earned = FloatField(default=0.0)
-    commissions_paid = FloatField(default=0.0)
-    pending_commissions = FloatField(default=0.0)
+    commissions_earned = DecimalField(precision=8, default=0)
+    commissions_paid = DecimalField(precision=8, default=0)
+    pending_commissions = DecimalField(precision=8, default=0)
     
     # Status
     is_active = BooleanField(default=True)

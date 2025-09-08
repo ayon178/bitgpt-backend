@@ -6,9 +6,10 @@ from ..user.model import User
 from ..tree.model import TreePlacement
 from .model import (
     MatrixTree, MatrixActivation, MatrixRecycle, 
-    MatrixAutoUpgrade, MatrixCommission, MatrixUplineReserve,
+    MatrixAutoUpgrade, MatrixUplineReserve,
     MatrixSlotInfo, MatrixPosition
 )
+from ..commission.model import Commission
 
 class MatrixService:
     """Matrix Program Business Logic Service"""
@@ -333,14 +334,16 @@ class MatrixService:
         """Process 10% commission for referrer on joining"""
         commission_amount = amount * Decimal(str(self.COMMISSION_PERCENTAGE / 100))
         
-        commission = MatrixCommission(
+        commission = Commission(
             user_id=ObjectId(referrer_id),
             from_user_id=ObjectId(user_id),
-            slot_no=1,
-            slot_name='STARTER',
-            commission_amount=commission_amount,
             commission_type='joining',
+            program='matrix',
+            commission_amount=commission_amount,
+            currency='USDT',
             commission_percentage=self.COMMISSION_PERCENTAGE,
+            source_slot_no=1,
+            source_slot_name='STARTER',
             status='paid',
             paid_at=datetime.utcnow()
         )
@@ -356,14 +359,16 @@ class MatrixService:
         upline_id = matrix_tree.parent_id
         commission_amount = amount * Decimal(str(self.COMMISSION_PERCENTAGE / 100))
         
-        commission = MatrixCommission(
+        commission = Commission(
             user_id=upline_id,
             from_user_id=ObjectId(user_id),
-            slot_no=slot_no,
-            slot_name=self.MATRIX_SLOTS[slot_no]['name'],
-            commission_amount=commission_amount,
             commission_type='upgrade',
+            program='matrix',
+            commission_amount=commission_amount,
+            currency='USDT',
             commission_percentage=self.COMMISSION_PERCENTAGE,
+            source_slot_no=slot_no,
+            source_slot_name=self.MATRIX_SLOTS[slot_no]['name'],
             status='paid',
             paid_at=datetime.utcnow()
         )

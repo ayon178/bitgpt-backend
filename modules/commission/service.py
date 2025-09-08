@@ -5,9 +5,13 @@ from datetime import datetime, timedelta
 from ..user.model import User
 from ..tree.model import TreePlacement
 from .model import (
-    Commission, CommissionDistribution, MissedProfit, 
-    LeadershipStipend, CommissionRule, CommissionAccumulation, CommissionPayment
+    Commission, CommissionDistribution,
+    CommissionRule, CommissionAccumulation, CommissionPayment,
+    DistributionReceipt
 )
+from ..missed_profit.model import MissedProfit
+from utils import ensure_currency_for_program
+from ..leadership_stipend.model import LeadershipStipend
 
 class CommissionService:
     """Commission Management Business Logic Service"""
@@ -34,6 +38,9 @@ class CommissionService:
             # Calculate commission amount
             commission_amount = amount * Decimal(str(self.JOINING_COMMISSION_PERCENTAGE / 100))
             
+            # Normalize currency per program
+            currency = ensure_currency_for_program(program, currency)
+
             # Create commission record
             commission = Commission(
                 user_id=upline_id,
@@ -47,6 +54,23 @@ class CommissionService:
                 status='pending'
             )
             commission.save()
+            # Receipt for joining commission
+            try:
+                DistributionReceipt(
+                    user_id=upline_id,
+                    from_user_id=ObjectId(from_user_id),
+                    program=program,
+                    source_type='joining',
+                    source_slot_no=1,
+                    source_slot_name='JOIN',
+                    distribution_level=1,
+                    amount=commission_amount,
+                    currency=currency,
+                    commission_id=commission.id,
+                    event='joining_commission'
+                ).save()
+            except Exception:
+                pass
             
             # Update accumulation
             self._update_commission_accumulation(upline_id, program, commission_amount, currency, 'joining')
@@ -83,6 +107,9 @@ class CommissionService:
             # Get corresponding level upline
             level_upline = self._get_level_upline(from_user_id, slot_no)
             
+            # Normalize currency per program
+            currency = ensure_currency_for_program(program, currency)
+
             # Create commission for level upline (30%)
             if level_upline:
                 level_commission_record = Commission(
@@ -103,6 +130,23 @@ class CommissionService:
                 
                 # Update accumulation
                 self._update_commission_accumulation(level_upline, program, level_commission, currency, 'upgrade')
+                # Receipt for level commission (30%)
+                try:
+                    DistributionReceipt(
+                        user_id=ObjectId(level_upline),
+                        from_user_id=ObjectId(from_user_id),
+                        program=program,
+                        source_type='upgrade',
+                        source_slot_no=slot_no,
+                        source_slot_name=slot_name,
+                        distribution_level=slot_no,
+                        amount=level_commission,
+                        currency=currency,
+                        commission_id=level_commission_record.id,
+                        event='upgrade_level_commission'
+                    ).save()
+                except Exception:
+                    pass
             
             # Create distribution record for 70%
             distribution = CommissionDistribution(
@@ -121,6 +165,24 @@ class CommissionService:
             level_distributions = self._distribute_across_levels(from_user_id, distribution_amount, currency)
             distribution.level_distributions = level_distributions
             distribution.save()
+            # Receipts for level distributions (70%)
+            try:
+                for ld in level_distributions:
+                    DistributionReceipt(
+                        user_id=ObjectId(ld['user_id']),
+                        from_user_id=ObjectId(from_user_id),
+                        program=program,
+                        source_type='level',
+                        source_slot_no=slot_no,
+                        source_slot_name=slot_name,
+                        distribution_level=int(ld['level']),
+                        amount=Decimal(str(ld['amount'])),
+                        currency=currency,
+                        distribution_id=distribution.id,
+                        event='level_distribution'
+                    ).save()
+            except Exception:
+                pass
             
             return {
                 "success": True,

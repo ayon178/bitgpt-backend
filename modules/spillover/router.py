@@ -4,8 +4,8 @@ from typing import Optional
 from bson import ObjectId
 from datetime import datetime
 
-from ..utils.response import success_response, error_response
-from ..auth.service import authentication_service
+from utils.response import success_response, error_response
+from auth.service import authentication_service
 from .model import SpilloverQueue, SpilloverPlacement, SpilloverSettings, SpilloverLog, SpilloverStatistics
 
 router = APIRouter(prefix="/spillover", tags=["Binary Spillover"])

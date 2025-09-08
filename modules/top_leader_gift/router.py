@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timedelta
@@ -12,7 +12,7 @@ from .model import (
     TopLeaderGiftStatistics, TopLeaderGiftTierProgress, TopLeaderGiftTier
 )
 from utils.response import success_response, error_response
-from ..auth.service import authentication_service
+from auth.service import authentication_service
 
 router = APIRouter(prefix="/top-leader-gift", tags=["Top Leader Gift"])
 

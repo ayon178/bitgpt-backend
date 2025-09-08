@@ -1,6 +1,7 @@
-from mongoengine import Document, StringField, IntField, DecimalField, BooleanField, DateTimeField, ObjectIdField, FloatField, DictField
+from mongoengine import Document, StringField, IntField, DecimalField, BooleanField, DateTimeField, ObjectIdField, FloatField, DictField, ListField
 from datetime import datetime
 from decimal import Decimal
+from utils import ensure_currency_for_program
 
 class SlotCatalog(Document):
     """Predefined slot information for all programs"""
@@ -83,6 +84,10 @@ class SlotActivation(Document):
             'created_at'
         ]
     }
+
+    def clean(self):
+        # Ensure currency matches program default if not provided or mismatched
+        self.currency = ensure_currency_for_program(self.program, self.currency)
 
 class SlotUpgradeQueue(Document):
     """Queue for managing slot upgrades"""

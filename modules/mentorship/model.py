@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, ObjectIdField, IntField, BooleanField, DateTimeField, FloatField, ListField, EmbeddedDocumentField, EmbeddedDocument, DictField
+from mongoengine import Document, StringField, ObjectIdField, IntField, BooleanField, DateTimeField, FloatField, DecimalField, ListField, EmbeddedDocumentField, EmbeddedDocument, DictField
 from datetime import datetime
 
 class MentorshipLevel(EmbeddedDocument):
@@ -25,12 +25,8 @@ class Mentorship(Document):
     # Mentorship levels
     levels = ListField(EmbeddedDocumentField(MentorshipLevel), default=[])
     
-    # Direct referrals tracking
-    direct_referrals = ListField(ObjectIdField(), default=[])
+    # Referrals are derived from PartnerGraph; keep only counters
     direct_referrals_count = IntField(default=0)
-    
-    # Direct-of-Direct referrals tracking
-    direct_of_direct_referrals = ListField(ObjectIdField(), default=[])
     direct_of_direct_referrals_count = IntField(default=0)
     
     # Commission tracking
@@ -106,8 +102,8 @@ class MentorshipCommission(Document):
     # Source details
     source_user_id = ObjectIdField(required=True)  # User who generated the commission
     source_user_level = IntField(required=True)  # 1 = Direct, 2 = Direct-of-Direct
-    source_amount = FloatField(required=True)  # Original amount that generated commission
-    commission_amount = FloatField(required=True)  # 10% of source amount
+    source_amount = DecimalField(required=True, precision=8)  # Original amount that generated commission
+    commission_amount = DecimalField(required=True, precision=8)  # 10% of source amount
     
     # Payment details
     payment_status = StringField(choices=['pending', 'processing', 'paid', 'failed'], default='pending')
@@ -140,9 +136,9 @@ class MentorshipFund(Document):
     fund_name = StringField(default='Mentorship Fund', unique=True)
     
     # Fund details
-    total_fund_amount = FloatField(default=0.0)
-    available_amount = FloatField(default=0.0)
-    distributed_amount = FloatField(default=0.0)
+    total_fund_amount = DecimalField(precision=8, default=0)
+    available_amount = DecimalField(precision=8, default=0)
+    distributed_amount = DecimalField(precision=8, default=0)
     currency = StringField(choices=['USDT'], default='USDT')
     
     # Fund sources
@@ -221,7 +217,7 @@ class MentorshipLog(Document):
     # Related entities
     related_user_id = ObjectIdField()  # For referral additions
     related_commission_id = ObjectIdField()  # For commission payments
-    commission_amount = FloatField()
+    commission_amount = DecimalField(precision=8)
     
     # Status
     is_processed = BooleanField(default=False)
@@ -289,8 +285,8 @@ class MentorshipReferral(Document):
     relationship_type = StringField(choices=['direct', 'direct_of_direct'], required=True)
     
     # Commission tracking
-    total_commissions_generated = FloatField(default=0.0)
-    total_commissions_paid = FloatField(default=0.0)
+    total_commissions_generated = DecimalField(precision=8, default=0)
+    total_commissions_paid = DecimalField(precision=8, default=0)
     
     # Status
     is_active = BooleanField(default=True)

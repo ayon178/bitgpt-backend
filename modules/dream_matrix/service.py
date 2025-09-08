@@ -6,10 +6,11 @@ from ..user.model import User
 from ..slot.model import SlotActivation
 from ..tree.model import TreePlacement
 from .model import (
-    DreamMatrix, DreamMatrixEligibility, DreamMatrixCommission,
+    DreamMatrix, DreamMatrixEligibility,
     DreamMatrixFund, DreamMatrixSettings, DreamMatrixLog, 
     DreamMatrixStatistics, DreamMatrixLevelProgress, DreamMatrixLevel
 )
+from ..commission.model import Commission
 
 class DreamMatrixService:
     """Dream Matrix Business Logic Service"""
@@ -176,29 +177,29 @@ class DreamMatrixService:
             commission_amount = level_details["commission_amount"]
             
             # Create commission record
-            commission = DreamMatrixCommission(
+            commission = Commission(
                 user_id=ObjectId(user_id),
-                dream_matrix_id=dream_matrix.id,
-                level_number=level_number,
-                level_name=level_details["level_name"],
+                from_user_id=ObjectId(source_user_id),
+                commission_type='bonus',
+                program='matrix',
+                commission_amount=Decimal(str(commission_amount)),
+                currency='USDT',
                 commission_percentage=level_details["commission_percentage"],
-                commission_amount=commission_amount,
-                source_user_id=ObjectId(source_user_id),
-                source_level=level_number,
-                source_amount=source_amount,
-                payment_status="pending"
+                source_slot_no=level_number,
+                source_slot_name=level_details["level_name"],
+                status='pending'
             )
             commission.save()
             
             # Update Dream Matrix record
-            dream_matrix.total_commissions_earned += commission_amount
-            dream_matrix.pending_commissions += commission_amount
+            dream_matrix.total_commissions_earned += Decimal(str(commission_amount))
+            dream_matrix.pending_commissions += Decimal(str(commission_amount))
             
             # Update level
             for level in dream_matrix.levels:
                 if level.level_number == level_number:
-                    level.total_earned += commission_amount
-                    level.pending_amount += commission_amount
+                    level.total_earned += Decimal(str(commission_amount))
+                    level.pending_amount += Decimal(str(commission_amount))
                     break
             
             dream_matrix.last_updated = datetime.utcnow()

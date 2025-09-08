@@ -10,8 +10,8 @@ from .model import (
     MissedProfitFund, MissedProfitSettings, MissedProfitLog, 
     MissedProfitStatistics, MissedProfitRecovery, MissedProfitReason
 )
-from ..utils.response import success_response, error_response
-from ..auth.service import authentication_service
+from utils.response import success_response, error_response
+from auth.service import authentication_service
 
 router = APIRouter(prefix="/missed-profit", tags=["Missed Profit Handling"])
 

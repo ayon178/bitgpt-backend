@@ -8,7 +8,9 @@ from modules.user.service import create_user_service
 class CreateUserRequest(BaseModel):
     uid: str = Field(..., description="Unique user identifier")
     refer_code: str = Field(..., description="Unique referral code for the user")
-    refered_by: str = Field(..., description="Mongo ObjectId string of the referrer")
+    # Accept both for backward compatibility; prefer upline_id per docs
+    upline_id: Optional[str] = Field(None, description="Mongo ObjectId string of the upline (docs preferred)")
+    refered_by: Optional[str] = Field(None, description="Mongo ObjectId string of the referrer (legacy)")
     wallet_address: str = Field(..., description="Unique blockchain wallet address")
     name: str = Field(..., description="Full name of the user")
     role: Optional[str] = Field(None, description="Role: user | admin | shareholder")
@@ -20,7 +22,7 @@ class CreateUserRequest(BaseModel):
             "example": {
                 "uid": "user123",
                 "refer_code": "RC12345",
-                "refered_by": "66f1aab2c1f3a2a9c0b4e123",
+                "upline_id": "66f1aab2c1f3a2a9c0b4e123",
                 "wallet_address": "0xABCDEF0123456789",
                 "name": "John Doe",
                 "role": "user",
@@ -34,7 +36,11 @@ user_router = APIRouter()
 
 @user_router.post("/create")
 async def create_user(payload: CreateUserRequest):
-    result, error = create_user_service(payload.dict())
+    # Map upline_id -> refered_by (Option B)
+    payload_dict = payload.dict()
+    if payload_dict.get("upline_id") and not payload_dict.get("refered_by"):
+        payload_dict["refered_by"] = payload_dict["upline_id"]
+    result, error = create_user_service(payload_dict)
 
     if error:
         return create_response(

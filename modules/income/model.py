@@ -40,18 +40,4 @@ class SpilloverEvent(Document):
         'indexes': [('from_user_id', 'program'), ('to_user_id', 'program'), 'tx_hash']
     }
 
-class LeadershipStipend(Document):
-    """Track leadership stipend distributions - Slot 10-16 rewards"""
-    user_id = ObjectIdField(required=True)
-    slot_no = IntField(required=True)
-    target_amount = DecimalField(required=True, precision=8)
-    current_amount = DecimalField(required=True, precision=8)
-    is_active = BooleanField(default=True)
-    started_at = DateTimeField(required=True)
-    completed_at = DateTimeField()
-    created_at = DateTimeField(default=datetime.utcnow)
-    
-    meta = {
-        'collection': 'leadership_stipend',
-        'indexes': [('user_id', 'slot_no'), 'is_active']
-    }
+## Note: Leadership Stipend is centralized in modules/leadership_stipend/model.py

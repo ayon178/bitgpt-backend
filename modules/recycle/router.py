@@ -4,8 +4,8 @@ from typing import Optional, List
 from bson import ObjectId
 from datetime import datetime
 
-from ..utils.response import success_response, error_response
-from ..auth.service import authentication_service
+from utils.response import success_response, error_response
+from auth.service import authentication_service
 from .model import RecycleQueue, RecyclePlacement, RecycleSettings, RecycleLog, RecycleStatistics, RecycleRule
 
 router = APIRouter(prefix="/recycle", tags=["Matrix Recycle"])
