@@ -392,6 +392,52 @@ class TreeService:
                 message=f"Error retrieving tree data: {str(e)}",
                 data=[]
             )
+
+    @staticmethod
+    async def get_subtree(user_id: str, program: str = 'binary') -> ResponseModel:
+        """
+        Return all descendants under a given user for a specific program.
+        """
+        try:
+            root_id = ObjectId(user_id)
+
+            # Fetch direct children first
+            children = TreePlacement.objects(parent_id=root_id, program=program, is_active=True)
+            if not children:
+                return ResponseModel(success=True, message="No descendants found for this user", data=[])
+
+            # BFS to collect entire subtree
+            queue = [c.user_id for c in children]
+            visited = set([str(root_id)])
+            nodes: List[Dict[str, Any]] = []
+
+            def _node_info(p: TreePlacement) -> Dict[str, Any]:
+                return {
+                    'user_id': str(p.user_id),
+                    'parent_id': str(p.parent_id) if p.parent_id else None,
+                    'position': p.position,
+                    'level': p.level,
+                    'slot_no': p.slot_no,
+                }
+
+            # Seed initial children info
+            for p in children:
+                nodes.append(_node_info(p))
+                visited.add(str(p.user_id))
+
+            while queue:
+                current = queue.pop(0)
+                descendants = TreePlacement.objects(parent_id=current, program=program, is_active=True)
+                for p in descendants:
+                    if str(p.user_id) in visited:
+                        continue
+                    nodes.append(_node_info(p))
+                    visited.add(str(p.user_id))
+                    queue.append(p.user_id)
+
+            return ResponseModel(success=True, message="Subtree retrieved successfully", data=nodes)
+        except Exception as e:
+            return ResponseModel(success=False, message=f"Error retrieving subtree: {str(e)}", data=[])
     
     @staticmethod
     async def get_all_trees_by_user(user_id: str) -> ResponseModel:

@@ -18,6 +18,7 @@ from modules.auto_upgrade.model import MatrixAutoUpgrade, GlobalPhaseProgression
 from modules.rank.service import RankService
 from modules.blockchain.model import BlockchainEvent
 from datetime import datetime
+from modules.tree.model import TreePlacement
 
 
 def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -593,6 +594,24 @@ def create_root_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
         try:
             if not PartnerGraph.objects(user_id=ObjectId(user.id)).first():
                 PartnerGraph(user_id=ObjectId(user.id)).save()
+        except Exception:
+            pass
+
+        # Seed a self tree placement for ROOT so binary tree view works for ROOT
+        try:
+            existing_root_placement = TreePlacement.objects(
+                user_id=ObjectId(user.id), program='binary', slot_no=1, is_active=True
+            ).first()
+            if not existing_root_placement:
+                TreePlacement(
+                    user_id=ObjectId(user.id),
+                    program='binary',
+                    parent_id=None,
+                    position='root',
+                    level=1,
+                    slot_no=1,
+                    is_active=True
+                ).save()
         except Exception:
             pass
 

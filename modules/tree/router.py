@@ -58,6 +58,33 @@ async def get_binary_tree_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/{user_id}/{program}/subtree")
+async def get_subtree(
+    user_id: str,
+    program: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """
+    Get full subtree under a user for a given program (binary/matrix/global).
+    Includes descendants with positions and levels.
+    """
+    try:
+        # Validate program type
+        valid_programs = ['binary', 'matrix', 'global']
+        if program not in valid_programs:
+            raise HTTPException(status_code=400, detail=f"Invalid program type. Must be one of: {valid_programs}")
+
+        # Auth check: allow self or admin (admin check placeholder)
+        # if str(current_user.get('_id')) != user_id: pass
+
+        result = await TreeService.get_subtree(user_id=user_id, program=program)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{user_id}/matrix")
 async def get_matrix_tree_data(
     user_id: str,
