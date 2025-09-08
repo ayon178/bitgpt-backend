@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 from bson import ObjectId
 from datetime import datetime
+import random
 from .model import JackpotTicket, JackpotFund
 from modules.user.model import User
 
@@ -130,6 +131,70 @@ class JackpotService:
                 for item in result
             ]
             return {"success": True, "week_id": week_id, "top_buyers": top_buyers}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def pick_newcomers_for_week(week_id: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
+        """Pick random newcomers for the week (users who first joined that week and have a jackpot entry).
+        Definition: Users whose account creation date falls within the week, and they have at least one JackpotTicket in that same week.
+        """
+        try:
+            wid = week_id or current_week_id()
+            # Compute week boundaries (UTC Monday..Sunday per ISO week)
+            now = datetime.utcnow()
+            year, week, _ = now.isocalendar()
+            if week_id:
+                parts = week_id.split('-')
+                if len(parts) == 2:
+                    year = int(parts[0])
+                    week = int(parts[1])
+            # First day of ISO week
+            # Find Monday of the given ISO week
+            # Build a date from year-week-1 (Monday)
+            from datetime import date, timedelta
+            d = date.fromisocalendar(year, week, 1)
+            week_start = datetime(d.year, d.month, d.day)
+            week_end = week_start + timedelta(days=7)
+
+            # Users created within the week
+            user_coll = User._get_collection()
+            new_users = list(user_coll.find({
+                "created_at": {"$gte": week_start, "$lt": week_end}
+            }, {"_id": 1}))
+            new_user_ids = {u["_id"] for u in new_users}
+
+            if not new_user_ids:
+                return {"success": True, "week_id": wid, "newcomers": []}
+
+            # Those who also have at least one ticket in the same week
+            ticket_coll = JackpotTicket._get_collection()
+            cursor = ticket_coll.aggregate([
+                {"$match": {"week_id": wid, "user_id": {"$in": list(new_user_ids)}}},
+                {"$group": {"_id": "$user_id"}}
+            ])
+            eligible = [str(doc["_id"]) for doc in cursor]
+
+            # Randomly pick up to limit users
+            if not eligible:
+                return {"success": True, "week_id": wid, "newcomers": []}
+            winners = random.sample(eligible, k=min(limit, len(eligible)))
+
+            # Persist in JackpotFund
+            fund = JackpotFund.objects(week_id=wid).first()
+            if not fund:
+                fund = JackpotFund(
+                    week_id=wid,
+                    total_pool=Decimal('0'),
+                    open_winners_pool=Decimal('0'),
+                    seller_pool=Decimal('0'),
+                    buyer_pool=Decimal('0'),
+                    newcomer_pool=Decimal('0'),
+                    winners={'open': [], 'top_sellers': [], 'top_buyers': [], 'newcomers': []}
+                )
+            fund.winners['newcomers'] = winners
+            fund.save()
+            return {"success": True, "week_id": wid, "newcomers": winners}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

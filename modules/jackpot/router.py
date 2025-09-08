@@ -136,3 +136,19 @@ async def top_buyers(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/newcomers")
+async def newcomers(
+    week_id: Optional[str] = None,
+    limit: int = 10,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    try:
+        res = JackpotService.pick_newcomers_for_week(week_id=week_id, limit=limit)
+        if not res.get("success"):
+            raise HTTPException(status_code=500, detail=res.get("error", "Failed to pick newcomers"))
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
