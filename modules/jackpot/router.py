@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from bson import ObjectId
 from .model import JackpotTicket
+from .service import JackpotService
 from auth.service import authentication_service
 
 
@@ -98,6 +99,39 @@ async def tickets_by_referrer(
                 "created_at": t.created_at
             } for t in tickets
         ]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/top-sellers")
+async def top_sellers(
+    week_id: Optional[str] = None,
+    limit: int = 10,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    try:
+        res = JackpotService.compute_top_sellers(week_id=week_id, limit=limit)
+        if not res.get("success"):
+            raise HTTPException(status_code=500, detail=res.get("error", "Failed to compute top sellers"))
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/top-buyers")
+async def top_buyers(
+    week_id: Optional[str] = None,
+    limit: int = 10,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    try:
+        res = JackpotService.compute_top_buyers(week_id=week_id, limit=limit)
+        if not res.get("success"):
+            raise HTTPException(status_code=500, detail=res.get("error", "Failed to compute top buyers"))
+        return res
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

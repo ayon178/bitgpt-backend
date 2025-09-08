@@ -3,9 +3,12 @@ kon user koto tarikh koto amount paiche kon event theke destribution er somoy do
 jackpot entry te referer er id thakbe, j join koraiche user k
 JackpotTicket Model theke count bad jabe
 
-JackpotFund Model top seller hobe jara refferer r tader join korano user ticket kinche. jar refer kora user ra besi ticket kinche tarai basically top seller. eita db te rakhte hobe. top 10 jon
+JackpotFund Model top seller hobe jara refferer r tader join korano user ticket kinche. jar refer kora user ra besi ticket kinche tarai basically top seller. eita db te rakhte hobe. router a hit korle top 10 jon top seller k response a dite hobe. amader 1 ta new route lagbe
 
-newcomer_pool 1 week_id er vitor 7 din a thakle tara jackpot a entry korle tader theke 10 jon
+j week_id oi week er vitor keu join korle and jackpot a entry korle tara e newcomer. newcomer_pool a eisob newcomer er theke randomly 10 jon k winner kora hobe. so router a hit korle 10 jon newcomer k response a dibe, uporer logic diye bar kore randomly.
+
+j sob user ra sobteke besi jackpot a join korche first theke tader rank kora hobe r first 10 jon k response a dibe reuter hit korle. era holo top buyer.
+
 
 top seller r top buyer get api
 

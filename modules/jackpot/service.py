@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 from bson import ObjectId
 from datetime import datetime
-from .model import JackpotTicket
+from .model import JackpotTicket, JackpotFund
 from modules.user.model import User
 
 
@@ -50,5 +50,87 @@ class JackpotService:
         referrer = str(user.refered_by) if user and user.refered_by else None
         for _ in range(entries):
             JackpotService.create_entry(user_id=user_id, source='free', referrer_user_id=referrer, free_source_slot=slot_no)
+
+    @staticmethod
+    def compute_top_sellers(week_id: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
+        """Compute top sellers for a given week: referrers whose referred users bought the most tickets.
+        We count tickets grouped by referrer_user_id among PAID tickets in the week.
+        """
+        try:
+            wid = week_id or current_week_id()
+            pipeline = [
+                {"$match": {"week_id": wid, "source": "paid"}},
+                {"$group": {"_id": "$referrer_user_id", "ticket_count": {"$sum": 1}}},
+                {"$sort": {"ticket_count": -1}},
+                {"$limit": int(limit)}
+            ]
+            # Using MongoEngine's aggregate via underlying collection
+            coll = JackpotTicket._get_collection()
+            result = list(coll.aggregate(pipeline))
+            # Persist into JackpotFund.winners.top_sellers
+            fund = JackpotFund.objects(week_id=wid).first()
+            if not fund:
+                fund = JackpotFund(
+                    week_id=wid,
+                    total_pool=Decimal('0'),
+                    open_winners_pool=Decimal('0'),
+                    seller_pool=Decimal('0'),
+                    buyer_pool=Decimal('0'),
+                    newcomer_pool=Decimal('0'),
+                    winners={'open': [], 'top_sellers': [], 'top_buyers': [], 'newcomers': []}
+                )
+            fund.winners['top_sellers'] = [
+                {"referrer_user_id": str(item.get("_id")), "tickets": int(item.get("ticket_count", 0))}
+                for item in result
+            ]
+            fund.save()
+            return {"success": True, "week_id": wid, "top_sellers": fund.winners['top_sellers']}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def compute_top_buyers_all_time(limit: int = 10) -> Dict[str, Any]:
+        """Compute all-time top buyers: users with most total tickets (paid + free)."""
+        try:
+            pipeline = [
+                {"$group": {"_id": "$user_id", "ticket_count": {"$sum": 1}}},
+                {"$sort": {"ticket_count": -1}},
+                {"$limit": int(limit)}
+            ]
+            coll = JackpotTicket._get_collection()
+            result = list(coll.aggregate(pipeline))
+            top_buyers = [
+                {"user_id": str(item.get("_id")), "tickets": int(item.get("ticket_count", 0))}
+                for item in result
+            ]
+            # Optionally store a snapshot in SystemConfig or a dedicated stats collection; return for now
+            return {"success": True, "top_buyers": top_buyers}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def compute_top_buyers(week_id: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
+        """Compute top buyers either for a given week (if week_id provided) or all-time otherwise."""
+        try:
+            match_stage = {}
+            if week_id:
+                match_stage["week_id"] = week_id
+            pipeline = []
+            if match_stage:
+                pipeline.append({"$match": match_stage})
+            pipeline.extend([
+                {"$group": {"_id": "$user_id", "ticket_count": {"$sum": 1}}},
+                {"$sort": {"ticket_count": -1}},
+                {"$limit": int(limit)}
+            ])
+            coll = JackpotTicket._get_collection()
+            result = list(coll.aggregate(pipeline))
+            top_buyers = [
+                {"user_id": str(item.get("_id")), "tickets": int(item.get("ticket_count", 0))}
+                for item in result
+            ]
+            return {"success": True, "week_id": week_id, "top_buyers": top_buyers}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
 
