@@ -1,11 +1,14 @@
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
+from datetime import datetime
 from ..tree.model import TreePlacement
 from ..slot.model import SlotCatalog
 from ..recycle.model import RecycleQueue, RecyclePlacement
 from ..user.model import User
 from utils.response import ResponseModel
-from modules.auto_upgrade.model import BinaryAutoUpgrade
+from modules.auto_upgrade.model import BinaryAutoUpgrade, GlobalPhaseProgression
+from modules.auto_upgrade.service import AutoUpgradeService
+from modules.auto_upgrade.service import AutoUpgradeService
 
 
 class TreeService:
@@ -135,6 +138,35 @@ class TreeService:
                     status.partner_ids = (status.partner_ids or []) + [user_id]
                 status.last_check_at = datetime.utcnow()
                 status.save()
+                # Attempt binary auto-upgrade for referrer (first 2 partners rule)
+                try:
+                    AutoUpgradeService().process_binary_auto_upgrade(user_id=str(referrer_id))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Global phase progression: increment parent counters when program is global
+        try:
+            if program == 'global':
+                parent_progress = GlobalPhaseProgression.objects(user_id=referrer_id).first()
+                if parent_progress:
+                    if parent_progress.current_phase == 'PHASE-1':
+                        parent_progress.phase_1_members_current = int(parent_progress.phase_1_members_current or 0) + 1
+                        # Attempt progression when threshold reached
+                        if parent_progress.phase_1_members_current >= int(parent_progress.phase_1_members_required or 4):
+                            AutoUpgradeService().process_global_phase_progression(user_id=str(referrer_id))
+                    else:
+                        parent_progress.phase_2_members_current = int(parent_progress.phase_2_members_current or 0) + 1
+                        if parent_progress.phase_2_members_current >= int(parent_progress.phase_2_members_required or 8):
+                            AutoUpgradeService().process_global_phase_progression(user_id=str(referrer_id))
+                    parent_progress.global_team_size = int(parent_progress.global_team_size or 0) + 1
+                    members = parent_progress.global_team_members or []
+                    if user_id not in members:
+                        members.append(user_id)
+                    parent_progress.global_team_members = members
+                    parent_progress.updated_at = datetime.utcnow()
+                    parent_progress.save()
         except Exception:
             pass
         
@@ -194,6 +226,33 @@ class TreeService:
                                 status.partner_ids = (status.partner_ids or []) + [user_id]
                             status.last_check_at = datetime.utcnow()
                             status.save()
+                            # Attempt binary auto-upgrade for this parent as spillover root may benefit
+                            try:
+                                AutoUpgradeService().process_binary_auto_upgrade(user_id=str(parent))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    # Global phase progression for spillover parent
+                    try:
+                        if program == 'global':
+                            parent_progress = GlobalPhaseProgression.objects(user_id=parent).first()
+                            if parent_progress:
+                                if parent_progress.current_phase == 'PHASE-1':
+                                    parent_progress.phase_1_members_current = int(parent_progress.phase_1_members_current or 0) + 1
+                                    if parent_progress.phase_1_members_current >= int(parent_progress.phase_1_members_required or 4):
+                                        AutoUpgradeService().process_global_phase_progression(user_id=str(parent))
+                                else:
+                                    parent_progress.phase_2_members_current = int(parent_progress.phase_2_members_current or 0) + 1
+                                    if parent_progress.phase_2_members_current >= int(parent_progress.phase_2_members_required or 8):
+                                        AutoUpgradeService().process_global_phase_progression(user_id=str(parent))
+                                parent_progress.global_team_size = int(parent_progress.global_team_size or 0) + 1
+                                members = parent_progress.global_team_members or []
+                                if user_id not in members:
+                                    members.append(user_id)
+                                parent_progress.global_team_members = members
+                                parent_progress.updated_at = datetime.utcnow()
+                                parent_progress.save()
                     except Exception:
                         pass
                     return placement

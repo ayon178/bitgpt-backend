@@ -12,15 +12,17 @@ from .model import (
 from ..missed_profit.model import MissedProfit
 from utils import ensure_currency_for_program
 from ..leadership_stipend.model import LeadershipStipend
+from ..leadership_stipend.service import LeadershipStipendService
+from ..blockchain.model import BlockchainEvent
 
 class CommissionService:
     """Commission Management Business Logic Service"""
     
     # Commission percentages based on PROJECT_DOCUMENTATION.md
     JOINING_COMMISSION_PERCENTAGE = 10.0  # 10% commission on joining
-    UPGRADE_COMMISSION_PERCENTAGE = 10.0  # 10% commission on upgrades
+    UPGRADE_COMMISSION_PERCENTAGE = 100.0  # 100% of upgrade amount participates in distribution
     LEVEL_COMMISSION_PERCENTAGE = 30.0    # 30% to corresponding level upline
-    LEVEL_DISTRIBUTION_PERCENTAGE = 70.0  # 70% distributed across levels 1-16
+    LEVEL_DISTRIBUTION_PERCENTAGE = 70.0  # 70% distributed across levels 1-16 (Dual Tree)
     
     def __init__(self):
         pass
@@ -95,7 +97,7 @@ class CommissionService:
             if not from_user:
                 return {"success": False, "error": "User not found"}
             
-            # Calculate total commission amount
+            # Calculate total commission amount (100% of upgrade value)
             total_commission = amount * Decimal(str(self.UPGRADE_COMMISSION_PERCENTAGE / 100))
             
             # 30% to corresponding level upline
@@ -110,43 +112,58 @@ class CommissionService:
             # Normalize currency per program
             currency = ensure_currency_for_program(program, currency)
 
-            # Create commission for level upline (30%)
+            # Create commission for level upline (30%) or miss to stipend if ineligible
             if level_upline:
-                level_commission_record = Commission(
-                    user_id=ObjectId(level_upline),
-                    from_user_id=ObjectId(from_user_id),
-                    commission_type='upgrade',
-                    program=program,
-                    commission_amount=level_commission,
-                    currency=currency,
-                    commission_percentage=self.LEVEL_COMMISSION_PERCENTAGE,
-                    source_slot_no=slot_no,
-                    source_slot_name=slot_name,
-                    level=slot_no,
-                    is_level_commission=True,
-                    status='pending'
-                )
-                level_commission_record.save()
-                
-                # Update accumulation
-                self._update_commission_accumulation(level_upline, program, level_commission, currency, 'upgrade')
-                # Receipt for level commission (30%)
-                try:
-                    DistributionReceipt(
+                if self._is_user_eligible_for_level(level_upline, program, slot_no):
+                    level_commission_record = Commission(
                         user_id=ObjectId(level_upline),
                         from_user_id=ObjectId(from_user_id),
+                        commission_type='upgrade',
                         program=program,
-                        source_type='upgrade',
+                        commission_amount=level_commission,
+                        currency=currency,
+                        commission_percentage=self.LEVEL_COMMISSION_PERCENTAGE,
                         source_slot_no=slot_no,
                         source_slot_name=slot_name,
-                        distribution_level=slot_no,
-                        amount=level_commission,
-                        currency=currency,
-                        commission_id=level_commission_record.id,
-                        event='upgrade_level_commission'
-                    ).save()
-                except Exception:
-                    pass
+                        level=slot_no,
+                        is_level_commission=True,
+                        status='pending'
+                    )
+                    level_commission_record.save()
+                    # Update accumulation
+                    self._update_commission_accumulation(level_upline, program, level_commission, currency, 'upgrade')
+                    # Receipt for level commission (30%)
+                    try:
+                        DistributionReceipt(
+                            user_id=ObjectId(level_upline),
+                            from_user_id=ObjectId(from_user_id),
+                            program=program,
+                            source_type='upgrade',
+                            source_slot_no=slot_no,
+                            source_slot_name=slot_name,
+                            distribution_level=slot_no,
+                            amount=level_commission,
+                            currency=currency,
+                            commission_id=None,
+                            event='upgrade_level_commission'
+                        ).save()
+                    except Exception:
+                        pass
+                else:
+                    # Route missed 30% to stipend
+                    try:
+                        self.handle_missed_profit(
+                            user_id=str(level_upline),
+                            from_user_id=from_user_id,
+                            program=program,
+                            slot_no=slot_no,
+                            slot_name=slot_name,
+                            amount=level_commission,
+                            currency=currency,
+                            reason='level_or_activity_ineligible'
+                        )
+                    except Exception:
+                        pass
             
             # Create distribution record for 70%
             distribution = CommissionDistribution(
@@ -161,8 +178,8 @@ class CommissionService:
                 status='pending'
             )
             
-            # Distribute across levels 1-16
-            level_distributions = self._distribute_across_levels(from_user_id, distribution_amount, currency)
+            # Distribute across levels 1-16 per Dual-Tree percentages
+            level_distributions = self._distribute_across_levels(from_user_id, distribution_amount, currency, program, slot_no, slot_name)
             distribution.level_distributions = level_distributions
             distribution.save()
             # Receipts for level distributions (70%)
@@ -196,6 +213,35 @@ class CommissionService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+        finally:
+            # Leadership Stipend hooks on Binary slot upgrades (slots 10-16)
+            try:
+                if program == 'binary':
+                    ls = LeadershipStipendService()
+                    # Ensure user is in program
+                    ls.join_leadership_stipend_program(user_id=from_user_id)
+                    # For any binary upgrade, if slot >= current tier, reset to new slot’s 2x (spec: newest slot supersedes)
+                    result = ls.check_eligibility(user_id=from_user_id, force_check=True)
+                    if slot_no >= 10:
+                        # Record blockchain event for stipend eligibility/upgrade
+                        try:
+                            BlockchainEvent(
+                                tx_hash=f"STIPEND-{from_user_id}-S{slot_no}-{datetime.utcnow().timestamp()}",
+                                event_type='upgrade_triggered',
+                                event_data={
+                                    'program': 'binary',
+                                    'slot_no': slot_no,
+                                    'user_id': from_user_id,
+                                    'stipend_eligibility': result.get('is_eligible', False),
+                                    'current_tier': result.get('current_tier', {})
+                                },
+                                status='processed',
+                                processed_at=datetime.utcnow()
+                            ).save()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
     
     def handle_missed_profit(self, user_id: str, from_user_id: str, program: str, 
                            slot_no: int, slot_name: str, amount: Decimal, 
@@ -346,23 +392,77 @@ class CommissionService:
         except Exception:
             return None
     
-    def _distribute_across_levels(self, from_user_id: str, amount: Decimal, currency: str) -> List[Dict]:
-        """Distribute commission across levels 1-16"""
-        level_distributions = []
-        amount_per_level = amount / Decimal('16')
-        
+    def _distribute_across_levels(self, from_user_id: str, amount: Decimal, currency: str, program: str, source_slot_no: int, source_slot_name: str) -> List[Dict]:
+        """Distribute commission across levels 1-16 using Dual-Tree percentages and handle misses"""
+        level_distributions: List[Dict] = []
+        percentages = self._dual_tree_percentages()
         for level in range(1, 17):
-            # Get user at this level
+            pct = Decimal(str(percentages.get(level, 0))) / Decimal('100')
+            level_amount = (amount * pct)
             level_user = self._get_level_upline(from_user_id, level)
-            
-            if level_user:
+            if not level_user or level_amount <= 0:
+                continue
+            if self._is_user_eligible_for_level(level_user, program, level):
                 level_distributions.append({
                     "level": level,
-                    "amount": float(amount_per_level),
+                    "amount": float(level_amount),
                     "user_id": level_user
                 })
-        
+                # Accumulate for eligible user
+                self._update_commission_accumulation(level_user, program, level_amount, currency, 'level')
+            else:
+                # Missed profit to stipend
+                try:
+                    self.handle_missed_profit(
+                        user_id=str(level_user),
+                        from_user_id=from_user_id,
+                        program=program,
+                        slot_no=source_slot_no,
+                        slot_name=source_slot_name,
+                        amount=level_amount,
+                        currency=currency,
+                        reason='level_or_activity_ineligible'
+                    )
+                except Exception:
+                    pass
         return level_distributions
+
+    def _dual_tree_percentages(self) -> Dict[int, float]:
+        """Dual-tree distribution percentages per level (sum = 100)."""
+        mapping: Dict[int, float] = {}
+        mapping[1] = 30.0
+        for lvl in [2, 3]:
+            mapping[lvl] = 10.0
+        for lvl in range(4, 11):
+            mapping[lvl] = 5.0
+        for lvl in [11, 12, 13]:
+            mapping[lvl] = 3.0
+        for lvl in [14, 15, 16]:
+            mapping[lvl] = 2.0
+        return mapping
+
+    def _is_user_eligible_for_level(self, user_id: str, program: str, required_level: int) -> bool:
+        """Check if user is eligible to receive commission for a given level."""
+        try:
+            # Check slot activation at or above required level
+            from ..slot.model import SlotActivation
+            has_slot = SlotActivation.objects(
+                user_id=ObjectId(user_id),
+                program=program,
+                slot_no__gte=required_level,
+                status='completed'
+            ).first() is not None
+            if not has_slot:
+                return False
+            # For binary, also require 2 partners (account active)
+            if program == 'binary':
+                from ..auto_upgrade.model import BinaryAutoUpgrade
+                status = BinaryAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+                if not status or (status.partners_available or 0) < (status.partners_required or 2):
+                    return False
+            return True
+        except Exception:
+            return False
     
     def _update_commission_accumulation(self, user_id: str, program: str, amount: Decimal, 
                                      currency: str, commission_type: str):

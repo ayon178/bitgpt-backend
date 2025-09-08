@@ -16,6 +16,11 @@ class CreateUserRequest(BaseModel):
     role: Optional[str] = Field(None, description="Role: user | admin | shareholder")
     email: Optional[str] = Field(None, description="Email address")
     password: Optional[str] = Field(None, description="Plain password if applicable")
+    # Blockchain payment proofs (frontend passes on-chain tx proofs)
+    binary_payment_tx: Optional[str] = Field(None, description="On-chain tx hash for 0.0066 BNB binary join")
+    matrix_payment_tx: Optional[str] = Field(None, description="On-chain tx hash for $11 matrix join (optional)")
+    global_payment_tx: Optional[str] = Field(None, description="On-chain tx hash for $33 global join (optional)")
+    network: Optional[str] = Field(None, description="Blockchain network identifier, e.g., BSC, ETH, TESTNET")
 
     class Config:
         json_schema_extra = {

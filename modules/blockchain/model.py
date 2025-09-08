@@ -5,7 +5,7 @@ class BlockchainEvent(Document):
     """Store blockchain events for idempotency"""
     tx_hash = StringField(required=True, unique=True)
     event_type = StringField(choices=[
-        'slot_activated', 'income_distributed', 'upgrade_triggered',
+        'join_payment', 'slot_activated', 'income_distributed', 'upgrade_triggered',
         'spillover_occurred', 'jackpot_settled', 'spark_distributed'
     ], required=True)
     event_data = DictField(required=True)

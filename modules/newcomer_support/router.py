@@ -374,6 +374,77 @@ async def create_newcomer_support_bonus(request: NewcomerSupportBonusRequest):
     except Exception as e:
         return error_response(str(e))
 
+@router.post("/bonus/claim-instant")
+async def claim_instant_bonus(payload: NewcomerSupportJoinRequest):
+    """Claim Instant Bonus (Matrix-only, API-triggered)"""
+    try:
+        # Validate user exists
+        user = User.objects(id=ObjectId(payload.user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Validate program enrollment
+        newcomer_support = NewcomerSupport.objects(user_id=ObjectId(payload.user_id)).first()
+        if not newcomer_support:
+            raise HTTPException(status_code=404, detail="User not in Newcomer Support program")
+
+        # Check eligibility first
+        eligibility = NewcomerSupportEligibility.objects(user_id=ObjectId(payload.user_id)).first()
+        if not eligibility:
+            eligibility = NewcomerSupportEligibility(user_id=ObjectId(payload.user_id))
+            eligibility.save()
+
+        # Refresh matrix/newcomer eligibility
+        matrix_status = _check_matrix_program_status(payload.user_id)
+        newcomer_status = _check_newcomer_status(payload.user_id)
+        is_eligible = bool(matrix_status.get("has_matrix")) and bool(newcomer_status.get("is_newcomer"))
+        if not is_eligible:
+            raise HTTPException(status_code=400, detail="Not eligible for instant bonus")
+
+        # Determine bonus amount from settings (fallback to 50 USDT)
+        settings = NewcomerSupportSettings.objects(is_active=True).first()
+        amount = settings.instant_bonus_amount if settings else 50.0
+
+        # Create bonus record
+        bonus = NewcomerSupportBonus(
+            user_id=ObjectId(payload.user_id),
+            newcomer_support_id=newcomer_support.id,
+            bonus_type="instant",
+            bonus_name="Instant Bonus",
+            bonus_amount=amount,
+            source_type="matrix_join",
+            source_description="Instant bonus upon joining Matrix program",
+            payment_status="pending"
+        )
+        bonus.save()
+
+        # Update user NGS state
+        newcomer_support.instant_bonus_amount = amount
+        newcomer_support.instant_bonus_claimed = True
+        newcomer_support.instant_bonus_claimed_at = datetime.utcnow()
+        newcomer_support.total_bonuses_earned += amount
+        newcomer_support.pending_bonuses += amount
+        newcomer_support.last_updated = datetime.utcnow()
+        newcomer_support.save()
+
+        return success_response(
+            data={
+                "bonus_id": str(bonus.id),
+                "user_id": payload.user_id,
+                "bonus_type": "instant",
+                "bonus_amount": amount,
+                "currency": "USDT",
+                "payment_status": "pending",
+                "message": f"Instant bonus processed: ${amount}"
+            },
+            message="Instant bonus claimed"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
 @router.get("/monthly-opportunities/{user_id}")
 async def get_monthly_opportunities(user_id: str):
     """Get monthly earning opportunities for user"""

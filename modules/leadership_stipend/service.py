@@ -255,6 +255,16 @@ class LeadershipStipendService:
                 leadership_stipend.last_payment_date = payment.payment_date
                 leadership_stipend.last_updated = datetime.utcnow()
                 leadership_stipend.save()
+                # Update tier totals
+                try:
+                    for t in leadership_stipend.tiers:
+                        if t.slot_number == payment.slot_number:
+                            t.total_paid = float((t.total_paid or 0.0) + float(payment.daily_return_amount))
+                            t.pending_amount = float(max(0.0, (t.pending_amount or 0.0) - float(payment.daily_return_amount)))
+                            break
+                    leadership_stipend.save()
+                except Exception:
+                    pass
             
             # Complete payment
             payment.payment_status = "paid"
@@ -446,9 +456,23 @@ class LeadershipStipendService:
             if not user_stipend.is_eligible or user_stipend.current_tier < 10:
                 return {"success": False, "amount": 0.0, "payments_created": 0}
             
-            # Get current tier info
+            # Get current tier info and compute remaining up to 2x cap
             tier_info = self._get_tier_info(user_stipend.current_tier)
-            daily_amount = tier_info["daily_return"]
+            cap_amount = float(tier_info["daily_return"])  # Using daily_return field as the 2x cap per spec
+            # Find the current tier record
+            tier_record = None
+            for t in user_stipend.tiers:
+                if t.slot_number == user_stipend.current_tier:
+                    tier_record = t
+                    break
+            if not tier_record:
+                return {"success": False, "amount": 0.0, "payments_created": 0}
+            tier_total_paid = float(tier_record.total_paid or 0.0)
+            tier_pending = float(tier_record.pending_amount or 0.0)
+            remaining = cap_amount - tier_total_paid - tier_pending
+            if remaining <= 0:
+                return {"success": False, "amount": 0.0, "payments_created": 0}
+            daily_amount = remaining
             
             # Create payment record
             payment = LeadershipStipendPayment(
@@ -464,6 +488,14 @@ class LeadershipStipendService:
                 payment_status="pending"
             )
             payment.save()
+            # Update tier pending/earned
+            try:
+                tier_record.pending_amount = float((tier_record.pending_amount or 0.0) + float(daily_amount))
+                tier_record.total_earned = float((tier_record.total_earned or 0.0) + float(daily_amount))
+                user_stipend.last_updated = datetime.utcnow()
+                user_stipend.save()
+            except Exception:
+                pass
             
             return {
                 "success": True,
