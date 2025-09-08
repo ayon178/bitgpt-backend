@@ -10,6 +10,7 @@ from utils import ensure_currency_for_program
 from modules.auto_upgrade.model import BinaryAutoUpgrade
 from modules.commission.service import CommissionService
 from modules.jackpot.service import JackpotService
+from modules.newcomer_support.model import NewcomerSupport
 
 
 def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -63,6 +64,18 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 is_eligible=False,
                 can_upgrade=False
             ).save()
+        except Exception:
+            pass
+
+        # Create Newcomer Support record (one per user)
+        try:
+            if not NewcomerSupport.objects(user_id=ObjectId(user.id)).first():
+                NewcomerSupport(
+                    user_id=ObjectId(user.id),
+                    is_eligible=False,
+                    is_active=False,
+                    joined_at=datetime.utcnow()
+                ).save()
         except Exception:
             pass
 
