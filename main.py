@@ -25,6 +25,7 @@ from modules.phase_system.router import router as phase_system_router
 from modules.recycle.router import router as recycle_router
 from modules.spillover.router import router as spillover_router
 from modules.jackpot.router import router as jackpot_router
+from modules.spark.router import router as spark_router
 
 # DB connection
 from core.db import connect_to_db
@@ -76,6 +77,7 @@ app.include_router(phase_system_router)
 app.include_router(recycle_router)
 app.include_router(spillover_router)
 app.include_router(jackpot_router)
+app.include_router(spark_router)
 
 @app.get("/")
 async def root():
