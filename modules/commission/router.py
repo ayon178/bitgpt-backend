@@ -6,9 +6,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from ..user.model import User
 from .model import (
-    Commission, CommissionDistribution, MissedProfit, 
-    LeadershipStipend, CommissionRule, CommissionAccumulation, CommissionPayment
+    Commission, CommissionDistribution, 
+    CommissionRule, CommissionAccumulation, CommissionPayment
 )
+from ..missed_profit.model import MissedProfit
+from ..leadership_stipend.model import LeadershipStipend
 from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/commission", tags=["Commission Management"])

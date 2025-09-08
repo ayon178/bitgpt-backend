@@ -34,7 +34,8 @@ from core.db import connect_to_db
 from modules.user import User, PartnerGraph
 from modules.slot import SlotCatalog, SlotActivation
 from modules.tree import TreePlacement
-from modules.income import IncomeEvent, SpilloverEvent, LeadershipStipend
+from modules.income import IncomeEvent, SpilloverEvent
+from modules.leadership_stipend.model import LeadershipStipend
 from modules.income.bonus_fund import BonusFund, FundDistribution
 from modules.wallet import UserWallet, ReserveLedger, WalletLedger
 from modules.jackpot import JackpotTicket, JackpotFund
