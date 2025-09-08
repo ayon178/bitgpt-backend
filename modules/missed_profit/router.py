@@ -11,6 +11,7 @@ from .model import (
     MissedProfitStatistics, MissedProfitRecovery, MissedProfitReason
 )
 from ..utils.response import success_response, error_response
+from ..auth.service import authentication_service
 
 router = APIRouter(prefix="/missed-profit", tags=["Missed Profit Handling"])
 
@@ -63,7 +64,7 @@ class MissedProfitRecoveryRequest(BaseModel):
 # API Endpoints
 
 @router.post("/create")
-async def create_missed_profit(request: MissedProfitCreateRequest):
+async def create_missed_profit(request: MissedProfitCreateRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Create missed profit record"""
     try:
         # Validate users exist
@@ -133,7 +134,7 @@ async def create_missed_profit(request: MissedProfitCreateRequest):
         return error_response(str(e))
 
 @router.get("/list/{user_id}")
-async def get_missed_profits(user_id: str, limit: int = Query(50, le=100)):
+async def get_missed_profits(user_id: str, limit: int = Query(50, le=100), current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get missed profits for user"""
     try:
         missed_profits = MissedProfit.objects(
@@ -175,7 +176,7 @@ async def get_missed_profits(user_id: str, limit: int = Query(50, le=100)):
         return error_response(str(e))
 
 @router.post("/accumulate")
-async def accumulate_missed_profits(request: MissedProfitAccumulationRequest):
+async def accumulate_missed_profits(request: MissedProfitAccumulationRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Accumulate missed profits for a period"""
     try:
         # Get missed profits for the period
@@ -287,7 +288,7 @@ async def accumulate_missed_profits(request: MissedProfitAccumulationRequest):
         return error_response(str(e))
 
 @router.post("/distribute")
-async def distribute_missed_profits(request: MissedProfitDistributionRequest):
+async def distribute_missed_profits(request: MissedProfitDistributionRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Distribute missed profits via Leadership Stipend"""
     try:
         # Get accumulated missed profits for the period
@@ -372,7 +373,7 @@ async def distribute_missed_profits(request: MissedProfitDistributionRequest):
         return error_response(str(e))
 
 @router.get("/fund")
-async def get_missed_profit_fund():
+async def get_missed_profit_fund(current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Missed Profit fund status"""
     try:
         fund = MissedProfitFund.objects(is_active=True).first()
@@ -406,7 +407,7 @@ async def get_missed_profit_fund():
         return error_response(str(e))
 
 @router.post("/fund")
-async def update_missed_profit_fund(request: MissedProfitFundRequest):
+async def update_missed_profit_fund(request: MissedProfitFundRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Missed Profit fund"""
     try:
         fund = MissedProfitFund.objects(is_active=True).first()
@@ -443,7 +444,7 @@ async def update_missed_profit_fund(request: MissedProfitFundRequest):
         return error_response(str(e))
 
 @router.get("/settings")
-async def get_missed_profit_settings():
+async def get_missed_profit_settings(current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Missed Profit system settings"""
     try:
         settings = MissedProfitSettings.objects(is_active=True).first()
@@ -479,7 +480,7 @@ async def get_missed_profit_settings():
         return error_response(str(e))
 
 @router.post("/settings")
-async def update_missed_profit_settings(request: MissedProfitSettingsRequest):
+async def update_missed_profit_settings(request: MissedProfitSettingsRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Missed Profit system settings"""
     try:
         settings = MissedProfitSettings.objects(is_active=True).first()
@@ -522,7 +523,7 @@ async def update_missed_profit_settings(request: MissedProfitSettingsRequest):
         return error_response(str(e))
 
 @router.get("/statistics")
-async def get_missed_profit_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$")):
+async def get_missed_profit_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$"), current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Missed Profit program statistics"""
     try:
         statistics = MissedProfitStatistics.objects(period=period, is_active=True).order_by('-last_updated').first()
@@ -621,7 +622,7 @@ async def get_missed_profit_statistics(period: str = Query("all_time", regex="^(
         return error_response(str(e))
 
 @router.post("/recovery")
-async def attempt_recovery(request: MissedProfitRecoveryRequest):
+async def attempt_recovery(request: MissedProfitRecoveryRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Attempt to recover missed profit"""
     try:
         # Get missed profit record

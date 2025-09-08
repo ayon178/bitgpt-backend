@@ -4,13 +4,14 @@ from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timedelta
 from decimal import Decimal
-from ..user.model import User
+from ..user.model import User, PartnerGraph
 from .model import (
     PhaseSystem, PhaseSystemEligibility, PhaseSystemUpgrade,
     PhaseSystemFund, PhaseSystemSettings, PhaseSystemLog, 
     PhaseSystemStatistics, PhaseSystemMember, PhaseSlot, PhaseProgress
 )
 from ..utils.response import success_response, error_response
+from ..auth.service import authentication_service
 
 router = APIRouter(prefix="/phase-system", tags=["Phase System"])
 
@@ -50,7 +51,7 @@ class PhaseSystemFundRequest(BaseModel):
 # API Endpoints
 
 @router.post("/join")
-async def join_phase_system(request: PhaseSystemJoinRequest):
+async def join_phase_system(request: PhaseSystemJoinRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Join Phase System"""
     try:
         # Validate user exists
@@ -132,7 +133,7 @@ async def join_phase_system(request: PhaseSystemJoinRequest):
         return error_response(str(e))
 
 @router.get("/status/{user_id}")
-async def get_phase_system_status(user_id: str):
+async def get_phase_system_status(user_id: str, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Phase System status for user"""
     try:
         phase_system = PhaseSystem.objects(user_id=ObjectId(user_id)).first()
@@ -191,7 +192,7 @@ async def get_phase_system_status(user_id: str):
         return error_response(str(e))
 
 @router.get("/eligibility/{user_id}")
-async def check_phase_system_eligibility(user_id: str):
+async def check_phase_system_eligibility(user_id: str, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Check Phase System eligibility for user"""
     try:
         # Get Phase System record
@@ -261,7 +262,7 @@ async def check_phase_system_eligibility(user_id: str):
         return error_response(str(e))
 
 @router.post("/upgrade")
-async def process_phase_upgrade(request: PhaseSystemUpgradeRequest):
+async def process_phase_upgrade(request: PhaseSystemUpgradeRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Process Phase System upgrade"""
     try:
         # Validate user exists
@@ -379,7 +380,7 @@ async def process_phase_upgrade(request: PhaseSystemUpgradeRequest):
         return error_response(str(e))
 
 @router.post("/add-member")
-async def add_phase_system_member(request: PhaseSystemMemberRequest):
+async def add_phase_system_member(request: PhaseSystemMemberRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Add member to Phase System"""
     try:
         # Validate users exist
@@ -438,7 +439,7 @@ async def add_phase_system_member(request: PhaseSystemMemberRequest):
         return error_response(str(e))
 
 @router.get("/fund")
-async def get_phase_system_fund():
+async def get_phase_system_fund(current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Phase System fund status"""
     try:
         fund = PhaseSystemFund.objects(is_active=True).first()
@@ -472,7 +473,7 @@ async def get_phase_system_fund():
         return error_response(str(e))
 
 @router.post("/fund")
-async def update_phase_system_fund(request: PhaseSystemFundRequest):
+async def update_phase_system_fund(request: PhaseSystemFundRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Phase System fund"""
     try:
         fund = PhaseSystemFund.objects(is_active=True).first()
@@ -509,7 +510,7 @@ async def update_phase_system_fund(request: PhaseSystemFundRequest):
         return error_response(str(e))
 
 @router.get("/settings")
-async def get_phase_system_settings():
+async def get_phase_system_settings(current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Phase System settings"""
     try:
         settings = PhaseSystemSettings.objects(is_active=True).first()
@@ -541,7 +542,7 @@ async def get_phase_system_settings():
         return error_response(str(e))
 
 @router.post("/settings")
-async def update_phase_system_settings(request: PhaseSystemSettingsRequest):
+async def update_phase_system_settings(request: PhaseSystemSettingsRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Phase System settings"""
     try:
         settings = PhaseSystemSettings.objects(is_active=True).first()
@@ -580,7 +581,7 @@ async def update_phase_system_settings(request: PhaseSystemSettingsRequest):
         return error_response(str(e))
 
 @router.get("/statistics")
-async def get_phase_system_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$")):
+async def get_phase_system_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$"), current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Phase System statistics"""
     try:
         statistics = PhaseSystemStatistics.objects(period=period, is_active=True).order_by('-last_updated').first()
@@ -670,7 +671,7 @@ async def get_phase_system_statistics(period: str = Query("all_time", regex="^(d
         return error_response(str(e))
 
 @router.get("/leaderboard")
-async def get_phase_system_leaderboard(limit: int = Query(50, le=100)):
+async def get_phase_system_leaderboard(limit: int = Query(50, le=100), current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Phase System leaderboard"""
     try:
         # Get top Phase System participants
@@ -730,20 +731,29 @@ def _initialize_phase_slots() -> List[PhaseSlot]:
     ]
 
 def _check_current_phase_status(user_id: str) -> Dict[str, Any]:
-    """Check current phase status for user"""
+    """Use PartnerGraph to derive team and directs for Global program"""
     try:
-        # This would need to be implemented based on actual team system
-        # For now, returning mock data
+        graph = PartnerGraph.objects(user_id=ObjectId(user_id)).first()
+        global_team_size = graph.total_team if graph else 0
+        # If program‑wise direct counts are tracked
+        direct_global = 0
+        if graph and graph.directs_count_by_program and 'global' in graph.directs_count_by_program:
+            direct_global = graph.directs_count_by_program['global'] or 0
+        else:
+            # Fallback: direct children in tree for global
+            from ..tree.model import TreePlacement
+            direct_global = TreePlacement.objects(parent_id=ObjectId(user_id), program='global', is_active=True).count()
+
         return {
-            "global_team_size": 0,
-            "direct_global_referrals": 0,
-            "current_members_count": 0
+            "global_team_size": global_team_size,
+            "direct_global_referrals": direct_global,
+            "current_members_count": direct_global,  # used as current members for slot progression
         }
     except Exception:
         return {
             "global_team_size": 0,
             "direct_global_referrals": 0,
-            "current_members_count": 0
+            "current_members_count": 0,
         }
 
 def _get_next_upgrade_requirements(phase_system: PhaseSystem) -> Dict[str, Any]:

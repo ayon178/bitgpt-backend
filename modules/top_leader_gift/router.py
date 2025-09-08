@@ -4,13 +4,15 @@ from pydantic import BaseModel
 from bson import ObjectId
 from datetime import datetime, timedelta
 from decimal import Decimal
-from ..user.model import User
+from ..user.model import User, PartnerGraph
+from ..rank.model import UserRank
 from .model import (
     TopLeaderGift, TopLeaderGiftEligibility, TopLeaderGiftReward,
     TopLeaderGiftFund, TopLeaderGiftSettings, TopLeaderGiftLog, 
     TopLeaderGiftStatistics, TopLeaderGiftTierProgress, TopLeaderGiftTier
 )
 from ..utils.response import success_response, error_response
+from ..auth.service import authentication_service
 
 router = APIRouter(prefix="/top-leader-gift", tags=["Top Leader Gift"])
 
@@ -46,7 +48,7 @@ class TopLeaderGiftTierRequest(BaseModel):
 # API Endpoints
 
 @router.post("/join")
-async def join_top_leader_gift(request: TopLeaderGiftJoinRequest):
+async def join_top_leader_gift(request: TopLeaderGiftJoinRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Join Top Leader Gift program"""
     try:
         # Validate user exists
@@ -97,7 +99,7 @@ async def join_top_leader_gift(request: TopLeaderGiftJoinRequest):
         return error_response(str(e))
 
 @router.get("/eligibility/{user_id}")
-async def check_top_leader_gift_eligibility(user_id: str):
+async def check_top_leader_gift_eligibility(user_id: str, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Check Top Leader Gift eligibility for user"""
     try:
         # Get Top Leader Gift record
@@ -182,7 +184,7 @@ async def check_top_leader_gift_eligibility(user_id: str):
         return error_response(str(e))
 
 @router.get("/status/{user_id}")
-async def get_top_leader_gift_status(user_id: str):
+async def get_top_leader_gift_status(user_id: str, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Top Leader Gift status and progress"""
     try:
         top_leader_gift = TopLeaderGift.objects(user_id=ObjectId(user_id)).first()
@@ -242,7 +244,7 @@ async def get_top_leader_gift_status(user_id: str):
         return error_response(str(e))
 
 @router.get("/rewards/{user_id}")
-async def get_top_leader_gift_rewards(user_id: str, limit: int = Query(50, le=100)):
+async def get_top_leader_gift_rewards(user_id: str, limit: int = Query(50, le=100), current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Top Leader Gift rewards for user"""
     try:
         rewards = TopLeaderGiftReward.objects(user_id=ObjectId(user_id)).order_by('-created_at').limit(limit)
@@ -280,7 +282,7 @@ async def get_top_leader_gift_rewards(user_id: str, limit: int = Query(50, le=10
         return error_response(str(e))
 
 @router.post("/reward")
-async def create_top_leader_gift_reward(request: TopLeaderGiftRewardRequest):
+async def create_top_leader_gift_reward(request: TopLeaderGiftRewardRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Create Top Leader Gift reward"""
     try:
         # Validate user exists
@@ -363,7 +365,7 @@ async def create_top_leader_gift_reward(request: TopLeaderGiftRewardRequest):
         return error_response(str(e))
 
 @router.get("/tier-progress/{user_id}")
-async def get_tier_progress(user_id: str):
+async def get_tier_progress(user_id: str, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get tier progress for user"""
     try:
         top_leader_gift = TopLeaderGift.objects(user_id=ObjectId(user_id)).first()
@@ -411,7 +413,7 @@ async def get_tier_progress(user_id: str):
         return error_response(str(e))
 
 @router.get("/fund")
-async def get_top_leader_gift_fund():
+async def get_top_leader_gift_fund(current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Top Leader Gift fund status"""
     try:
         fund = TopLeaderGiftFund.objects(is_active=True).first()
@@ -445,7 +447,7 @@ async def get_top_leader_gift_fund():
         return error_response(str(e))
 
 @router.post("/fund")
-async def update_top_leader_gift_fund(request: TopLeaderGiftFundRequest):
+async def update_top_leader_gift_fund(request: TopLeaderGiftFundRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Top Leader Gift fund"""
     try:
         fund = TopLeaderGiftFund.objects(is_active=True).first()
@@ -482,7 +484,7 @@ async def update_top_leader_gift_fund(request: TopLeaderGiftFundRequest):
         return error_response(str(e))
 
 @router.get("/settings")
-async def get_top_leader_gift_settings():
+async def get_top_leader_gift_settings(current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Top Leader Gift system settings"""
     try:
         settings = TopLeaderGiftSettings.objects(is_active=True).first()
@@ -510,7 +512,7 @@ async def get_top_leader_gift_settings():
         return error_response(str(e))
 
 @router.post("/settings")
-async def update_top_leader_gift_settings(request: TopLeaderGiftSettingsRequest):
+async def update_top_leader_gift_settings(request: TopLeaderGiftSettingsRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Top Leader Gift system settings"""
     try:
         settings = TopLeaderGiftSettings.objects(is_active=True).first()
@@ -545,7 +547,7 @@ async def update_top_leader_gift_settings(request: TopLeaderGiftSettingsRequest)
         return error_response(str(e))
 
 @router.get("/statistics")
-async def get_top_leader_gift_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$")):
+async def get_top_leader_gift_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$"), current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Top Leader Gift program statistics"""
     try:
         statistics = TopLeaderGiftStatistics.objects(period=period, is_active=True).order_by('-last_updated').first()
@@ -631,7 +633,7 @@ async def get_top_leader_gift_statistics(period: str = Query("all_time", regex="
         return error_response(str(e))
 
 @router.get("/leaderboard")
-async def get_top_leader_gift_leaderboard(limit: int = Query(50, le=100)):
+async def get_top_leader_gift_leaderboard(limit: int = Query(50, le=100), current_user: dict = Depends(authentication_service.verify_authentication)):
     """Get Top Leader Gift leaderboard"""
     try:
         # Get top Top Leader Gift participants
@@ -729,16 +731,29 @@ def _initialize_top_leader_gift_tiers() -> List[TopLeaderGiftTier]:
     ]
 
 def _check_current_status(user_id: str) -> Dict[str, Any]:
-    """Check current status for user"""
+    """Resolve rank, directs, and team size from canonical sources"""
     try:
-        # This would need to be implemented based on actual rank and team system
-        # For now, returning mock data
+        # Rank
+        user_rank = UserRank.objects(user_id=ObjectId(user_id)).first()
+        self_rank = user_rank.current_rank_number if user_rank else 0
+
+        # Direct partners and team from PartnerGraph
+        graph = PartnerGraph.objects(user_id=ObjectId(user_id)).first()
+        direct_partners = graph.directs if graph else []
+        total_team_size = graph.total_team if graph else 0
+
+        # Map directs to their ranks
+        ranks = {}
+        if direct_partners:
+            direct_user_ranks = UserRank.objects(user_id__in=direct_partners)
+            ranks = {str(r.user_id): r.current_rank_number for r in direct_user_ranks}
+
         return {
-            "self_rank": 0,
-            "direct_partners_count": 0,
-            "direct_partners": [],
-            "direct_partners_with_ranks": {},
-            "total_team_size": 0
+            "self_rank": self_rank,
+            "direct_partners_count": len(direct_partners),
+            "direct_partners": direct_partners,
+            "direct_partners_with_ranks": ranks,
+            "total_team_size": total_team_size,
         }
     except Exception:
         return {
@@ -746,7 +761,7 @@ def _check_current_status(user_id: str) -> Dict[str, Any]:
             "direct_partners_count": 0,
             "direct_partners": [],
             "direct_partners_with_ranks": {},
-            "total_team_size": 0
+            "total_team_size": 0,
         }
 
 def _check_tier_eligibility(eligibility: TopLeaderGiftEligibility) -> Dict[str, bool]:

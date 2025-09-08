@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from bson import ObjectId
 from datetime import datetime
 
 from ..utils.response import success_response, error_response
+from ..auth.service import authentication_service
 from .model import RecycleQueue, RecyclePlacement, RecycleSettings, RecycleLog, RecycleStatistics, RecycleRule
 
 router = APIRouter(prefix="/recycle", tags=["Matrix Recycle"])
@@ -30,7 +31,7 @@ class SettingsUpdateRequest(BaseModel):
 
 
 @router.post("/queue")
-async def queue_recycle(request: QueueRecycleRequest):
+async def queue_recycle(request: QueueRecycleRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         item = RecycleQueue(
             user_id=ObjectId(request.user_id),
@@ -61,7 +62,7 @@ async def queue_recycle(request: QueueRecycleRequest):
 
 
 @router.get("/queue")
-async def list_queue(status: str = Query("queued"), limit: int = Query(50, le=200)):
+async def list_queue(status: str = Query("queued"), limit: int = Query(50, le=200), current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         items = RecycleQueue.objects(status=status).order_by('created_at').limit(limit)
         return success_response({
@@ -86,7 +87,7 @@ async def list_queue(status: str = Query("queued"), limit: int = Query(50, le=20
 
 
 @router.get("/placements/{user_id}")
-async def list_placements(user_id: str, limit: int = Query(50, le=200)):
+async def list_placements(user_id: str, limit: int = Query(50, le=200), current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         items = RecyclePlacement.objects(user_id=ObjectId(user_id)).order_by('-processed_at').limit(limit)
         return success_response({
@@ -109,7 +110,7 @@ async def list_placements(user_id: str, limit: int = Query(50, le=200)):
 
 
 @router.get("/settings")
-async def get_settings():
+async def get_settings(current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         settings = RecycleSettings.objects().first()
         if not settings:
@@ -137,7 +138,7 @@ async def get_settings():
 
 
 @router.post("/settings")
-async def update_settings(req: SettingsUpdateRequest):
+async def update_settings(req: SettingsUpdateRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         settings = RecycleSettings.objects().first() or RecycleSettings()
         settings.enabled = req.enabled
@@ -156,7 +157,7 @@ async def update_settings(req: SettingsUpdateRequest):
 
 
 @router.get("/statistics")
-async def get_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$")):
+async def get_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$"), current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         stat = RecycleStatistics.objects(period=period).order_by('-last_updated').first()
         if not stat:

@@ -70,21 +70,45 @@ class AuthenticationService(object):
         return User.objects(email=email).first()
             
     def authenticate_user(self, username: str, password: str):
-        user = self.get_user(username=username)
+        """
+        Unified authentication to support PROJECT rules:
+        - Normal user: wallet-only login (no password)
+        - Admin/shareholder: wallet (or uid/email) + password
+        The OAuth2 form provides `username`; we treat it as wallet_address first,
+        then fallback to uid lookup for compatibility.
+        """
+        # Try wallet first, then uid
+        user = self.get_user_by_wallet(username)
+        if not user:
+            user = self.get_user(username=username)
 
         if not user:
             return None, "Wrong credentials"
 
-        # For this codebase, password may be absent
+        # Role: user → wallet-only login (no password required)
+        if user.role == 'user':
+            token = self.create_access_token({"sub": user.uid, "user_id": str(user.id)})
+            return token, "SUCCESS"
+
+        # Role: admin/shareholder → must provide and verify password
+        if user.role in ["admin", "shareholder"]:
+            if not password:
+                return None, "Password required"
+            if not user.password:
+                return None, "Your account is not active please set your password"
+            is_valid, error_msg = self.verify_password(password, user.password)
+            if not is_valid:
+                return None, error_msg or "Wrong credentials"
+            token = self.create_access_token({"sub": user.uid, "user_id": str(user.id)})
+            return token, "SUCCESS"
+
+        # Fallback for other roles: require password if present
         if not user.password:
             return None, "Your account is not active please set your password"
-
-        # Verify hashed password
         is_valid, error_msg = self.verify_password(password, user.password)
         if not is_valid:
             return None, error_msg or "Wrong credentials"
-
-        return self.create_access_token(data={"sub": user.uid}), "SUCCESS"
+        return self.create_access_token({"sub": user.uid, "user_id": str(user.id)}), "SUCCESS"
 
     def create_access_token(self, data: dict):
         to_encode = data.copy()
@@ -106,9 +130,11 @@ class AuthenticationService(object):
 
         try:
             payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            # Prefer user_id if present; fallback to uid in `sub`
+            user_id_claim = payload.get("user_id")
             username: str = payload.get("sub")
 
-            if username is None:
+            if not user_id_claim and not username:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="No username found in token",
@@ -122,7 +148,12 @@ class AuthenticationService(object):
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        user = self.get_user(username=username)
+        # Resolve user: by id claim when available, else by uid (sub)
+        user = None
+        if user_id_claim:
+            user = self.get_user_by_id(user_id_claim)
+        if not user and username:
+            user = self.get_user(username=username)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

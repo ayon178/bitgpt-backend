@@ -28,6 +28,10 @@ class TreePlacement(Document):
     is_spillover = BooleanField(default=False)  # Spillover placement
     spillover_from = ObjectIdField()  # Original parent for spillover
     
+    # Binary child pointers (required for spillover traversal/BFS)
+    left_child_id = ObjectIdField()
+    right_child_id = ObjectIdField()
+    
     # Tree structure tracking
     children_count = IntField(default=0)  # Number of direct children
     total_team_size = IntField(default=0)  # Total team size including all levels
@@ -54,7 +58,9 @@ class TreePlacement(Document):
             'phase',
             'is_spillover',
             'is_upline_reserve',
-            'is_active'
+            'is_active',
+            'left_child_id',
+            'right_child_id'
         ]
     }
 
@@ -115,25 +121,7 @@ class TreeSpillover(Document):
         ]
     }
 
-class MatrixRecycle(Document):
-    """Track Matrix recycle system"""
-    user_id = ObjectIdField(required=True)
-    matrix_level = IntField(required=True)
-    recycle_position = StringField(choices=['left', 'center', 'right'], required=True)
-    recycle_amount = DecimalField(required=True, precision=8)
-    currency = StringField(choices=['USDT'], default='USDT')
-    is_processed = BooleanField(default=False)
-    processed_at = DateTimeField()
-    created_at = DateTimeField(default=datetime.utcnow)
-    
-    meta = {
-        'collection': 'matrix_recycle',
-        'indexes': [
-            'user_id',
-            'matrix_level',
-            'is_processed'
-        ]
-    }
+## NOTE: MatrixRecycle has been centralized under modules/matrix/model.py to avoid duplication.
 
 class GlobalPhaseProgress(Document):
     """Track Global program phase progression"""

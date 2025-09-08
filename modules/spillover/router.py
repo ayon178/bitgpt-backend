@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from typing import Optional
 from bson import ObjectId
 from datetime import datetime
 
 from ..utils.response import success_response, error_response
+from ..auth.service import authentication_service
 from .model import SpilloverQueue, SpilloverPlacement, SpilloverSettings, SpilloverLog, SpilloverStatistics
 
 router = APIRouter(prefix="/spillover", tags=["Binary Spillover"])
@@ -28,7 +29,7 @@ class SettingsUpdateRequest(BaseModel):
 
 
 @router.post("/queue")
-async def queue_spillover(request: QueueSpilloverRequest):
+async def queue_spillover(request: QueueSpilloverRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         item = SpilloverQueue(
             user_id=ObjectId(request.user_id),
@@ -54,7 +55,7 @@ async def queue_spillover(request: QueueSpilloverRequest):
 
 
 @router.get("/queue")
-async def list_queue(status: str = Query("queued"), limit: int = Query(50, le=200)):
+async def list_queue(status: str = Query("queued"), limit: int = Query(50, le=200), current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         items = SpilloverQueue.objects(status=status).order_by('created_at').limit(limit)
         return success_response({
@@ -76,7 +77,7 @@ async def list_queue(status: str = Query("queued"), limit: int = Query(50, le=20
 
 
 @router.get("/placements/{user_id}")
-async def list_placements(user_id: str, limit: int = Query(50, le=200)):
+async def list_placements(user_id: str, limit: int = Query(50, le=200), current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         items = SpilloverPlacement.objects(user_id=ObjectId(user_id)).order_by('-processed_at').limit(limit)
         return success_response({
@@ -97,7 +98,7 @@ async def list_placements(user_id: str, limit: int = Query(50, le=200)):
 
 
 @router.get("/settings")
-async def get_settings():
+async def get_settings(current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         settings = SpilloverSettings.objects().first()
         if not settings:
@@ -116,7 +117,7 @@ async def get_settings():
 
 
 @router.post("/settings")
-async def update_settings(req: SettingsUpdateRequest):
+async def update_settings(req: SettingsUpdateRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         settings = SpilloverSettings.objects().first() or SpilloverSettings()
         settings.enabled = req.enabled
@@ -135,7 +136,7 @@ async def update_settings(req: SettingsUpdateRequest):
 
 
 @router.get("/statistics")
-async def get_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$")):
+async def get_statistics(period: str = Query("all_time", regex="^(daily|weekly|monthly|all_time)$"), current_user: dict = Depends(authentication_service.verify_authentication)):
     try:
         stat = SpilloverStatistics.objects(period=period).order_by('-last_updated').first()
         if not stat:
