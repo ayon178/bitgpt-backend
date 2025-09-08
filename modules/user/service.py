@@ -210,17 +210,8 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
         except Exception:
             pass
 
-        # Auto tree placement (binary, slot 1)
-        try:
-            # Place user under their referrer in binary slot 1
-            placement_resp = asyncio.run(TreeService.create_tree_placement(
-                user_id=str(user.id),
-                referrer_id=str(user.refered_by),
-                program='binary',
-                slot_no=1
-            ))
-        except Exception:
-            placement_resp = None
+        # Auto tree placement handled via BackgroundTasks in router to avoid blocking
+        placement_resp = None
 
         # Auto-activate first two binary slots (Explorer=1, Contributor=2)
         try:
@@ -346,15 +337,8 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
         try:
             if matrix_payment_tx:
                 # Placement in Matrix tree (slot 1)
-                try:
-                    asyncio.run(TreeService.create_tree_placement(
-                        user_id=str(user.id),
-                        referrer_id=str(user.refered_by),
-                        program='matrix',
-                        slot_no=1
-                    ))
-                except Exception:
-                    pass
+                # Placement scheduled via router background task
+                pass
 
                 # Activate Matrix Slot-1 using provided tx
                 matrix_catalog = SlotCatalog.objects(program='matrix', slot_no=1, is_active=True).first()
@@ -464,15 +448,8 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
         try:
             if global_payment_tx:
                 # Placement in Global tree (Phase-1 Slot-1)
-                try:
-                    asyncio.run(TreeService.create_tree_placement(
-                        user_id=str(user.id),
-                        referrer_id=str(user.refered_by),
-                        program='global',
-                        slot_no=1
-                    ))
-                except Exception:
-                    pass
+                # Placement scheduled via router background task
+                pass
 
                 # Activate Global Slot-1 using provided tx
                 global_catalog = SlotCatalog.objects(program='global', slot_no=1, is_active=True).first()
