@@ -113,6 +113,17 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 ref_pg.directs_count_by_program['global'] = int(ref_pg.directs_count_by_program.get('global', 0)) + 1
             ref_pg.last_updated = datetime.utcnow()
             ref_pg.save()
+            # Royal Captain / President counters on join (Matrix+Global for Royal Captain; direct invites for President)
+            try:
+                # Update referrer model fields if exist
+                if hasattr(referrer, 'royal_captain_qualifications') and (user.matrix_joined and user.global_joined):
+                    referrer.royal_captain_qualifications = int(getattr(referrer, 'royal_captain_qualifications', 0) or 0) + 1
+                if hasattr(referrer, 'president_reward_qualifications'):
+                    referrer.president_reward_qualifications = int(getattr(referrer, 'president_reward_qualifications', 0) or 0) + 1
+                referrer.updated_at = datetime.utcnow()
+                referrer.save()
+            except Exception:
+                pass
         except Exception:
             pass
 
