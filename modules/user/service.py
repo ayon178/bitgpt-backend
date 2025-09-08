@@ -2,7 +2,7 @@ from typing import Tuple, Optional, Dict, Any
 from mongoengine.errors import NotUniqueError, ValidationError
 from modules.user.model import User, PartnerGraph, EarningHistory
 from auth.service import authentication_service
-from anyio import from_thread
+import asyncio
 from modules.tree.service import TreeService
 from modules.slot.model import SlotActivation, SlotCatalog
 from decimal import Decimal
@@ -213,13 +213,12 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
         # Auto tree placement (binary, slot 1)
         try:
             # Place user under their referrer in binary slot 1
-            placement_resp = from_thread.run(
-                TreeService.create_tree_placement,
+            placement_resp = asyncio.run(TreeService.create_tree_placement(
                 user_id=str(user.id),
                 referrer_id=str(user.refered_by),
                 program='binary',
                 slot_no=1
-            )
+            ))
         except Exception:
             placement_resp = None
 
@@ -348,13 +347,12 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             if matrix_payment_tx:
                 # Placement in Matrix tree (slot 1)
                 try:
-                    from_thread.run(
-                        TreeService.create_tree_placement,
+                    asyncio.run(TreeService.create_tree_placement(
                         user_id=str(user.id),
                         referrer_id=str(user.refered_by),
                         program='matrix',
                         slot_no=1
-                    )
+                    ))
                 except Exception:
                     pass
 
@@ -467,13 +465,12 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             if global_payment_tx:
                 # Placement in Global tree (Phase-1 Slot-1)
                 try:
-                    from_thread.run(
-                        TreeService.create_tree_placement,
+                    asyncio.run(TreeService.create_tree_placement(
                         user_id=str(user.id),
                         referrer_id=str(user.refered_by),
                         program='global',
                         slot_no=1
-                    )
+                    ))
                 except Exception:
                     pass
 
