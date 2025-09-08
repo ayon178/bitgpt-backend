@@ -100,12 +100,14 @@ This note consolidates everything that must happen automatically when a user joi
 - No immediate payout at join unless thresholds are met; hook evaluations run after each qualifying event
 
 ## 10) Data to Persist/Update (Summary)
-- User: referrer, activation, partner counts, rank
-- Binary: slot activations (1–2), tree placement node, upgrade history, level income context
-- Matrix (if joined): placement node, auto-upgrade reserves, mentorship links, recycle state
-- Global (if joined): phase/slot index, queue positions, progression state
-- Commissions: joining, upgrade, distributions, mentorship, missed→stipend
-- Funds/Pools: Spark, Leadership Stipend, Jackpot coupon counters
+- User: referrer, activation, partner counts, rank, Royal Captain/President counters, joined flags (binary/matrix/global)
+- Binary: slot activations (1–2), tree placement node, upgrade history, level income context, BinaryAutoUpgrade status, blockchain events, earning history
+- Matrix (if joined): placement node, slot activations, auto-upgrade (middle-3) tracker, mentorship links/status, NGS record, recycle state (when enabled), blockchain events, earning history
+- Global (if joined): phase/slot index, GlobalPhaseProgression status, queue positions, team members, progression state, blockchain events, earning history
+- Commissions: joining, upgrade (30% level + 70% dual-tree), distributions/receipts, mentorship, missed→stipend routing, accumulations, history
+- Funds/Pools: Spark (eligibility cycles), Leadership Stipend (missed profits fund and user tiers/payments), Jackpot coupon counters
+- Rank: user rank status/history, leaderboard stats
+- NGS: eligibility, instant bonus records, monthly opportunities, upline-rank bonus state
 - Programs’ ledgers and history audit trails
 
 ## 11) Triggers/Events to Fire (Transactional Order)
