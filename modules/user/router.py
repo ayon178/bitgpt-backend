@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from utils.response import create_response
 from modules.user.service import create_user_service
+from modules.user.service import create_root_user_service
 
 
 class CreateUserRequest(BaseModel):
@@ -59,6 +60,36 @@ async def create_user(payload: CreateUserRequest):
         status="Ok",
         status_code=status.HTTP_201_CREATED,
         message="User created successfully",
+        data=result,
+    )
+
+
+class CreateRootUserRequest(BaseModel):
+    uid: str = Field(..., description="Unique user identifier (e.g., ROOT)")
+    refer_code: str = Field(..., description="Referral code for root (e.g., ROOT001)")
+    wallet_address: str = Field(..., description="Blockchain wallet address for root")
+    name: str = Field(..., description="Display name for root user")
+    role: Optional[str] = Field("admin", description="Role, defaults to admin")
+    email: Optional[str] = Field(None, description="Email address")
+    password: Optional[str] = Field(None, description="Optional password")
+
+
+@user_router.post("/create-root")
+async def create_root_user(payload: CreateRootUserRequest):
+    result, error = create_root_user_service(payload.dict())
+
+    if error:
+        return create_response(
+            status="Error",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=error,
+            data=None,
+        )
+
+    return create_response(
+        status="Ok",
+        status_code=status.HTTP_201_CREATED,
+        message="Root user created successfully",
         data=result,
     )
 

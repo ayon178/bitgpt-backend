@@ -39,7 +39,7 @@ class User(Document):
     """Core user model for BitGPT platform"""
     uid = StringField(required=True, unique=True)
     refer_code = StringField(required=True, unique=True)
-    refered_by = ObjectIdField(required=True)
+    refered_by = ObjectIdField(required=False)
     wallet_address = StringField(required=True, unique=True)
     name = StringField(required=True)
     role = StringField(choices=['user', 'admin', 'shareholder'], default='user')

@@ -581,3 +581,72 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
         return None, str(e)
 
 
+def create_root_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Create a root (mother) account without requiring a referrer/upline."""
+    try:
+        required_fields = ["uid", "refer_code", "wallet_address", "name"]
+        missing = [f for f in required_fields if not payload.get(f)]
+        if missing:
+            return None, f"Missing required fields: {', '.join(missing)}"
+
+        # Prevent duplicates
+        if User.objects(uid=payload["uid"]).first() or User.objects(refer_code=payload["refer_code"]).first() or User.objects(wallet_address=payload["wallet_address"]).first():
+            return None, "Root user with uid/refer_code/wallet already exists"
+
+        # Create a self-referenced root upline to satisfy schema where needed
+        raw_password = payload.get("password")
+        hashed_password = authentication_service.get_password_hash(raw_password) if raw_password else None
+
+        user = User(
+            uid=payload.get("uid"),
+            refer_code=payload.get("refer_code"),
+            refered_by=None,
+            wallet_address=payload.get("wallet_address"),
+            name=payload.get("name"),
+            role=payload.get("role") or "admin",
+            email=payload.get("email"),
+            password=hashed_password,
+            status='active',
+            binary_joined=True
+        )
+        user.save()
+
+        # Initialize partner graph
+        try:
+            if not PartnerGraph.objects(user_id=ObjectId(user.id)).first():
+                PartnerGraph(user_id=ObjectId(user.id)).save()
+        except Exception:
+            pass
+
+        # Seed BinaryAutoUpgrade tracking for root
+        try:
+            if not BinaryAutoUpgrade.objects(user_id=ObjectId(user.id)).first():
+                BinaryAutoUpgrade(
+                    user_id=ObjectId(user.id),
+                    current_slot_no=1,
+                    current_level=1,
+                    partners_required=2,
+                    partners_available=0,
+                    is_eligible=False,
+                    can_upgrade=False
+                ).save()
+        except Exception:
+            pass
+
+        # Issue token
+        token = authentication_service.create_access_token(
+            data={
+                "sub": user.uid,
+                "user_id": str(user.id),
+            }
+        )
+
+        return {
+            "_id": str(user.id),
+            "token": token.access_token,
+            "token_type": token.token_type,
+        }, None
+
+    except Exception as e:
+        return None, str(e)
+
