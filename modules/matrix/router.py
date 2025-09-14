@@ -941,3 +941,161 @@ async def get_leadership_stipend_info_endpoint(
         return success_response(leadership_stipend_info, "Leadership Stipend information fetched successfully")
     except Exception as e:
         return error_response(str(e))
+
+# ==================== JACKPOT PROGRAM INTEGRATION API ENDPOINTS ====================
+
+@router.get("/jackpot-program-status/{user_id}")
+async def get_jackpot_program_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Jackpot Program status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Jackpot Program status")
+        
+        service = MatrixService()
+        result = service.get_jackpot_program_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Jackpot Program status fetched successfully")
+        return error_response(result.get("error", "Failed to get Jackpot Program status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/integrate-jackpot-program/{user_id}")
+async def integrate_jackpot_program_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Integrate Matrix user with Jackpot Program."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to integrate this user with Jackpot Program")
+        
+        service = MatrixService()
+        result = service.integrate_with_jackpot_program(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Jackpot Program integration completed successfully")
+        return error_response(result.get("error", "Failed to integrate with Jackpot Program"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/jackpot-program-info")
+async def get_jackpot_program_info_endpoint(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Jackpot Program information."""
+    try:
+        jackpot_program_info = {
+            "eligibility": "All Matrix slots",
+            "contribution_rate": "2% of Matrix slot value",
+            "fund_structure": {
+                "open_pool": "50%",
+                "top_direct_promoters": "30%",
+                "top_buyers": "10%",
+                "binary_contribution": "5%"
+            },
+            "free_coupons": {
+                "slot_5": "1 FREE COUPON",
+                "slot_6": "2 FREE COUPON",
+                "slot_7": "3 FREE COUPON",
+                "slot_8": "4 FREE COUPON",
+                "slot_9": "5 FREE COUPON",
+                "slot_10": "6 FREE COUPON",
+                "slot_11": "7 FREE COUPON",
+                "slot_12": "8 FREE COUPON",
+                "slot_13": "9 FREE COUPON",
+                "slot_14": "10 FREE COUPON",
+                "slot_15": "11 FREE COUPON",
+                "slot_16": "12 FREE COUPON"
+            },
+            "integration_points": {
+                "matrix_join": "Automatic Jackpot Program integration on Matrix join",
+                "matrix_upgrade": "Automatic Jackpot Program integration on Matrix upgrade"
+            },
+            "description": "Jackpot Program provides free coupons for Binary slot upgrades. Users contribute 2% of Matrix slot value to Jackpot fund with specific distribution percentages."
+        }
+        
+        return success_response(jackpot_program_info, "Jackpot Program information fetched successfully")
+    except Exception as e:
+        return error_response(str(e))
+
+# ==================== NEWCOMER GROWTH SUPPORT (NGS) INTEGRATION API ENDPOINTS ====================
+
+@router.get("/ngs-status/{user_id}")
+async def get_ngs_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive NGS status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's NGS status")
+        
+        service = MatrixService()
+        result = service.get_ngs_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "NGS status fetched successfully")
+        return error_response(result.get("error", "Failed to get NGS status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/integrate-ngs/{user_id}")
+async def integrate_ngs_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Integrate Matrix user with NGS."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to integrate this user with NGS")
+        
+        service = MatrixService()
+        result = service.integrate_with_newcomer_growth_support(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "NGS integration completed successfully")
+        return error_response(result.get("error", "Failed to integrate with NGS"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/ngs-info")
+async def get_ngs_info_endpoint(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive NGS information."""
+    try:
+        ngs_info = {
+            "eligibility": "All Matrix slots",
+            "benefit_structure": {
+                "instant_bonus": "5% of Matrix slot value - Can be cashed out instantly",
+                "extra_earning": "3% of Matrix slot value - Monthly opportunities based on upline activity",
+                "upline_rank_bonus": "2% of Matrix slot value - 10% bonus when achieving same rank as upline"
+            },
+            "total_benefits": "10% of Matrix slot value",
+            "benefit_types": {
+                "instant_reward": "Immediate cash-out bonus",
+                "extra_income": "Monthly earning opportunities",
+                "long_term_support": "Upline rank bonus system"
+            },
+            "integration_points": {
+                "matrix_join": "Automatic NGS integration on Matrix join",
+                "matrix_upgrade": "Automatic NGS integration on Matrix upgrade"
+            },
+            "description": "Newcomer Growth Support provides instant bonuses, extra earning opportunities, and upline rank bonuses for Matrix joiners. All benefits are designed to boost non-working income for new members."
+        }
+        
+        return success_response(ngs_info, "NGS information fetched successfully")
+    except Exception as e:
+        return error_response(str(e))

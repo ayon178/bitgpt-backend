@@ -241,6 +241,12 @@ class MatrixService:
             # Trigger automatic Global Program integration
             self.trigger_global_integration_automatic(user_id)
             
+            # Trigger automatic Jackpot Program integration
+            self.trigger_jackpot_integration_automatic(user_id)
+            
+            # Trigger automatic NGS integration
+            self.trigger_ngs_integration_automatic(user_id)
+            
             return {
                 "success": True,
                 "level": placement_position['level'],
@@ -1619,6 +1625,12 @@ class MatrixService:
             if to_slot_no >= 10:
                 self.trigger_leadership_stipend_integration_automatic(user_id)
             
+            # Trigger automatic Jackpot Program integration
+            self.trigger_jackpot_integration_automatic(user_id)
+            
+            # Trigger automatic NGS integration
+            self.trigger_ngs_integration_automatic(user_id)
+            
             return {
                 "success": True,
                 "user_id": user_id,
@@ -2186,7 +2198,7 @@ class MatrixService:
             return global_status
         except Exception as e:
             print(f"Error updating Global Program status: {e}")
-            return None
+        return None
     
     def _process_global_distribution(self, user_id: str, contribution: float):
         """Process Global Distribution according to PROJECT_DOCUMENTATION.md percentages."""
@@ -2410,7 +2422,7 @@ class MatrixService:
             stipend_eligibility = self._check_leadership_stipend_eligibility(matrix_slot)
             
             if not stipend_eligibility.get("is_eligible"):
-                return {
+        return {
                     "success": False, 
                     "error": f"User not eligible for Leadership Stipend: {stipend_eligibility.get('reason')}"
                 }
@@ -2654,5 +2666,682 @@ class MatrixService:
                 
         except Exception as e:
             print(f"Error in automatic Leadership Stipend integration: {e}")
+    
+    def integrate_with_jackpot_program(self, user_id: str):
+        """Integrate Matrix user with Jackpot Program."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check if user is eligible for Jackpot Program
+            jackpot_eligibility = self._check_jackpot_program_eligibility(matrix_slot)
+            
+            if not jackpot_eligibility.get("is_eligible"):
+                return {
+                    "success": False, 
+                    "error": f"User not eligible for Jackpot Program: {jackpot_eligibility.get('reason')}"
+                }
+            
+            # Calculate Jackpot Program contribution
+            jackpot_contribution = self._calculate_jackpot_program_contribution(matrix_slot)
+            
+            # Process Jackpot Program distribution
+            distribution_result = self._process_jackpot_program_distribution(user_id, jackpot_contribution, matrix_slot)
+            
+            # Award free coupons for Binary slot upgrades
+            coupon_result = self._award_jackpot_coupons(user_id, matrix_slot)
+            
+            # Update Jackpot Program status
+            jackpot_status = self._update_jackpot_program_status(user_id, jackpot_contribution, matrix_slot)
+            
+            # Log Jackpot Program integration
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="jackpot_program_integration",
+                amount=jackpot_contribution,
+                description=f"Jackpot Program integration - Matrix slot {matrix_slot} contributes ${jackpot_contribution}"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"jackpot_integration_{user_id}",
+                event_type='jackpot_program_integration',
+                event_data={
+                    'program': 'jackpot_program',
+                    'user_id': user_id,
+                    'matrix_slot': matrix_slot,
+                    'jackpot_contribution': jackpot_contribution,
+                    'jackpot_status': jackpot_status,
+                    'coupons_awarded': coupon_result
+                }
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "jackpot_contribution": jackpot_contribution,
+                "jackpot_status": jackpot_status,
+                "distribution_result": distribution_result,
+                "coupon_result": coupon_result,
+                "message": f"Successfully integrated with Jackpot Program - Contribution: ${jackpot_contribution}"
+            }
+        except Exception as e:
+            print(f"Error integrating with Jackpot Program: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _check_jackpot_program_eligibility(self, matrix_slot: int):
+        """Check if user is eligible for Jackpot Program."""
+        try:
+            # Jackpot Program applies to all Matrix slots
+            # Free coupons are awarded for slots 5-16
+            if matrix_slot < 1:
+                return {"is_eligible": False, "reason": f"User must have at least slot 1 (current: {matrix_slot})"}
+            
+            return {"is_eligible": True, "reason": f"User eligible for Jackpot Program with slot {matrix_slot}"}
+        except Exception as e:
+            print(f"Error checking Jackpot Program eligibility: {e}")
+            return {"is_eligible": False, "reason": str(e)}
+    
+    def _calculate_jackpot_program_contribution(self, matrix_slot: int):
+        """Calculate Jackpot Program contribution based on Matrix slot."""
+        try:
+            # Jackpot Program contribution based on Matrix slot value
+            # This follows the Jackpot fund structure from PROJECT_DOCUMENTATION.md
+            
+            slot_values = {
+                1: 11,      # STARTER
+                2: 33,      # BRONZE
+                3: 99,      # SILVER
+                4: 297,     # GOLD
+                5: 891,     # PLATINUM
+                6: 2673,    # DIAMOND
+                7: 8019,    # RUBY
+                8: 24057,   # EMERALD
+                9: 72171,   # SAPPHIRE
+                10: 216513, # TOPAZ
+                11: 649539, # PEARL
+                12: 1948617, # AMETHYST
+                13: 5845851, # OBSIDIAN
+                14: 17537553, # TITANIUM
+                15: 52612659  # STAR
+            }
+            
+            slot_value = slot_values.get(matrix_slot, 0)
+            
+            # Jackpot Program contribution is 2% of Matrix slot value
+            # This goes to Jackpot fund
+            jackpot_contribution = slot_value * 0.02
+            
+            return jackpot_contribution
+        except Exception as e:
+            print(f"Error calculating Jackpot Program contribution: {e}")
+            return 0
+    
+    def _process_jackpot_program_distribution(self, user_id: str, contribution: float, matrix_slot: int):
+        """Process Jackpot Program distribution according to PROJECT_DOCUMENTATION.md percentages."""
+        try:
+            # Jackpot Fund Structure from PROJECT_DOCUMENTATION.md:
+            # - OPEN POOL: 50%
+            # - TOP DIRECT PROMOTERS POOL: 30%
+            # - TOP BUYERS POOL: 10%
+            # - BINARY CONTRIBUTION: 5% deduction from each Binary slot activation
+            
+            distribution = {
+                "open_pool": {
+                    "percentage": 50,
+                    "amount": contribution * 0.50
+                },
+                "top_direct_promoters_pool": {
+                    "percentage": 30,
+                    "amount": contribution * 0.30
+                },
+                "top_buyers_pool": {
+                    "percentage": 10,
+                    "amount": contribution * 0.10
+                },
+                "binary_contribution": {
+                    "percentage": 5,
+                    "amount": contribution * 0.05
+                },
+                "total_distributed": contribution,
+                "distribution_percentage": 100.0
+            }
+            
+            # Process each distribution component
+            self._process_open_pool(user_id, distribution["open_pool"])
+            self._process_top_direct_promoters_pool(user_id, distribution["top_direct_promoters_pool"])
+            self._process_top_buyers_pool(user_id, distribution["top_buyers_pool"])
+            self._process_binary_contribution(user_id, distribution["binary_contribution"])
+            
+            return distribution
+        except Exception as e:
+            print(f"Error processing Jackpot Program distribution: {e}")
+            return None
+    
+    def _process_open_pool(self, user_id: str, open_pool: dict):
+        """Process Open Pool (50% of Jackpot fund)."""
+        try:
+            amount = open_pool["amount"]
+            if amount > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="jackpot_open_pool",
+                    amount=amount,
+                    description=f"Jackpot Open Pool: 50% of Jackpot contribution"
+                )
+            
+            print(f"✅ Open Pool processed: ${amount}")
+        except Exception as e:
+            print(f"Error processing Open Pool: {e}")
+    
+    def _process_top_direct_promoters_pool(self, user_id: str, promoters_pool: dict):
+        """Process Top Direct Promoters Pool (30% of Jackpot fund)."""
+        try:
+            amount = promoters_pool["amount"]
+            if amount > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="jackpot_top_direct_promoters",
+                    amount=amount,
+                    description=f"Jackpot Top Direct Promoters Pool: 30% of Jackpot contribution"
+                )
+            
+            print(f"✅ Top Direct Promoters Pool processed: ${amount}")
+        except Exception as e:
+            print(f"Error processing Top Direct Promoters Pool: {e}")
+    
+    def _process_top_buyers_pool(self, user_id: str, buyers_pool: dict):
+        """Process Top Buyers Pool (10% of Jackpot fund)."""
+        try:
+            amount = buyers_pool["amount"]
+            if amount > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="jackpot_top_buyers",
+                    amount=amount,
+                    description=f"Jackpot Top Buyers Pool: 10% of Jackpot contribution"
+                )
+            
+            print(f"✅ Top Buyers Pool processed: ${amount}")
+        except Exception as e:
+            print(f"Error processing Top Buyers Pool: {e}")
+    
+    def _process_binary_contribution(self, user_id: str, binary_contribution: dict):
+        """Process Binary Contribution (5% of Jackpot fund)."""
+        try:
+            amount = binary_contribution["amount"]
+            if amount > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="jackpot_binary_contribution",
+                    amount=amount,
+                    description=f"Jackpot Binary Contribution: 5% of Jackpot contribution"
+                )
+            
+            print(f"✅ Binary Contribution processed: ${amount}")
+        except Exception as e:
+            print(f"Error processing Binary Contribution: {e}")
+    
+    def _award_jackpot_coupons(self, user_id: str, matrix_slot: int):
+        """Award free coupons for Binary slot upgrades according to PROJECT_DOCUMENTATION.md."""
+        try:
+            # Free Coupons System from PROJECT_DOCUMENTATION.md:
+            # - SLOT 5: 1 FREE COUPON
+            # - SLOT 6: 2 FREE COUPON
+            # - AND IT CONTINUES UP TO SLOT 16
+            
+            coupon_rules = {
+                5: 1,   # 1 FREE COUPON
+                6: 2,   # 2 FREE COUPON
+                7: 3,   # 3 FREE COUPON
+                8: 4,   # 4 FREE COUPON
+                9: 5,   # 5 FREE COUPON
+                10: 6,  # 6 FREE COUPON
+                11: 7,  # 7 FREE COUPON
+                12: 8,  # 8 FREE COUPON
+                13: 9,  # 9 FREE COUPON
+                14: 10, # 10 FREE COUPON
+                15: 11, # 11 FREE COUPON
+                16: 12  # 12 FREE COUPON
+            }
+            
+            coupons_awarded = coupon_rules.get(matrix_slot, 0)
+            
+            if coupons_awarded > 0:
+                # Log coupon award
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="jackpot_free_coupons",
+                    amount=coupons_awarded,
+                    description=f"Jackpot Free Coupons: {coupons_awarded} free coupons for Binary slot upgrades"
+                )
+                
+                print(f"✅ Free coupons awarded: {coupons_awarded} coupons for slot {matrix_slot}")
+            
+            return {
+                "coupons_awarded": coupons_awarded,
+                "slot": matrix_slot,
+                "description": f"{coupons_awarded} free coupons for Binary slot upgrades"
+            }
+        except Exception as e:
+            print(f"Error awarding Jackpot coupons: {e}")
+            return {"coupons_awarded": 0, "error": str(e)}
+    
+    def _update_jackpot_program_status(self, user_id: str, contribution: float, matrix_slot: int):
+        """Update Jackpot Program status for user."""
+        try:
+            # Calculate coupons awarded
+            coupon_rules = {5: 1, 6: 2, 7: 3, 8: 4, 9: 5, 10: 6, 11: 7, 12: 8, 13: 9, 14: 10, 15: 11, 16: 12}
+            coupons_awarded = coupon_rules.get(matrix_slot, 0)
+            
+            jackpot_status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "contribution": contribution,
+                "coupons_awarded": coupons_awarded,
+                "status": "active",
+                "last_contribution": datetime.utcnow().isoformat(),
+                "fund_distribution": {
+                    "open_pool": contribution * 0.50,
+                    "top_direct_promoters": contribution * 0.30,
+                    "top_buyers": contribution * 0.10,
+                    "binary_contribution": contribution * 0.05
+                }
+            }
+            
+            return jackpot_status
+        except Exception as e:
+            print(f"Error updating Jackpot Program status: {e}")
+            return None
+    
+    def get_jackpot_program_status(self, user_id: str):
+        """Get comprehensive Jackpot Program status for a user."""
+        try:
+            # Get user's Matrix info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check eligibility
+            eligibility = self._check_jackpot_program_eligibility(matrix_slot)
+            
+            # Calculate contribution if eligible
+            jackpot_contribution = 0
+            coupons_awarded = 0
+            if eligibility.get("is_eligible"):
+                jackpot_contribution = self._calculate_jackpot_program_contribution(matrix_slot)
+                coupon_rules = {5: 1, 6: 2, 7: 3, 8: 4, 9: 5, 10: 6, 11: 7, 12: 8, 13: 9, 14: 10, 15: 11, 16: 12}
+                coupons_awarded = coupon_rules.get(matrix_slot, 0)
+            
+            status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "eligibility": eligibility,
+                "jackpot_info": {
+                    "contribution": jackpot_contribution,
+                    "coupons_awarded": coupons_awarded,
+                    "fund_distribution": {
+                        "open_pool": jackpot_contribution * 0.50,
+                        "top_direct_promoters": jackpot_contribution * 0.30,
+                        "top_buyers": jackpot_contribution * 0.10,
+                        "binary_contribution": jackpot_contribution * 0.05
+                    }
+                },
+                "jackpot_program_info": {
+                    "description": "Jackpot Program provides free coupons for Binary slot upgrades",
+                    "eligibility": "All Matrix slots",
+                    "contribution_rate": "2% of Matrix slot value",
+                    "fund_structure": {
+                        "open_pool": "50%",
+                        "top_direct_promoters": "30%",
+                        "top_buyers": "10%",
+                        "binary_contribution": "5%"
+                    },
+                    "free_coupons": {
+                        "slot_5": "1 FREE COUPON",
+                        "slot_6": "2 FREE COUPON",
+                        "slot_7": "3 FREE COUPON",
+                        "slot_8": "4 FREE COUPON",
+                        "slot_9": "5 FREE COUPON",
+                        "slot_10": "6 FREE COUPON",
+                        "slot_11": "7 FREE COUPON",
+                        "slot_12": "8 FREE COUPON",
+                        "slot_13": "9 FREE COUPON",
+                        "slot_14": "10 FREE COUPON",
+                        "slot_15": "11 FREE COUPON",
+                        "slot_16": "12 FREE COUPON"
+                    }
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting Jackpot Program status: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def trigger_jackpot_integration_automatic(self, user_id: str):
+        """Automatically trigger Jackpot Program integration when Matrix slot is activated."""
+        try:
+            print(f"🎯 Triggering automatic Jackpot Program integration for user {user_id}")
+            
+            # Integrate with Jackpot Program
+            integration_result = self.integrate_with_jackpot_program(user_id)
+            
+            if integration_result.get("success"):
+                print(f"✅ Jackpot Program integration completed automatically")
+                print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
+                print(f"   - Jackpot contribution: ${integration_result.get('jackpot_contribution')}")
+                print(f"   - Coupons awarded: {integration_result.get('coupon_result', {}).get('coupons_awarded', 0)}")
+            else:
+                print(f"❌ Jackpot Program integration failed: {integration_result.get('error')}")
+                
+        except Exception as e:
+            print(f"Error in automatic Jackpot Program integration: {e}")
+    
+    def integrate_with_newcomer_growth_support(self, user_id: str):
+        """Integrate Matrix user with Newcomer Growth Support (NGS) program."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check if user is eligible for NGS
+            ngs_eligibility = self._check_ngs_eligibility(matrix_slot)
+            
+            if not ngs_eligibility.get("is_eligible"):
+                return {
+                    "success": False, 
+                    "error": f"User not eligible for NGS: {ngs_eligibility.get('reason')}"
+                }
+            
+            # Calculate NGS benefits
+            ngs_benefits = self._calculate_ngs_benefits(matrix_slot)
+            
+            # Process NGS instant bonus
+            instant_bonus_result = self._process_ngs_instant_bonus(user_id, ngs_benefits)
+            
+            # Process NGS extra earning opportunities
+            extra_earning_result = self._process_ngs_extra_earning(user_id, ngs_benefits)
+            
+            # Process NGS upline rank bonus
+            upline_rank_bonus_result = self._process_ngs_upline_rank_bonus(user_id, ngs_benefits)
+            
+            # Update NGS status
+            ngs_status = self._update_ngs_status(user_id, ngs_benefits, matrix_slot)
+            
+            # Log NGS integration
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="ngs_integration",
+                amount=ngs_benefits["total_benefits"],
+                description=f"NGS integration - Matrix slot {matrix_slot} provides ${ngs_benefits['total_benefits']} in benefits"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"ngs_integration_{user_id}",
+                event_type='ngs_integration',
+                event_data={
+                    'program': 'newcomer_growth_support',
+                    'user_id': user_id,
+                    'matrix_slot': matrix_slot,
+                    'ngs_benefits': ngs_benefits,
+                    'ngs_status': ngs_status
+                }
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "ngs_benefits": ngs_benefits,
+                "ngs_status": ngs_status,
+                "instant_bonus_result": instant_bonus_result,
+                "extra_earning_result": extra_earning_result,
+                "upline_rank_bonus_result": upline_rank_bonus_result,
+                "message": f"Successfully integrated with NGS - Total Benefits: ${ngs_benefits['total_benefits']}"
+            }
+        except Exception as e:
+            print(f"Error integrating with NGS: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _check_ngs_eligibility(self, matrix_slot: int):
+        """Check if user is eligible for Newcomer Growth Support."""
+        try:
+            # NGS applies to all Matrix slots
+            # All Matrix joiners get NGS benefits
+            if matrix_slot < 1:
+                return {"is_eligible": False, "reason": f"User must have at least slot 1 (current: {matrix_slot})"}
+            
+            return {"is_eligible": True, "reason": f"User eligible for NGS with slot {matrix_slot}"}
+        except Exception as e:
+            print(f"Error checking NGS eligibility: {e}")
+            return {"is_eligible": False, "reason": str(e)}
+    
+    def _calculate_ngs_benefits(self, matrix_slot: int):
+        """Calculate NGS benefits based on Matrix slot."""
+        try:
+            # NGS benefits based on Matrix slot value
+            # This follows the NGS structure from PROJECT_DOCUMENTATION.md
+            
+            slot_values = {
+                1: 11,      # STARTER
+                2: 33,      # BRONZE
+                3: 99,      # SILVER
+                4: 297,     # GOLD
+                5: 891,     # PLATINUM
+                6: 2673,    # DIAMOND
+                7: 8019,    # RUBY
+                8: 24057,   # EMERALD
+                9: 72171,   # SAPPHIRE
+                10: 216513, # TOPAZ
+                11: 649539, # PEARL
+                12: 1948617, # AMETHYST
+                13: 5845851, # OBSIDIAN
+                14: 17537553, # TITANIUM
+                15: 52612659  # STAR
+            }
+            
+            slot_value = slot_values.get(matrix_slot, 0)
+            
+            # NGS benefits calculation:
+            # - Instant Bonus: 5% of Matrix slot value
+            # - Extra Earning Opportunities: 3% of Matrix slot value
+            # - Upline Rank Bonus: 2% of Matrix slot value
+            
+            instant_bonus = slot_value * 0.05
+            extra_earning = slot_value * 0.03
+            upline_rank_bonus = slot_value * 0.02
+            total_benefits = instant_bonus + extra_earning + upline_rank_bonus
+            
+            return {
+                "slot_value": slot_value,
+                "instant_bonus": instant_bonus,
+                "extra_earning": extra_earning,
+                "upline_rank_bonus": upline_rank_bonus,
+                "total_benefits": total_benefits
+            }
+        except Exception as e:
+            print(f"Error calculating NGS benefits: {e}")
+            return {"total_benefits": 0}
+    
+    def _process_ngs_instant_bonus(self, user_id: str, ngs_benefits: dict):
+        """Process NGS instant bonus."""
+        try:
+            instant_bonus = ngs_benefits.get("instant_bonus", 0)
+            
+            if instant_bonus > 0:
+                # Log instant bonus
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="ngs_instant_bonus",
+                    amount=instant_bonus,
+                    description=f"NGS Instant Bonus: 5% of Matrix slot value - Can be cashed out instantly"
+                )
+                
+                print(f"✅ NGS Instant Bonus processed: ${instant_bonus}")
+            
+            return {
+                "instant_bonus": instant_bonus,
+                "description": "Instant bonus that can be cashed out immediately",
+                "percentage": "5% of Matrix slot value"
+            }
+        except Exception as e:
+            print(f"Error processing NGS instant bonus: {e}")
+            return {"instant_bonus": 0, "error": str(e)}
+    
+    def _process_ngs_extra_earning(self, user_id: str, ngs_benefits: dict):
+        """Process NGS extra earning opportunities."""
+        try:
+            extra_earning = ngs_benefits.get("extra_earning", 0)
+            
+            if extra_earning > 0:
+                # Log extra earning opportunities
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="ngs_extra_earning",
+                    amount=extra_earning,
+                    description=f"NGS Extra Earning Opportunities: 3% of Matrix slot value - Monthly opportunities based on upline activity"
+                )
+                
+                print(f"✅ NGS Extra Earning processed: ${extra_earning}")
+            
+            return {
+                "extra_earning": extra_earning,
+                "description": "Extra earning opportunities at end of month (30 days) based on upline activity",
+                "percentage": "3% of Matrix slot value",
+                "frequency": "Monthly"
+            }
+        except Exception as e:
+            print(f"Error processing NGS extra earning: {e}")
+            return {"extra_earning": 0, "error": str(e)}
+    
+    def _process_ngs_upline_rank_bonus(self, user_id: str, ngs_benefits: dict):
+        """Process NGS upline rank bonus."""
+        try:
+            upline_rank_bonus = ngs_benefits.get("upline_rank_bonus", 0)
+            
+            if upline_rank_bonus > 0:
+                # Log upline rank bonus
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="ngs_upline_rank_bonus",
+                    amount=upline_rank_bonus,
+                    description=f"NGS Upline Rank Bonus: 2% of Matrix slot value - 10% bonus when achieving same rank as upline"
+                )
+                
+                print(f"✅ NGS Upline Rank Bonus processed: ${upline_rank_bonus}")
+            
+            return {
+                "upline_rank_bonus": upline_rank_bonus,
+                "description": "10% bonus when member achieves same rank as upline",
+                "percentage": "2% of Matrix slot value",
+                "bonus_rate": "10%"
+            }
+        except Exception as e:
+            print(f"Error processing NGS upline rank bonus: {e}")
+            return {"upline_rank_bonus": 0, "error": str(e)}
+    
+    def _update_ngs_status(self, user_id: str, ngs_benefits: dict, matrix_slot: int):
+        """Update NGS status for user."""
+        try:
+            ngs_status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "slot_value": ngs_benefits.get("slot_value", 0),
+                "benefits": {
+                    "instant_bonus": ngs_benefits.get("instant_bonus", 0),
+                    "extra_earning": ngs_benefits.get("extra_earning", 0),
+                    "upline_rank_bonus": ngs_benefits.get("upline_rank_bonus", 0),
+                    "total_benefits": ngs_benefits.get("total_benefits", 0)
+                },
+                "status": "active",
+                "last_benefit": datetime.utcnow().isoformat(),
+                "benefit_breakdown": {
+                    "instant_bonus_percentage": "5%",
+                    "extra_earning_percentage": "3%",
+                    "upline_rank_bonus_percentage": "2%",
+                    "total_percentage": "10%"
+                }
+            }
+            
+            return ngs_status
+        except Exception as e:
+            print(f"Error updating NGS status: {e}")
+            return None
+    
+    def get_ngs_status(self, user_id: str):
+        """Get comprehensive NGS status for a user."""
+        try:
+            # Get user's Matrix info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check eligibility
+            eligibility = self._check_ngs_eligibility(matrix_slot)
+            
+            # Calculate benefits if eligible
+            ngs_benefits = {}
+            if eligibility.get("is_eligible"):
+                ngs_benefits = self._calculate_ngs_benefits(matrix_slot)
+            
+            status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "eligibility": eligibility,
+                "ngs_info": ngs_benefits,
+                "ngs_program_info": {
+                    "description": "Newcomer Growth Support provides instant bonuses, extra earning opportunities, and upline rank bonuses for Matrix joiners",
+                    "eligibility": "All Matrix slots",
+                    "benefit_structure": {
+                        "instant_bonus": "5% of Matrix slot value - Can be cashed out instantly",
+                        "extra_earning": "3% of Matrix slot value - Monthly opportunities based on upline activity",
+                        "upline_rank_bonus": "2% of Matrix slot value - 10% bonus when achieving same rank as upline"
+                    },
+                    "total_benefits": "10% of Matrix slot value",
+                    "benefit_types": {
+                        "instant_reward": "Immediate cash-out bonus",
+                        "extra_income": "Monthly earning opportunities",
+                        "long_term_support": "Upline rank bonus system"
+                    }
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting NGS status: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def trigger_ngs_integration_automatic(self, user_id: str):
+        """Automatically trigger NGS integration when Matrix slot is activated."""
+        try:
+            print(f"🎯 Triggering automatic NGS integration for user {user_id}")
+            
+            # Integrate with NGS
+            integration_result = self.integrate_with_newcomer_growth_support(user_id)
+            
+            if integration_result.get("success"):
+                print(f"✅ NGS integration completed automatically")
+                print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
+                print(f"   - Total benefits: ${integration_result.get('ngs_benefits', {}).get('total_benefits', 0)}")
+                print(f"   - Instant bonus: ${integration_result.get('ngs_benefits', {}).get('instant_bonus', 0)}")
+                print(f"   - Extra earning: ${integration_result.get('ngs_benefits', {}).get('extra_earning', 0)}")
+                print(f"   - Upline rank bonus: ${integration_result.get('ngs_benefits', {}).get('upline_rank_bonus', 0)}")
+            else:
+                print(f"❌ NGS integration failed: {integration_result.get('error')}")
+                
+        except Exception as e:
+            print(f"Error in automatic NGS integration: {e}")
     
     # ==================== MATRIX UPGRADE SYSTEM METHODS ====================
