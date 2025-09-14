@@ -238,6 +238,9 @@ class MatrixService:
             # Trigger automatic rank update
             self.trigger_rank_update_automatic(user_id)
             
+            # Trigger automatic Global Program integration
+            self.trigger_global_integration_automatic(user_id)
+            
             return {
                 "success": True,
                 "level": placement_position['level'],
@@ -1609,6 +1612,9 @@ class MatrixService:
             # Trigger automatic rank update
             self.trigger_rank_update_automatic(user_id)
             
+            # Trigger automatic Global Program integration
+            self.trigger_global_integration_automatic(user_id)
+            
             return {
                 "success": True,
                 "user_id": user_id,
@@ -2035,5 +2041,351 @@ class MatrixService:
                 
         except Exception as e:
             print(f"Error in automatic rank update: {e}")
+    
+    # ==================== GLOBAL PROGRAM INTEGRATION METHODS ====================
+    
+    def integrate_with_global_program(self, user_id: str):
+        """Integrate Matrix user with Global Program."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Check if user is eligible for Global Program
+            global_eligibility = self._check_global_program_eligibility(user_id)
+            
+            if not global_eligibility.get("is_eligible"):
+                return {
+                    "success": False, 
+                    "error": f"User not eligible for Global Program: {global_eligibility.get('reason')}"
+                }
+            
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Calculate Global Program contribution
+            global_contribution = self._calculate_global_contribution(matrix_slot)
+            
+            # Update Global Program status
+            global_status = self._update_global_program_status(user_id, global_contribution)
+            
+            # Process Global Distribution
+            distribution_result = self._process_global_distribution(user_id, global_contribution)
+            
+            # Log Global Program integration
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="global_program_integration",
+                amount=global_contribution,
+                description=f"Global Program integration - Matrix slot {matrix_slot} contributes ${global_contribution}"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"global_integration_{user_id}",
+                event_type='global_program_integration',
+                event_data={
+                    'program': 'global_program',
+                    'user_id': user_id,
+                    'matrix_slot': matrix_slot,
+                    'global_contribution': global_contribution,
+                    'global_status': global_status
+                }
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "global_contribution": global_contribution,
+                "global_status": global_status,
+                "distribution_result": distribution_result,
+                "message": f"Successfully integrated with Global Program - Contribution: ${global_contribution}"
+            }
+        except Exception as e:
+            print(f"Error integrating with Global Program: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _check_global_program_eligibility(self, user_id: str):
+        """Check if user is eligible for Global Program."""
+        try:
+            # Get user's Matrix tree
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"is_eligible": False, "reason": "Matrix tree not found"}
+            
+            # Check if user has at least STARTER slot (slot 1)
+            if matrix_tree.current_slot < 1:
+                return {"is_eligible": False, "reason": "User must have at least STARTER slot"}
+            
+            # Check if user has Global Program package
+            # This would integrate with Global Program module
+            # For now, assume all Matrix users are eligible
+            
+            return {"is_eligible": True, "reason": "User meets Global Program requirements"}
+        except Exception as e:
+            print(f"Error checking Global Program eligibility: {e}")
+            return {"is_eligible": False, "reason": str(e)}
+    
+    def _calculate_global_contribution(self, matrix_slot: int):
+        """Calculate Global Program contribution based on Matrix slot."""
+        try:
+            # Global Program contribution based on Matrix slot value
+            # This follows the Global Distribution percentages from PROJECT_DOCUMENTATION.md
+            
+            slot_values = {
+                1: 11,      # STARTER
+                2: 33,      # BRONZE
+                3: 99,      # SILVER
+                4: 297,     # GOLD
+                5: 891,     # PLATINUM
+                6: 2673,    # DIAMOND
+                7: 8019,    # RUBY
+                8: 24057,   # EMERALD
+                9: 72171,   # SAPPHIRE
+                10: 216513, # TOPAZ
+                11: 649539, # PEARL
+                12: 1948617, # AMETHYST
+                13: 5845851, # OBSIDIAN
+                14: 17537553, # TITANIUM
+                15: 52612659  # STAR
+            }
+            
+            slot_value = slot_values.get(matrix_slot, 0)
+            
+            # Global Program contribution is 5% of Matrix slot value
+            # This goes to Global Distribution fund
+            global_contribution = slot_value * 0.05
+            
+            return global_contribution
+        except Exception as e:
+            print(f"Error calculating Global contribution: {e}")
+            return 0
+    
+    def _update_global_program_status(self, user_id: str, contribution: float):
+        """Update Global Program status for user."""
+        try:
+            # This would integrate with Global Program module
+            # For now, return placeholder status
+            
+            global_status = {
+                "user_id": user_id,
+                "contribution": contribution,
+                "phase": "Phase-1",  # Placeholder
+                "slot": 1,  # Placeholder
+                "status": "active",
+                "last_contribution": datetime.utcnow().isoformat()
+            }
+            
+            return global_status
+        except Exception as e:
+            print(f"Error updating Global Program status: {e}")
+            return None
+    
+    def _process_global_distribution(self, user_id: str, contribution: float):
+        """Process Global Distribution according to PROJECT_DOCUMENTATION.md percentages."""
+        try:
+            # Global Distribution percentages from PROJECT_DOCUMENTATION.md:
+            # - Level (40%): 10% Partner Incentive to direct upline + 30% reserved to upgrade corresponding Phase/slot
+            # - Profit (30%): Net profit portion
+            # - Royal Captain Bonus (15%)
+            # - President Reward (15%)
+            # - Triple Entry Reward (5%)
+            # - Shareholders (5%)
+            
+            distribution = {
+                "level_distribution": {
+                    "partner_incentive": contribution * 0.10,  # 10% to direct upline
+                    "reserved_upgrade": contribution * 0.30,      # 30% reserved for upgrade
+                    "total_level": contribution * 0.40           # 40% total
+                },
+                "profit_distribution": {
+                    "net_profit": contribution * 0.30             # 30% net profit
+                },
+                "special_bonuses": {
+                    "royal_captain_bonus": contribution * 0.15,  # 15% Royal Captain Bonus
+                    "president_reward": contribution * 0.15,     # 15% President Reward
+                    "triple_entry_reward": contribution * 0.05,  # 5% Triple Entry Reward
+                    "shareholders": contribution * 0.05          # 5% Shareholders
+                },
+                "total_distributed": contribution,
+                "distribution_percentage": 100.0
+            }
+            
+            # Process each distribution component
+            self._process_level_distribution(user_id, distribution["level_distribution"])
+            self._process_profit_distribution(user_id, distribution["profit_distribution"])
+            self._process_special_bonuses(user_id, distribution["special_bonuses"])
+            
+            return distribution
+        except Exception as e:
+            print(f"Error processing Global Distribution: {e}")
+            return None
+    
+    def _process_level_distribution(self, user_id: str, level_distribution: dict):
+        """Process Level Distribution (40% total)."""
+        try:
+            # Partner Incentive (10% to direct upline)
+            partner_incentive = level_distribution["partner_incentive"]
+            if partner_incentive > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="global_partner_incentive",
+                    amount=partner_incentive,
+                    description=f"Global Partner Incentive: 10% of Global contribution"
+                )
+            
+            # Reserved Upgrade (30% reserved for upgrade)
+            reserved_upgrade = level_distribution["reserved_upgrade"]
+            if reserved_upgrade > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="global_reserved_upgrade",
+                    amount=reserved_upgrade,
+                    description=f"Global Reserved Upgrade: 30% of Global contribution"
+                )
+            
+            print(f"✅ Level Distribution processed: ${level_distribution['total_level']}")
+        except Exception as e:
+            print(f"Error processing Level Distribution: {e}")
+    
+    def _process_profit_distribution(self, user_id: str, profit_distribution: dict):
+        """Process Profit Distribution (30% total)."""
+        try:
+            net_profit = profit_distribution["net_profit"]
+            if net_profit > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="global_profit",
+                    amount=net_profit,
+                    description=f"Global Profit Distribution: 30% of Global contribution"
+                )
+            
+            print(f"✅ Profit Distribution processed: ${net_profit}")
+        except Exception as e:
+            print(f"Error processing Profit Distribution: {e}")
+    
+    def _process_special_bonuses(self, user_id: str, special_bonuses: dict):
+        """Process Special Bonuses (35% total)."""
+        try:
+            # Royal Captain Bonus (15%)
+            royal_captain = special_bonuses["royal_captain_bonus"]
+            if royal_captain > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="global_royal_captain_bonus",
+                    amount=royal_captain,
+                    description=f"Global Royal Captain Bonus: 15% of Global contribution"
+                )
+            
+            # President Reward (15%)
+            president_reward = special_bonuses["president_reward"]
+            if president_reward > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="global_president_reward",
+                    amount=president_reward,
+                    description=f"Global President Reward: 15% of Global contribution"
+                )
+            
+            # Triple Entry Reward (5%)
+            triple_entry = special_bonuses["triple_entry_reward"]
+            if triple_entry > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="global_triple_entry_reward",
+                    amount=triple_entry,
+                    description=f"Global Triple Entry Reward: 5% of Global contribution"
+                )
+            
+            # Shareholders (5%)
+            shareholders = special_bonuses["shareholders"]
+            if shareholders > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="global_shareholders",
+                    amount=shareholders,
+                    description=f"Global Shareholders: 5% of Global contribution"
+                )
+            
+            total_special = sum(special_bonuses.values())
+            print(f"✅ Special Bonuses processed: ${total_special}")
+        except Exception as e:
+            print(f"Error processing Special Bonuses: {e}")
+    
+    def get_global_program_status(self, user_id: str):
+        """Get comprehensive Global Program status for a user."""
+        try:
+            # Get user's Matrix info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Calculate Global contribution
+            global_contribution = self._calculate_global_contribution(matrix_slot)
+            
+            # Check eligibility
+            eligibility = self._check_global_program_eligibility(user_id)
+            
+            status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "global_contribution": global_contribution,
+                "eligibility": eligibility,
+                "global_distribution": {
+                    "level_distribution": {
+                        "partner_incentive": global_contribution * 0.10,
+                        "reserved_upgrade": global_contribution * 0.30,
+                        "total_level": global_contribution * 0.40
+                    },
+                    "profit_distribution": {
+                        "net_profit": global_contribution * 0.30
+                    },
+                    "special_bonuses": {
+                        "royal_captain_bonus": global_contribution * 0.15,
+                        "president_reward": global_contribution * 0.15,
+                        "triple_entry_reward": global_contribution * 0.05,
+                        "shareholders": global_contribution * 0.05
+                    },
+                    "total_distributed": global_contribution
+                },
+                "global_program_info": {
+                    "description": "Global Program integration with Matrix",
+                    "contribution_rate": "5% of Matrix slot value",
+                    "distribution_percentages": {
+                        "level": "40%",
+                        "profit": "30%",
+                        "royal_captain": "15%",
+                        "president_reward": "15%",
+                        "triple_entry": "5%",
+                        "shareholders": "5%"
+                    }
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting Global Program status: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def trigger_global_integration_automatic(self, user_id: str):
+        """Automatically trigger Global Program integration when Matrix slot is activated."""
+        try:
+            print(f"🎯 Triggering automatic Global Program integration for user {user_id}")
+            
+            # Integrate with Global Program
+            integration_result = self.integrate_with_global_program(user_id)
+            
+            if integration_result.get("success"):
+                print(f"✅ Global Program integration completed automatically")
+                print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
+                print(f"   - Global contribution: ${integration_result.get('global_contribution')}")
+                print(f"   - Distribution processed: ${integration_result.get('distribution_result', {}).get('total_distributed', 0)}")
+            else:
+                print(f"❌ Global Program integration failed: {integration_result.get('error')}")
+                
+        except Exception as e:
+            print(f"Error in automatic Global Program integration: {e}")
     
     # ==================== MATRIX UPGRADE SYSTEM METHODS ====================

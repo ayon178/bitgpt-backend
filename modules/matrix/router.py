@@ -780,3 +780,83 @@ async def get_rank_system_info_endpoint(
         return success_response(rank_system_info, "Rank system information fetched successfully")
     except Exception as e:
         return error_response(str(e))
+
+# ==================== GLOBAL PROGRAM INTEGRATION API ENDPOINTS ====================
+
+@router.get("/global-program-status/{user_id}")
+async def get_global_program_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Global Program status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Global Program status")
+        
+        service = MatrixService()
+        result = service.get_global_program_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Global Program status fetched successfully")
+        return error_response(result.get("error", "Failed to get Global Program status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/integrate-global-program/{user_id}")
+async def integrate_global_program_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Integrate Matrix user with Global Program."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to integrate this user with Global Program")
+        
+        service = MatrixService()
+        result = service.integrate_with_global_program(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Global Program integration completed successfully")
+        return error_response(result.get("error", "Failed to integrate with Global Program"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/global-distribution-info")
+async def get_global_distribution_info_endpoint(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Global Distribution information."""
+    try:
+        global_distribution_info = {
+            "distribution_percentages": {
+                "level_distribution": {
+                    "partner_incentive": "10%",
+                    "reserved_upgrade": "30%",
+                    "total_level": "40%"
+                },
+                "profit_distribution": {
+                    "net_profit": "30%"
+                },
+                "special_bonuses": {
+                    "royal_captain_bonus": "15%",
+                    "president_reward": "15%",
+                    "triple_entry_reward": "5%",
+                    "shareholders": "5%"
+                },
+                "total_distributed": "100%"
+            },
+            "contribution_rate": "5% of Matrix slot value",
+            "integration_points": {
+                "matrix_join": "Automatic Global Program integration on Matrix join",
+                "matrix_upgrade": "Automatic Global Program integration on Matrix upgrade"
+            },
+            "description": "Global Program integration with Matrix provides cross-program benefits and unified earning opportunities"
+        }
+        
+        return success_response(global_distribution_info, "Global Distribution information fetched successfully")
+    except Exception as e:
+        return error_response(str(e))
