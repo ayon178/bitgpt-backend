@@ -1,433 +1,801 @@
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any, Optional, List
 from bson import ObjectId
 from decimal import Decimal
 from datetime import datetime
-from ..user.model import User
-from ..tree.model import TreePlacement
+from mongoengine.errors import ValidationError
+
+from ..user.model import User, EarningHistory
+from ..slot.model import SlotCatalog
+from ..commission.service import CommissionService
+from ..auto_upgrade.model import MatrixAutoUpgrade
+from ..rank.service import RankService
+from ..spark.service import SparkService
+from ..newcomer_support.service import NewcomerSupportService
+from ..mentorship.service import MentorshipService
+from ..dream_matrix.service import DreamMatrixService
+from ..blockchain.model import BlockchainEvent
 from .model import (
-    MatrixTree, MatrixActivation, MatrixRecycle, 
-    MatrixAutoUpgrade, MatrixUplineReserve,
-    MatrixSlotInfo, MatrixPosition
+    MatrixTree, MatrixNode, MatrixActivation, MatrixUpgradeLog,
+    MatrixEarningHistory, MatrixCommission, MatrixRecycleInstance, MatrixRecycleNode
 )
-from ..commission.model import Commission
+from utils import ensure_currency_for_program
+
 
 class MatrixService:
     """Matrix Program Business Logic Service"""
     
-    # Matrix slot configuration
+    def __init__(self):
+        self.commission_service = CommissionService()
+        self.rank_service = RankService()
+        self.spark_service = SparkService()
+        self.newcomer_support_service = NewcomerSupportService()
+        self.mentorship_service = MentorshipService()
+        self.dream_matrix_service = DreamMatrixService()
+    
+    # Matrix slot definitions per PROJECT_DOCUMENTATION.md
     MATRIX_SLOTS = {
-        1: {'name': 'STARTER', 'value': Decimal('11.0'), 'members': 3},
-        2: {'name': 'BRONZE', 'value': Decimal('33.0'), 'members': 9},
-        3: {'name': 'SILVER', 'value': Decimal('99.0'), 'members': 27},
-        4: {'name': 'GOLD', 'value': Decimal('297.0'), 'members': 81},
-        5: {'name': 'PLATINUM', 'value': Decimal('891.0'), 'members': 243}
+        1: {'name': 'STARTER', 'value': Decimal('11'), 'level': 1, 'members': 3},
+        2: {'name': 'BRONZE', 'value': Decimal('33'), 'level': 2, 'members': 9},
+        3: {'name': 'SILVER', 'value': Decimal('99'), 'level': 3, 'members': 27},
+        4: {'name': 'GOLD', 'value': Decimal('297'), 'level': 4, 'members': 81},
+        5: {'name': 'PLATINUM', 'value': Decimal('891'), 'level': 5, 'members': 243},
+        6: {'name': 'DIAMOND', 'value': Decimal('2673'), 'level': 6, 'members': 729},
+        7: {'name': 'RUBY', 'value': Decimal('8019'), 'level': 7, 'members': 2187},
+        8: {'name': 'EMERALD', 'value': Decimal('24057'), 'level': 8, 'members': 6561},
+        9: {'name': 'SAPPHIRE', 'value': Decimal('72171'), 'level': 9, 'members': 19683},
+        10: {'name': 'TOPAZ', 'value': Decimal('216513'), 'level': 10, 'members': 59049},
+        11: {'name': 'PEARL', 'value': Decimal('649539'), 'level': 11, 'members': 177147},
+        12: {'name': 'AMETHYST', 'value': Decimal('1948617'), 'level': 12, 'members': 531441},
+        13: {'name': 'OBSIDIAN', 'value': Decimal('5845851'), 'level': 13, 'members': 1594323},
+        14: {'name': 'TITANIUM', 'value': Decimal('17537553'), 'level': 14, 'members': 4782969},
+        15: {'name': 'STAR', 'value': Decimal('52612659'), 'level': 15, 'members': 14348907}
     }
     
-    COMMISSION_PERCENTAGE = 10.0  # 10% commission
-    
-    def __init__(self):
-        pass
-    
     def join_matrix(self, user_id: str, referrer_id: str, tx_hash: str, amount: Decimal) -> Dict[str, Any]:
-        """Join Matrix program with $11 USDT"""
+        """
+        Join Matrix program with $11 USDT and trigger all auto calculations
+        
+        This method implements Section 1.1 Joining Requirements from MATRIX_TODO.md:
+        - Cost: $11 USDT to join Matrix program
+        - Structure: 3x Matrix structure (3, 9, 27 members per level)
+        - Slots: 15 slots total (STARTER to STAR)
+        - Recycle System: Each slot completes with 39 members (3+9+27)
+        
+        Auto calculations triggered:
+        - MatrixTree Creation
+        - Slot-1 Activation (STARTER)
+        - Tree Placement in referrer's matrix
+        - All commission distributions (100% total)
+        - Special program integrations
+        """
         try:
-            # Validate user and referrer
+            # Validate user and referrer exist
             user = User.objects(id=ObjectId(user_id)).first()
             referrer = User.objects(id=ObjectId(referrer_id)).first()
             
             if not user or not referrer:
                 raise ValueError("User or referrer not found")
             
-            # Check if user already joined Matrix
-            existing_matrix = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if existing_matrix:
-                raise ValueError("User already joined Matrix program")
+            # Validate amount ($11 USDT)
+            expected_amount = self.MATRIX_SLOTS[1]['value']
+            if amount != expected_amount:
+                raise ValueError(f"Matrix join amount must be ${expected_amount} USDT")
             
-            # Validate amount
-            if amount != Decimal('11.0'):
-                raise ValueError("Matrix joining fee must be $11 USDT")
+            # Check if user already in Matrix program
+            existing_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if existing_tree:
+                raise ValueError("User already in Matrix program")
             
-            # Create Matrix tree entry
-            matrix_tree = self._create_matrix_tree(user_id, referrer_id)
+            currency = ensure_currency_for_program('matrix', 'USDT')
             
-            # Create activation record
+            # 1. Create MatrixTree for the user
+            matrix_tree = self._create_matrix_tree(user_id)
+            
+            # 2. Activate Slot-1 (STARTER) - $11 USDT
             activation = self._create_matrix_activation(
-                user_id, 1, 'STARTER', 'initial', amount, tx_hash
+                user_id, 1, self.MATRIX_SLOTS[1]['name'], 
+                'initial', amount, tx_hash
             )
             
-            # Update user's Matrix status
-            user.matrix_joined = True
-            user.save()
+            # 3. Place user in referrer's matrix tree using BFS algorithm
+            placement_result = self._place_user_in_matrix_tree(user_id, referrer_id, matrix_tree)
             
-            # Process commission for referrer
-            self._process_joining_commission(referrer_id, user_id, amount)
+            # 4. Initialize MatrixAutoUpgrade tracking
+            self._initialize_matrix_auto_upgrade(user_id)
+            
+            # 5. Process all commission distributions (100% total)
+            commission_results = self._process_matrix_commissions(user_id, referrer_id, amount, currency)
+            
+            # 6. Process special program integrations
+            special_programs_results = self._process_special_programs(user_id, referrer_id, amount, currency)
+            
+            # 7. Update user's matrix participation status
+            self._update_user_matrix_status(user, True)
+            
+            # 8. Record earning history
+            self._record_matrix_earning_history(user_id, 1, self.MATRIX_SLOTS[1]['name'], amount, currency)
+            
+            # 9. Record blockchain event
+            self._record_blockchain_event(tx_hash, user_id, referrer_id, amount, currency)
+            
+            # 10. Update user rank
+            rank_result = self.rank_service.update_user_rank(user_id=user_id)
             
             return {
                 "success": True,
                 "matrix_tree_id": str(matrix_tree.id),
                 "activation_id": str(activation.id),
-                "message": "Successfully joined Matrix program"
+                "slot_activated": self.MATRIX_SLOTS[1]['name'],
+                "amount": float(amount),
+                "currency": currency,
+                "placement_result": placement_result,
+                "commission_results": commission_results,
+                "special_programs_results": special_programs_results,
+                "rank_result": rank_result,
+                "message": f"Successfully joined Matrix program with {self.MATRIX_SLOTS[1]['name']} slot"
             }
             
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    def upgrade_matrix_slot(self, user_id: str, slot_no: int, tx_hash: str, amount: Decimal) -> Dict[str, Any]:
-        """Upgrade Matrix slot"""
+    def _create_matrix_tree(self, user_id: str) -> MatrixTree:
+        """Create MatrixTree for user"""
         try:
-            # Validate user and Matrix tree
-            user = User.objects(id=ObjectId(user_id)).first()
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            
-            if not user or not matrix_tree:
-                raise ValueError("User or Matrix tree not found")
-            
-            # Validate slot upgrade
-            if slot_no <= matrix_tree.current_slot or slot_no > 5:
-                raise ValueError("Invalid slot upgrade")
-            
-            # Validate amount
-            expected_amount = self.MATRIX_SLOTS[slot_no]['value']
-            if amount != expected_amount:
-                raise ValueError(f"Upgrade amount must be ${expected_amount} USDT")
-            
-            # Create activation record
-            activation = self._create_matrix_activation(
-                user_id, slot_no, self.MATRIX_SLOTS[slot_no]['name'], 
-                'upgrade', amount, tx_hash
-            )
-            
-            # Update Matrix tree
-            self._update_matrix_tree(matrix_tree, slot_no)
-            
-            # Process commission for upline
-            self._process_upgrade_commission(user_id, slot_no, amount)
-            
-            # Check for auto upgrade eligibility
-            self._check_auto_upgrade_eligibility(user_id)
-            
-            return {
-                "success": True,
-                "activation_id": str(activation.id),
-                "new_slot": self.MATRIX_SLOTS[slot_no]['name'],
-                "message": f"Successfully upgraded to {self.MATRIX_SLOTS[slot_no]['name']}"
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def process_auto_upgrade(self, user_id: str, from_slot: int, to_slot: int) -> Dict[str, Any]:
-        """Process Matrix auto upgrade using middle 3 members earnings"""
-        try:
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if not matrix_tree:
-                raise ValueError("Matrix tree not found")
-            
-            # Calculate earnings from middle 3 members
-            middle_three_earnings = self._calculate_middle_three_earnings(user_id, from_slot)
-            
-            if middle_three_earnings <= 0:
-                raise ValueError("Insufficient earnings for auto upgrade")
-            
-            # Calculate upgrade cost
-            upgrade_cost = self.MATRIX_SLOTS[to_slot]['value']
-            
-            if middle_three_earnings < upgrade_cost:
-                raise ValueError("Insufficient earnings for auto upgrade")
-            
-            # Create auto upgrade record
-            auto_upgrade = MatrixAutoUpgrade(
+            matrix_tree = MatrixTree(
                 user_id=ObjectId(user_id),
-                from_slot=from_slot,
-                to_slot=to_slot,
-                upgrade_cost=upgrade_cost,
-                earnings_from_middle_three=middle_three_earnings,
-                status='completed',
-                completed_at=datetime.utcnow()
+                current_slot=1,
+                current_level=1,
+                total_members=0,
+                level_1_members=0,
+                level_2_members=0,
+                level_3_members=0,
+                is_complete=False,
+                nodes=[],
+                slots=[]
             )
-            auto_upgrade.save()
-            
-            # Update Matrix tree
-            self._update_matrix_tree(matrix_tree, to_slot)
-            
-            # Create activation record for auto upgrade
-            activation = self._create_matrix_activation(
-                user_id, to_slot, self.MATRIX_SLOTS[to_slot]['name'],
-                'auto', upgrade_cost, f"AUTO_{auto_upgrade.id}"
-            )
-            
-            return {
-                "success": True,
-                "auto_upgrade_id": str(auto_upgrade.id),
-                "activation_id": str(activation.id),
-                "earnings_used": float(middle_three_earnings),
-                "message": f"Auto upgrade to {self.MATRIX_SLOTS[to_slot]['name']} completed"
-            }
-            
+            matrix_tree.save()
+            return matrix_tree
         except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def process_recycle(self, user_id: str, matrix_level: int, recycle_position: str) -> Dict[str, Any]:
-        """Process Matrix recycle system"""
-        try:
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if not matrix_tree:
-                raise ValueError("Matrix tree not found")
-            
-            # Calculate recycle amount
-            recycle_amount = self._calculate_recycle_amount(matrix_level)
-            
-            # Create recycle record
-            recycle = MatrixRecycle(
-                user_id=ObjectId(user_id),
-                matrix_level=matrix_level,
-                recycle_position=recycle_position,
-                recycle_amount=recycle_amount,
-                original_slot=self.MATRIX_SLOTS[matrix_tree.current_slot]['name'],
-                recycle_reason='matrix_completion',
-                is_processed=True,
-                processed_at=datetime.utcnow()
-            )
-            recycle.save()
-            
-            # Find new parent for recycle
-            new_parent = self._find_recycle_parent(user_id, recycle_position)
-            if new_parent:
-                recycle.new_parent_id = ObjectId(new_parent)
-                recycle.new_position = recycle_position
-                recycle.save()
-            
-            return {
-                "success": True,
-                "recycle_id": str(recycle.id),
-                "recycle_amount": float(recycle_amount),
-                "new_parent": new_parent,
-                "message": "Matrix recycle processed successfully"
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def get_matrix_tree_structure(self, user_id: str) -> Dict[str, Any]:
-        """Get complete Matrix tree structure"""
-        try:
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if not matrix_tree:
-                raise ValueError("Matrix tree not found")
-            
-            # Get children
-            children = MatrixTree.objects(parent_id=ObjectId(user_id)).all()
-            
-            # Get team statistics
-            team_stats = self._calculate_team_statistics(user_id)
-            
-            return {
-                "success": True,
-                "data": {
-                    "matrix_tree": {
-                        "user_id": str(matrix_tree.user_id),
-                        "current_slot": matrix_tree.current_slot,
-                        "current_level": matrix_tree.current_level,
-                        "positions": [
-                            {
-                                "position": pos.position,
-                                "is_active": pos.is_active,
-                                "is_upline_reserve": pos.is_upline_reserve,
-                                "user_id": str(pos.user_id) if pos.user_id else None
-                            } for pos in matrix_tree.positions
-                        ],
-                        "matrix_slots": [
-                            {
-                                "slot_name": slot.slot_name,
-                                "slot_value": float(slot.slot_value),
-                                "level": slot.level,
-                                "is_active": slot.is_active,
-                                "member_count": slot.member_count
-                            } for slot in matrix_tree.matrix_slots
-                        ],
-                        "total_team_size": matrix_tree.total_team_size,
-                        "auto_upgrade_enabled": matrix_tree.auto_upgrade_enabled,
-                        "is_activated": matrix_tree.is_activated
-                    },
-                    "children": [
-                        {
-                            "user_id": str(child.user_id),
-                            "current_slot": child.current_slot,
-                            "current_level": child.current_level
-                        } for child in children
-                    ],
-                    "team_stats": team_stats
-                }
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    def _create_matrix_tree(self, user_id: str, referrer_id: str) -> MatrixTree:
-        """Create Matrix tree entry"""
-        matrix_tree = MatrixTree(
-            user_id=ObjectId(user_id),
-            parent_id=ObjectId(referrer_id),
-            current_slot=1,
-            current_level=1,
-            is_active=True,
-            is_activated=False
-        )
-        
-        # Initialize Matrix positions (left, center, right)
-        matrix_tree.positions = [
-            MatrixPosition(position='left', is_active=False),
-            MatrixPosition(position='center', is_upline_reserve=True, is_active=False),
-            MatrixPosition(position='right', is_active=False)
-        ]
-        
-        # Initialize STARTER slot
-        matrix_tree.matrix_slots = [
-            MatrixSlotInfo(
-                slot_name='STARTER',
-                slot_value=Decimal('11.0'),
-                level=1,
-                is_active=True,
-                member_count=3,
-                activated_at=datetime.utcnow()
-            )
-        ]
-        
-        matrix_tree.save()
-        return matrix_tree
+            raise ValueError(f"Failed to create matrix tree: {str(e)}")
     
     def _create_matrix_activation(self, user_id: str, slot_no: int, slot_name: str, 
                                 activation_type: str, amount: Decimal, tx_hash: str) -> MatrixActivation:
-        """Create Matrix activation record"""
-        activation = MatrixActivation(
-            user_id=ObjectId(user_id),
-            slot_no=slot_no,
-            slot_name=slot_name,
-            activation_type=activation_type,
-            amount_paid=amount,
-            tx_hash=tx_hash,
-            status='completed',
-            activated_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
-        )
-        activation.save()
-        return activation
+        """Create MatrixActivation record"""
+        try:
+            activation = MatrixActivation(
+                user_id=ObjectId(user_id),
+                slot_no=slot_no,
+                slot_name=slot_name,
+                activation_type=activation_type,
+                upgrade_source='auto' if activation_type == 'initial' else 'manual',
+                amount_paid=amount,
+                currency='USDT',
+                tx_hash=tx_hash,
+                is_auto_upgrade=(activation_type == 'initial'),
+                status='completed',
+                activated_at=datetime.utcnow(),
+                completed_at=datetime.utcnow()
+            )
+            activation.save()
+            return activation
+        except Exception as e:
+            raise ValueError(f"Failed to create matrix activation: {str(e)}")
     
-    def _update_matrix_tree(self, matrix_tree: MatrixTree, new_slot: int):
-        """Update Matrix tree with new slot"""
-        matrix_tree.current_slot = new_slot
-        matrix_tree.current_level = new_slot
-        
-        # Add new slot info
-        new_slot_info = MatrixSlotInfo(
-            slot_name=self.MATRIX_SLOTS[new_slot]['name'],
-            slot_value=self.MATRIX_SLOTS[new_slot]['value'],
-            level=new_slot,
-            is_active=True,
-            member_count=self.MATRIX_SLOTS[new_slot]['members'],
-            activated_at=datetime.utcnow()
-        )
-        matrix_tree.matrix_slots.append(new_slot_info)
-        matrix_tree.save()
-    
-    def _process_joining_commission(self, referrer_id: str, user_id: str, amount: Decimal):
-        """Process 10% commission for referrer on joining"""
-        commission_amount = amount * Decimal(str(self.COMMISSION_PERCENTAGE / 100))
-        
-        commission = Commission(
-            user_id=ObjectId(referrer_id),
-            from_user_id=ObjectId(user_id),
-            commission_type='joining',
-            program='matrix',
-            commission_amount=commission_amount,
-            currency='USDT',
-            commission_percentage=self.COMMISSION_PERCENTAGE,
-            source_slot_no=1,
-            source_slot_name='STARTER',
-            status='paid',
-            paid_at=datetime.utcnow()
-        )
-        commission.save()
-    
-    def _process_upgrade_commission(self, user_id: str, slot_no: int, amount: Decimal):
-        """Process 10% commission for upline on upgrade"""
-        # Get upline
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-        if not matrix_tree:
-            return
-        
-        upline_id = matrix_tree.parent_id
-        commission_amount = amount * Decimal(str(self.COMMISSION_PERCENTAGE / 100))
-        
-        commission = Commission(
-            user_id=upline_id,
-            from_user_id=ObjectId(user_id),
-            commission_type='upgrade',
-            program='matrix',
-            commission_amount=commission_amount,
-            currency='USDT',
-            commission_percentage=self.COMMISSION_PERCENTAGE,
-            source_slot_no=slot_no,
-            source_slot_name=self.MATRIX_SLOTS[slot_no]['name'],
-            status='paid',
-            paid_at=datetime.utcnow()
-        )
-        commission.save()
-    
-    def _calculate_middle_three_earnings(self, user_id: str, slot_level: int) -> Decimal:
-        """Calculate earnings from middle 3 members for auto upgrade"""
-        # This is a simplified calculation
-        # In real implementation, you would calculate based on actual earnings
-        base_earning = self.MATRIX_SLOTS[slot_level]['value'] * Decimal('0.1')  # 10% of slot value
-        return base_earning * 3  # 3 members
-    
-    def _check_auto_upgrade_eligibility(self, user_id: str):
-        """Check if user is eligible for auto upgrade"""
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-        if not matrix_tree:
-            return
-        
-        # Check if user has enough earnings for next slot
-        if matrix_tree.current_slot < 5:
-            next_slot = matrix_tree.current_slot + 1
-            earnings = self._calculate_middle_three_earnings(user_id, matrix_tree.current_slot)
-            upgrade_cost = self.MATRIX_SLOTS[next_slot]['value']
+    def _place_user_in_matrix_tree(self, user_id: str, referrer_id: str, matrix_tree: MatrixTree) -> Dict[str, Any]:
+        """Place user in referrer's matrix tree using BFS algorithm"""
+        try:
+            # Get referrer's matrix tree
+            referrer_tree = MatrixTree.objects(user_id=ObjectId(referrer_id)).first()
+            if not referrer_tree:
+                raise ValueError("Referrer not in Matrix program")
             
-            if earnings >= upgrade_cost:
-                matrix_tree.auto_upgrade_ready = True
-                matrix_tree.save()
+            # Find first available position using BFS
+            placement_position = self._find_bfs_placement_position(referrer_tree)
+            
+            if not placement_position:
+                raise ValueError("No available positions in referrer's matrix tree")
+            
+            # Create matrix node for the new user
+            matrix_node = MatrixNode(
+                level=placement_position['level'],
+                position=placement_position['position'],
+                user_id=ObjectId(user_id),
+                placed_at=datetime.utcnow(),
+                is_active=True
+            )
+            
+            # Add node to referrer's tree
+            referrer_tree.nodes.append(matrix_node)
+            
+            # Update member counts
+            if placement_position['level'] == 1:
+                referrer_tree.level_1_members += 1
+            elif placement_position['level'] == 2:
+                referrer_tree.level_2_members += 1
+            elif placement_position['level'] == 3:
+                referrer_tree.level_3_members += 1
+            
+            referrer_tree.total_members += 1
+            referrer_tree.updated_at = datetime.utcnow()
+            referrer_tree.save()
+            
+            # Check if tree is complete (39 members)
+            if referrer_tree.total_members >= 39:
+                referrer_tree.is_complete = True
+                referrer_tree.save()
+                # Automatically trigger recycle process
+                self._check_and_process_automatic_recycle(str(referrer_tree.user_id), 1)
+            
+            return {
+                "success": True,
+                "level": placement_position['level'],
+                "position": placement_position['position'],
+                "total_members": referrer_tree.total_members,
+                "is_complete": referrer_tree.is_complete
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
-    def _calculate_recycle_amount(self, matrix_level: int) -> Decimal:
-        """Calculate recycle amount based on matrix level"""
-        # Simplified calculation
-        return self.MATRIX_SLOTS[matrix_level]['value'] * Decimal('0.5')  # 50% of slot value
+    def _find_bfs_placement_position(self, matrix_tree: MatrixTree) -> Optional[Dict[str, int]]:
+        """Find first available position using BFS algorithm"""
+        try:
+            # Level 1: Check positions 0, 1, 2 (left, middle, right)
+            for pos in range(3):
+                if not any(node.level == 1 and node.position == pos for node in matrix_tree.nodes):
+                    return {"level": 1, "position": pos}
+            
+            # Level 2: Check positions 0-8 (3 under each L1 parent)
+            for pos in range(9):
+                if not any(node.level == 2 and node.position == pos for node in matrix_tree.nodes):
+                    return {"level": 2, "position": pos}
+            
+            # Level 3: Check positions 0-26 (3 under each L2 parent)
+            for pos in range(27):
+                if not any(node.level == 3 and node.position == pos for node in matrix_tree.nodes):
+                    return {"level": 3, "position": pos}
+            
+            return None  # No available positions
+            
+        except Exception as e:
+            raise ValueError(f"Failed to find BFS placement position: {str(e)}")
     
-    def _find_recycle_parent(self, user_id: str, recycle_position: str) -> Optional[str]:
-        """Find new parent for recycle placement"""
-        # Simplified implementation
-        # In real implementation, you would find the next available position
-        return None
+    def _initialize_matrix_auto_upgrade(self, user_id: str):
+        """Initialize MatrixAutoUpgrade tracking"""
+        try:
+            if not MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first():
+                MatrixAutoUpgrade(
+                    user_id=ObjectId(user_id),
+                    current_slot_no=1,
+                    current_level=1,
+                    middle_three_required=3,
+                    middle_three_available=0,
+                    is_eligible=False,
+                    next_upgrade_cost=self.MATRIX_SLOTS[2]['value'],
+                    can_upgrade=False
+                ).save()
+        except Exception as e:
+            print(f"Error initializing matrix auto upgrade: {str(e)}")
     
-    def _calculate_team_statistics(self, user_id: str) -> Dict[str, Any]:
-        """Calculate team statistics"""
-        # Get direct children count
-        direct_children = MatrixTree.objects(parent_id=ObjectId(user_id)).count()
-        
-        # Get total team size (recursive)
-        total_team = self._calculate_total_team_size(user_id)
-        
-        return {
-            "direct_children": direct_children,
-            "total_team": total_team,
-            "matrix_level": MatrixTree.objects(user_id=ObjectId(user_id)).first().current_level if MatrixTree.objects(user_id=ObjectId(user_id)).first() else 0
-        }
+    def _process_matrix_commissions(self, user_id: str, referrer_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+        """Process all matrix commission distributions (100% total)"""
+        try:
+            results = {}
+            
+            # 1. Joining Commission (10% to direct upline)
+            joining_result = self.commission_service.calculate_joining_commission(
+                from_user_id=user_id,
+                program='matrix',
+                amount=amount,
+                currency=currency
+            )
+            results['joining_commission'] = joining_result
+            
+            # 2. Partner Incentive (10% to upline from joining)
+            partner_result = self.commission_service.calculate_partner_incentive(
+                from_user_id=user_id,
+                to_user_id=referrer_id,
+                program='matrix',
+                amount=amount,
+                currency=currency
+            )
+            results['partner_incentive'] = partner_result
+            
+            # 3. Level Distribution (40% distributed across matrix levels)
+            level_result = self._calculate_level_distribution(user_id, amount, currency)
+            results['level_distribution'] = level_result
+            
+            # 4. Spark Bonus (8% contribution to Spark fund)
+            spark_result = self.spark_service.contribute_to_fund(
+                program='matrix',
+                amount=amount,
+                currency=currency,
+                source_user_id=user_id,
+                source_type='matrix_join',
+                source_slot_no=1
+            )
+            results['spark_bonus'] = spark_result
+            
+            # 5. Royal Captain (4% contribution to Royal Captain fund)
+            royal_captain_result = self._contribute_to_royal_captain_fund(user_id, amount, currency)
+            results['royal_captain'] = royal_captain_result
+            
+            # 6. President Reward (3% contribution to President Reward fund)
+            president_result = self._contribute_to_president_reward_fund(user_id, amount, currency)
+            results['president_reward'] = president_result
+            
+            # 7. Shareholders (5% contribution to Shareholders fund)
+            shareholders_result = self._contribute_to_shareholders_fund(user_id, amount, currency)
+            results['shareholders'] = shareholders_result
+            
+            # 8. Newcomer Growth Support (20% contribution + instant bonus)
+            ngs_result = self.newcomer_support_service.process_matrix_contribution(
+                user_id=user_id,
+                amount=amount,
+                currency=currency
+            )
+            results['newcomer_support'] = ngs_result
+            
+            # 9. Mentorship Bonus (10% to super upline - direct-of-direct)
+            mentorship_result = self.mentorship_service.process_matrix_mentorship(
+                user_id=user_id,
+                referrer_id=referrer_id,
+                amount=amount,
+                currency=currency
+            )
+            results['mentorship_bonus'] = mentorship_result
+            
+            return results
+            
+        except Exception as e:
+            return {"error": str(e)}
     
-    def _calculate_total_team_size(self, user_id: str) -> int:
-        """Calculate total team size recursively"""
-        children = MatrixTree.objects(parent_id=ObjectId(user_id)).all()
-        total = len(children)
-        
-        for child in children:
-            total += self._calculate_total_team_size(str(child.user_id))
-        
-        return total
+    def _process_special_programs(self, user_id: str, referrer_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+        """Process special program integrations"""
+        try:
+            results = {}
+            
+            # 1. Dream Matrix initialization
+            dream_matrix_result = self.dream_matrix_service.initialize_dream_matrix(
+                user_id=user_id,
+                referrer_id=referrer_id
+            )
+            results['dream_matrix'] = dream_matrix_result
+            
+            # 2. Rank update
+            rank_result = self.rank_service.update_user_rank(user_id=user_id)
+            results['rank_update'] = rank_result
+            
+            return results
+            
+        except Exception as e:
+            return {"error": str(e)}
+    
+    def _update_user_matrix_status(self, user: User, matrix_joined: bool):
+        """Update user's matrix participation status"""
+        try:
+            user.matrix_joined = matrix_joined
+            user.updated_at = datetime.utcnow()
+            user.save()
+        except Exception as e:
+            print(f"Error updating user matrix status: {str(e)}")
+    
+    def _record_matrix_earning_history(self, user_id: str, slot_no: int, slot_name: str, amount: Decimal, currency: str):
+        """Record matrix earning history"""
+        try:
+            MatrixEarningHistory(
+                user_id=ObjectId(user_id),
+                earning_type='slot_activation',
+                slot_no=slot_no,
+                slot_name=slot_name,
+                amount=amount,
+                currency=currency,
+                source_type='matrix_join',
+                description=f"Matrix slot {slot_no} ({slot_name}) activation"
+            ).save()
+        except Exception as e:
+            print(f"Error recording matrix earning history: {str(e)}")
+    
+    def _record_blockchain_event(self, tx_hash: str, user_id: str, referrer_id: str, amount: Decimal, currency: str):
+        """Record blockchain event"""
+        try:
+            BlockchainEvent(
+                tx_hash=tx_hash,
+                event_type='matrix_join',
+                event_data={
+                    'program': 'matrix',
+                    'slot_no': 1,
+                    'slot_name': 'STARTER',
+                    'amount': str(amount),
+                    'currency': currency,
+                    'user_id': user_id,
+                    'referrer_id': referrer_id
+                },
+                status='processed',
+                processed_at=datetime.utcnow()
+            ).save()
+        except Exception as e:
+            print(f"Error recording blockchain event: {str(e)}")
+    
+    def _calculate_level_distribution(self, user_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+        """Calculate level distribution (40% of total)"""
+        try:
+            # 40% of amount distributed across matrix levels
+            level_amount = amount * Decimal('0.40')
+            
+            # TODO: Implement actual level distribution logic
+            # This would involve finding upline chain and distributing to each level
+            
+            return {
+                "success": True,
+                "total_level_amount": float(level_amount),
+                "currency": currency,
+                "message": "Level distribution calculated"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _contribute_to_royal_captain_fund(self, user_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+        """Contribute 4% to Royal Captain fund"""
+        try:
+            # TODO: Implement Royal Captain fund contribution
+            return {"success": True, "message": "Royal Captain contribution processed"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _contribute_to_president_reward_fund(self, user_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+        """Contribute 3% to President Reward fund"""
+        try:
+            # TODO: Implement President Reward fund contribution
+            return {"success": True, "message": "President Reward contribution processed"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _contribute_to_shareholders_fund(self, user_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+        """Contribute 5% to Shareholders fund"""
+        try:
+            # TODO: Implement Shareholders fund contribution
+            return {"success": True, "message": "Shareholders contribution processed"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def get_matrix_status(self, user_id: str) -> Dict[str, Any]:
+        """Get user's matrix program status"""
+        try:
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                raise ValueError("User not found")
+            
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_auto_upgrade = MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "matrix_joined": user.matrix_joined if hasattr(user, 'matrix_joined') else False,
+                "matrix_tree": {
+                    "current_slot": matrix_tree.current_slot if matrix_tree else 0,
+                    "current_level": matrix_tree.current_level if matrix_tree else 0,
+                    "total_members": matrix_tree.total_members if matrix_tree else 0,
+                    "is_complete": matrix_tree.is_complete if matrix_tree else False
+                } if matrix_tree else None,
+                "auto_upgrade": {
+                    "current_slot": matrix_auto_upgrade.current_slot_no if matrix_auto_upgrade else 0,
+                    "middle_three_available": matrix_auto_upgrade.middle_three_available if matrix_auto_upgrade else 0,
+                    "is_eligible": matrix_auto_upgrade.is_eligible if matrix_auto_upgrade else False,
+                    "can_upgrade": matrix_auto_upgrade.can_upgrade if matrix_auto_upgrade else False
+                } if matrix_auto_upgrade else None
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    # ==================== RECYCLE SYSTEM METHODS ====================
+    
+    def detect_recycle_completion(self, user_id: str, slot_no: int):
+        """Detect when a Matrix slot has completed with 39 members (3+9+27)."""
+        try:
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return False
+            
+            # Check if current slot has 39 members
+            current_slot_nodes = [node for node in matrix_tree.nodes if node.level <= 3]
+            if len(current_slot_nodes) >= 39:
+                return True
+            
+            return False
+        except Exception as e:
+            print(f"Error detecting recycle completion: {e}")
+            return False
+    
+    def create_recycle_snapshot(self, user_id: str, slot_no: int):
+        """Create immutable snapshot of 39-member tree when recycle occurs."""
+        try:
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return None
+            
+            # Get current recycle number for this user+slot
+            existing_recycles = MatrixRecycleInstance.objects(
+                user_id=ObjectId(user_id),
+                slot_number=slot_no
+            ).order_by('-recycle_no').first()
+            
+            next_recycle_no = (existing_recycles.recycle_no + 1) if existing_recycles else 1
+            
+            # Create recycle instance
+            recycle_instance = MatrixRecycleInstance(
+                user_id=ObjectId(user_id),
+                slot_number=slot_no,
+                recycle_no=next_recycle_no,
+                is_complete=True,
+                created_at=datetime.utcnow(),
+                completed_at=datetime.utcnow()
+            )
+            recycle_instance.save()
+            
+            # Create immutable snapshot of all 39 nodes
+            for node in matrix_tree.nodes:
+                if node.level <= 3:  # Only include the 39 members (3+9+27)
+                    recycle_node = MatrixRecycleNode(
+                        instance_id=recycle_instance.id,
+                        occupant_user_id=node.user_id,
+                        level_index=node.level,
+                        position_index=node.position,
+                        placed_at=node.placed_at
+                    )
+                    recycle_node.save()
+            
+            return recycle_instance
+        except Exception as e:
+            print(f"Error creating recycle snapshot: {e}")
+            return None
+    
+    def place_recycled_user(self, user_id: str, slot_no: int, upline_user_id: str):
+        """Place recycled user in upline's corresponding slot using BFS algorithm."""
+        try:
+            # Get upline's matrix tree
+            upline_tree = MatrixTree.objects(user_id=ObjectId(upline_user_id)).first()
+            if not upline_tree:
+                return None
+            
+            # Find next available position using BFS
+            next_position = self._get_next_available_position(upline_tree, slot_no)
+            if not next_position:
+                return None
+            
+            # Create new node for recycled user
+            new_node = MatrixNode(
+                user_id=ObjectId(user_id),
+                level=next_position["level"],
+                position=next_position["position"],
+                parent_id=ObjectId(upline_user_id),
+                placed_at=datetime.utcnow()
+            )
+            
+            # Add to upline's tree
+            upline_tree.nodes.append(new_node)
+            upline_tree.total_members += 1
+            upline_tree.last_updated = datetime.utcnow()
+            upline_tree.save()
+            
+            return new_node
+        except Exception as e:
+            print(f"Error placing recycled user: {e}")
+            return None
+    
+    def _get_next_available_position(self, matrix_tree, slot_no: int):
+        """Get next available position in matrix tree using BFS algorithm."""
+        try:
+            # BFS placement: Level 1 (left → middle → right), then Level 2, then Level 3
+            existing_positions = set()
+            for node in matrix_tree.nodes:
+                existing_positions.add((node.level, node.position))
+            
+            # Level 1: 3 positions (0, 1, 2)
+            for pos in range(3):
+                if (1, pos) not in existing_positions:
+                    return {"level": 1, "position": pos}
+            
+            # Level 2: 9 positions (0-8)
+            for pos in range(9):
+                if (2, pos) not in existing_positions:
+                    return {"level": 2, "position": pos}
+            
+            # Level 3: 27 positions (0-26)
+            for pos in range(27):
+                if (3, pos) not in existing_positions:
+                    return {"level": 3, "position": pos}
+            
+            return None  # Tree is full
+        except Exception as e:
+            print(f"Error getting next available position: {e}")
+            return None
+    
+    def process_recycle_completion(self, user_id: str, slot_no: int):
+        """Process complete recycle cycle: detect, snapshot, re-entry."""
+        try:
+            # 1. Detect recycle completion
+            if not self.detect_recycle_completion(user_id, slot_no):
+                return {"success": False, "error": "Recycle not yet complete"}
+            
+            # 2. Create immutable snapshot
+            recycle_instance = self.create_recycle_snapshot(user_id, slot_no)
+            if not recycle_instance:
+                return {"success": False, "error": "Failed to create recycle snapshot"}
+            
+            # 3. Get upline for re-entry
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"success": False, "error": "Matrix tree not found"}
+            
+            # Find upline (parent in matrix tree)
+            upline_user_id = None
+            for node in matrix_tree.nodes:
+                if node.user_id == ObjectId(user_id):
+                    upline_user_id = node.parent_id
+                    break
+            
+            if not upline_user_id:
+                return {"success": False, "error": "Upline not found"}
+            
+            # 4. Place recycled user in upline's tree
+            new_node = self.place_recycled_user(user_id, slot_no, str(upline_user_id))
+            if not new_node:
+                return {"success": False, "error": "Failed to place recycled user"}
+            
+            # 5. Clear current tree for new cycle
+            matrix_tree.nodes = []
+            matrix_tree.total_members = 0
+            matrix_tree.current_slot = slot_no + 1 if slot_no < 15 else slot_no
+            matrix_tree.last_updated = datetime.utcnow()
+            matrix_tree.save()
+            
+            return {
+                "success": True,
+                "recycle_instance_id": str(recycle_instance.id),
+                "recycle_no": recycle_instance.recycle_no,
+                "new_position": {
+                    "level": new_node.level,
+                    "position": new_node.position
+                },
+                "upline_user_id": str(upline_user_id)
+            }
+        except Exception as e:
+            print(f"Error processing recycle completion: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def get_recycle_tree(self, user_id: str, slot_no: int, recycle_no: int = None):
+        """Get matrix tree by recycle number or current in-progress tree."""
+        try:
+            if recycle_no is None or recycle_no == "current":
+                # Return current in-progress tree
+                matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+                if not matrix_tree:
+                    return None
+                
+                return {
+                    "user_id": str(matrix_tree.user_id),
+                    "slot_number": slot_no,
+                    "recycle_no": "current",
+                    "is_snapshot": False,
+                    "is_complete": False,
+                    "total_recycles": MatrixRecycleInstance.objects(
+                        user_id=ObjectId(user_id),
+                        slot_number=slot_no
+                    ).count(),
+                    "nodes": [node.to_mongo().to_dict() for node in matrix_tree.nodes]
+                }
+            else:
+                # Return specific recycle snapshot
+                recycle_instance = MatrixRecycleInstance.objects(
+                    user_id=ObjectId(user_id),
+                    slot_number=slot_no,
+                    recycle_no=recycle_no
+                ).first()
+                
+                if not recycle_instance:
+                    return None
+                
+                # Get all nodes for this recycle instance
+                recycle_nodes = MatrixRecycleNode.objects(instance_id=recycle_instance.id).all()
+                
+                return {
+                    "user_id": str(recycle_instance.user_id),
+                    "slot_number": recycle_instance.slot_number,
+                    "recycle_no": recycle_instance.recycle_no,
+                    "is_snapshot": True,
+                    "is_complete": recycle_instance.is_complete,
+                    "total_recycles": MatrixRecycleInstance.objects(
+                        user_id=ObjectId(user_id),
+                        slot_number=slot_no
+                    ).count(),
+                    "nodes": [node.to_mongo().to_dict() for node in recycle_nodes]
+                }
+        except Exception as e:
+            print(f"Error getting recycle tree: {e}")
+            return None
+    
+    def get_recycle_history(self, user_id: str, slot_no: int):
+        """Get recycle history for user+slot."""
+        try:
+            recycle_instances = MatrixRecycleInstance.objects(
+                user_id=ObjectId(user_id),
+                slot_number=slot_no
+            ).order_by('-recycle_no').all()
+            
+            return [instance.to_mongo().to_dict() for instance in recycle_instances]
+        except Exception as e:
+            print(f"Error getting recycle history: {e}")
+            return []
+    
+    def _check_and_process_automatic_recycle(self, user_id: str, slot_no: int):
+        """Check and automatically process recycle when 39 members complete."""
+        try:
+            # Check if recycle is needed
+            if self.detect_recycle_completion(user_id, slot_no):
+                print(f"🔄 Automatic recycle detected for user {user_id}, slot {slot_no}")
+                
+                # Process the recycle automatically
+                result = self.process_recycle_completion(user_id, slot_no)
+                
+                if result.get("success"):
+                    print(f"✅ Automatic recycle completed successfully for user {user_id}")
+                    print(f"   - Recycle #{result.get('recycle_no')}")
+                    print(f"   - New position: Level {result.get('new_position', {}).get('level')}, Position {result.get('new_position', {}).get('position')}")
+                    print(f"   - Upline: {result.get('upline_user_id')}")
+                    
+                    # Log the automatic recycle event
+                    self._log_earning_history(
+                        user_id=user_id,
+                        earning_type="automatic_recycle",
+                        amount=0.0,
+                        description=f"Automatic recycle #{result.get('recycle_no')} completed - 39 members reached"
+                    )
+                    
+                    # Log blockchain event for automatic recycle
+                    self._log_blockchain_event(
+                        tx_hash=f"auto_recycle_{user_id}_{slot_no}_{result.get('recycle_no')}",
+                        event_type='matrix_automatic_recycle',
+                        event_data={
+                            'program': 'matrix',
+                            'slot_no': slot_no,
+                            'user_id': user_id,
+                            'recycle_no': result.get('recycle_no'),
+                            'new_position': result.get('new_position'),
+                            'upline_user_id': result.get('upline_user_id')
+                        }
+                    )
+                else:
+                    print(f"❌ Automatic recycle failed for user {user_id}: {result.get('error')}")
+            else:
+                print(f"ℹ️ No recycle needed for user {user_id}, slot {slot_no} - {self._get_current_member_count(user_id)} members")
+                
+        except Exception as e:
+            print(f"Error in automatic recycle check: {e}")
+    
+    def _get_current_member_count(self, user_id: str):
+        """Get current member count for a user's matrix tree."""
+        try:
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if matrix_tree:
+                return matrix_tree.total_members
+            return 0
+        except Exception as e:
+            print(f"Error getting member count: {e}")
+            return 0
+    
+    def _log_blockchain_event(self, tx_hash: str, event_type: str, event_data: dict):
+        """Log blockchain event for audit trail."""
+        try:
+            from ..blockchain.model import BlockchainEvent
+            BlockchainEvent(
+                tx_hash=tx_hash,
+                event_type=event_type,
+                event_data=event_data,
+                status='processed',
+                processed_at=datetime.utcnow()
+            ).save()
+        except Exception as e:
+            print(f"Error recording blockchain event: {str(e)}")

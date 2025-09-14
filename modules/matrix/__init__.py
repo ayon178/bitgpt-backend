@@ -1,2 +1,29 @@
 # Matrix Program Module
-# 3x Matrix structure with recycle system and auto upgrade
+
+from .service import MatrixService
+from .router import router
+from .model import (
+    MatrixTree,
+    MatrixNode,
+    MatrixActivation,
+    MatrixUpgradeLog,
+    MatrixEarningHistory,
+    MatrixCommission,
+    MatrixRecycleInstance,
+    MatrixRecycleNode,
+    MatrixSlotInfo
+)
+
+__all__ = [
+    'MatrixService',
+    'router',
+    'MatrixTree',
+    'MatrixNode',
+    'MatrixActivation',
+    'MatrixUpgradeLog',
+    'MatrixEarningHistory',
+    'MatrixCommission',
+    'MatrixRecycleInstance',
+    'MatrixRecycleNode',
+    'MatrixSlotInfo'
+]

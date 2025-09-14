@@ -1,248 +1,207 @@
-from mongoengine import Document, StringField, ObjectIdField, IntField, BooleanField, DateTimeField, DecimalField, ListField, DictField, FloatField, EmbeddedDocumentField, EmbeddedDocument
+from mongoengine import Document, ObjectIdField, StringField, IntField, FloatField, BooleanField, DateTimeField, ListField, EmbeddedDocument, EmbeddedDocumentField, DecimalField
 from datetime import datetime
 from decimal import Decimal
 
-class MatrixSlotInfo(EmbeddedDocument):
-    """Matrix slot information"""
-    slot_name = StringField(required=True)  # STARTER, BRONZE, SILVER, GOLD, PLATINUM
-    slot_value = DecimalField(required=True, precision=8)  # USDT value
-    level = IntField(required=True)
-    is_active = BooleanField(default=False)
-    activated_at = DateTimeField()
-    upgrade_cost = DecimalField(precision=8, default=0)
-    total_income = DecimalField(precision=8, default=0)
-    wallet_amount = DecimalField(precision=8, default=0)
+class MatrixNode(EmbeddedDocument):
+    """Individual matrix node in the 3x structure"""
+    level = IntField(required=True)  # 1, 2, or 3
+    position = IntField(required=True)  # 0-based position within level
+    user_id = ObjectIdField(required=True)  # User occupying this position
+    placed_at = DateTimeField(default=datetime.utcnow)
+    is_active = BooleanField(default=True)
     
-    # Matrix specific fields
-    member_count = IntField()  # Required members for this slot (3^level)
-    recycle_eligible = BooleanField(default=False)  # Eligible for recycle system
+    meta = {
+        'indexes': [
+            'level',
+            'position',
+            'user_id'
+        ]
+    }
 
-class MatrixPosition(EmbeddedDocument):
-    """Matrix position information"""
-    position = StringField(choices=['left', 'center', 'right'], required=True)
-    user_id = ObjectIdField()
-    is_upline_reserve = BooleanField(default=False)  # Center position special handling
+class MatrixSlotInfo(EmbeddedDocument):
+    """Matrix slot information for a user"""
+    slot_no = IntField(required=True)
+    slot_name = StringField(required=True)
+    slot_value = DecimalField(required=True)
+    level = IntField(required=True)
+    members_count = IntField(required=True)  # 3, 9, 27, 81, 243, etc.
     is_active = BooleanField(default=False)
     activated_at = DateTimeField()
-    
-    # Auto upgrade contribution
-    contributes_to_auto_upgrade = BooleanField(default=False)  # Middle 3 members
-    earnings_contributed = DecimalField(precision=8, default=0)
+    total_income = DecimalField(default=Decimal('0'))
+    upgrade_cost = DecimalField(default=Decimal('0'))
+    wallet_amount = DecimalField(default=Decimal('0'))
 
 class MatrixTree(Document):
-    """Matrix tree structure and positioning"""
-    user_id = ObjectIdField(required=True)
-    parent_id = ObjectIdField(required=True)
-    
-    # Matrix positions (3 positions per user)
-    positions = ListField(EmbeddedDocumentField(MatrixPosition), default=[])
-    
-    # Current slot information
-    current_slot = IntField(default=1)  # 1-5 (STARTER to PLATINUM)
-    current_level = IntField(default=1)
-    
-    # Matrix slots
-    matrix_slots = ListField(EmbeddedDocumentField(MatrixSlotInfo), default=[])
-    
-    # Tree structure tracking
-    total_team_size = IntField(default=0)  # Total team size including all levels
-    direct_children_count = IntField(default=0)  # Direct children count
-    
-    # Auto upgrade tracking
-    auto_upgrade_enabled = BooleanField(default=True)
-    middle_three_earnings = DecimalField(precision=8, default=0)  # Earnings from middle 3 members
-    auto_upgrade_ready = BooleanField(default=False)
-    
-    # Recycle system
-    is_recycle_eligible = BooleanField(default=False)
-    recycle_amount = DecimalField(precision=8, default=0)
-    recycle_position = StringField(choices=['left', 'center', 'right'])
-    
-    # Commission tracking
-    total_commissions_earned = DecimalField(precision=8, default=0)
-    total_commissions_paid = DecimalField(precision=8, default=0)
-    
-    # Status
-    is_active = BooleanField(default=True)
-    is_activated = BooleanField(default=False)
-    activation_date = DateTimeField()
-    
-    # Timestamps
+    """User's matrix tree structure"""
+    user_id = ObjectIdField(required=True, unique=True)
+    current_slot = IntField(default=1)  # Current active slot (1-15)
+    current_level = IntField(default=1)  # Current level (1-15)
+    total_members = IntField(default=0)  # Total members in tree
+    level_1_members = IntField(default=0)  # Members in level 1
+    level_2_members = IntField(default=0)  # Members in level 2
+    level_3_members = IntField(default=0)  # Members in level 3
+    is_complete = BooleanField(default=False)  # True when 39 members complete
+    nodes = ListField(EmbeddedDocumentField(MatrixNode))  # All nodes in tree
+    slots = ListField(EmbeddedDocumentField(MatrixSlotInfo))  # User's slot info
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)
     
     meta = {
-        'collection': 'matrix_tree',
+        'collection': 'matrix_trees',
         'indexes': [
             'user_id',
-            'parent_id',
             'current_slot',
-            'current_level',
-            'is_active',
-            'is_activated'
-        ]
-    }
-
-class MatrixActivation(Document):
-    """Track Matrix slot activations and upgrades"""
-    user_id = ObjectIdField(required=True)
-    slot_no = IntField(required=True)
-    slot_name = StringField(required=True)
-    activation_type = StringField(choices=['initial', 'upgrade', 'auto', 'manual'], required=True)
-    
-    # Payment details
-    amount_paid = DecimalField(required=True, precision=8)
-    currency = StringField(choices=['USDT'], default='USDT')
-    
-    # Transaction details
-    tx_hash = StringField(required=True, unique=True)
-    blockchain_network = StringField(choices=['TRC20', 'ERC20'], default='TRC20')
-    
-    # Commission details
-    commission_paid = DecimalField(precision=8, default=0)
-    commission_percentage = FloatField(default=10.0)  # 10% commission
-    
-    # Auto upgrade details
-    is_auto_upgrade = BooleanField(default=False)
-    middle_three_contributed = ListField(ObjectIdField())  # Middle 3 members who contributed
-    earnings_used = DecimalField(precision=8, default=0)
-    
-    # Status
-    status = StringField(choices=['pending', 'completed', 'failed', 'refunded'], default='pending')
-    activated_at = DateTimeField()
-    completed_at = DateTimeField()
-    created_at = DateTimeField(default=datetime.utcnow)
-    
-    meta = {
-        'collection': 'matrix_activation',
-        'indexes': [
-            'user_id',
-            'slot_no',
-            'status',
-            'activation_type',
+            'is_complete',
             'created_at'
         ]
     }
 
-class MatrixRecycle(Document):
-    """Track Matrix recycle system"""
+class MatrixActivation(Document):
+    """Matrix slot activation records"""
     user_id = ObjectIdField(required=True)
-    matrix_level = IntField(required=True)
-    recycle_position = StringField(choices=['left', 'center', 'right'], required=True)
-    recycle_amount = DecimalField(required=True, precision=8)
-    currency = StringField(choices=['USDT'], default='USDT')
-    
-    # Recycle details
-    original_slot = StringField(required=True)
-    recycle_reason = StringField(choices=['matrix_completion', 'auto_recycle', 'manual_recycle'], required=True)
-    
-    # Processing
-    is_processed = BooleanField(default=False)
-    processed_at = DateTimeField()
-    processed_by = ObjectIdField()  # Admin who processed
-    
-    # New placement
-    new_parent_id = ObjectIdField()
-    new_position = StringField(choices=['left', 'center', 'right'])
-    
-    created_at = DateTimeField(default=datetime.utcnow)
+    slot_no = IntField(required=True)
+    slot_name = StringField(required=True)
+    activation_type = StringField(choices=['initial', 'upgrade'], default='initial')
+    upgrade_source = StringField(choices=['auto', 'manual'], default='manual')
+    amount_paid = DecimalField(required=True)
+    currency = StringField(default="USDT")
+    tx_hash = StringField(required=True)
+    is_auto_upgrade = BooleanField(default=False)
+    status = StringField(choices=['pending', 'processing', 'completed', 'failed'], default='pending')
+    activated_at = DateTimeField(default=datetime.utcnow)
+    completed_at = DateTimeField()
     
     meta = {
-        'collection': 'matrix_recycle',
+        'collection': 'matrix_activations',
         'indexes': [
             'user_id',
-            'matrix_level',
-            'is_processed',
-            'recycle_reason'
+            'slot_no',
+            'activation_type',
+            'status',
+            'activated_at'
         ]
     }
 
-class MatrixAutoUpgrade(Document):
-    """Track Matrix auto upgrade activities"""
+class MatrixUpgradeLog(Document):
+    """Log of matrix slot upgrades"""
     user_id = ObjectIdField(required=True)
-    from_slot = IntField(required=True)
-    to_slot = IntField(required=True)
-    upgrade_cost = DecimalField(required=True, precision=8)
-    currency = StringField(choices=['USDT'], default='USDT')
-    
-    # Middle 3 members contribution
-    middle_three_members = ListField(ObjectIdField())
-    earnings_from_middle_three = DecimalField(required=True, precision=8)
-    
-    # Transaction details
+    from_slot_no = IntField(required=True)
+    to_slot_no = IntField(required=True)
+    from_slot_name = StringField(required=True)
+    to_slot_name = StringField(required=True)
+    upgrade_cost = DecimalField(required=True)
+    currency = StringField(default="USDT")
     tx_hash = StringField(required=True)
-    blockchain_network = StringField(choices=['TRC20', 'ERC20'], default='TRC20')
-    
-    # Status
+    upgrade_type = StringField(choices=['manual', 'auto'], default='manual')
+    earnings_used = DecimalField(default=Decimal('0'))
+    profit_gained = DecimalField(default=Decimal('0'))
     status = StringField(choices=['pending', 'processing', 'completed', 'failed'], default='pending')
-    processed_at = DateTimeField()
-    completed_at = DateTimeField()
     created_at = DateTimeField(default=datetime.utcnow)
+    completed_at = DateTimeField()
     
     meta = {
-        'collection': 'matrix_auto_upgrade',
+        'collection': 'matrix_upgrade_logs',
         'indexes': [
             'user_id',
             'status',
+            'created_at'
+        ]
+    }
+
+class MatrixEarningHistory(Document):
+    """Matrix earning history for a user"""
+    user_id = ObjectIdField(required=True)
+    earning_type = StringField(choices=['slot_activation', 'commission', 'level_income', 'mentorship', 'dream_matrix'], required=True)
+    slot_no = IntField()
+    slot_name = StringField()
+    amount = DecimalField(required=True)
+    currency = StringField(default="USDT")
+    source_user_id = ObjectIdField()  # User who triggered the earning
+    source_type = StringField()  # Type of source (join, upgrade, etc.)
+    level = IntField()  # Matrix level for level income
+    description = StringField()
+    created_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'matrix_earning_history',
+        'indexes': [
+            'user_id',
+            'earning_type',
             'created_at'
         ]
     }
 
 class MatrixCommission(Document):
-    """Track Matrix commission distribution"""
-    user_id = ObjectIdField(required=True)  # User who gets commission
-    from_user_id = ObjectIdField(required=True)  # User who generated commission
+    """Matrix commission records"""
+    from_user_id = ObjectIdField(required=True)  # User who activated/upgraded
+    to_user_id = ObjectIdField(required=True)    # User who receives commission
+    program = StringField(default="matrix")
     slot_no = IntField(required=True)
     slot_name = StringField(required=True)
-    
-    # Commission details
-    commission_amount = DecimalField(required=True, precision=8)
-    currency = StringField(choices=['USDT'], default='USDT')
-    commission_type = StringField(choices=['joining', 'upgrade', 'level'], required=True)
-    commission_percentage = FloatField(required=True)
-    
-    # Level information
-    level = IntField()  # Which level this commission is for
-    is_direct_commission = BooleanField(default=False)  # Direct upline commission
-    
-    # Status
+    commission_type = StringField(choices=['joining', 'upgrade', 'level_income', 'mentorship'], required=True)
+    commission_level = IntField()  # Level in upline chain
+    amount = DecimalField(required=True)
+    currency = StringField(default="USDT")
+    percentage = FloatField()  # Commission percentage
     status = StringField(choices=['pending', 'paid', 'missed'], default='pending')
-    paid_at = DateTimeField()
+    tx_hash = StringField()
     created_at = DateTimeField(default=datetime.utcnow)
+    paid_at = DateTimeField()
     
     meta = {
-        'collection': 'matrix_commission',
+        'collection': 'matrix_commissions',
         'indexes': [
-            'user_id',
             'from_user_id',
-            'slot_no',
+            'to_user_id',
+            'commission_type',
             'status',
             'created_at'
         ]
     }
 
-class MatrixUplineReserve(Document):
-    """Track Matrix upline reserve (center position)"""
+class MatrixRecycleInstance(Document):
+    """Matrix recycle instance tracking"""
     user_id = ObjectIdField(required=True)
-    upline_id = ObjectIdField(required=True)  # The upline who gets reserve benefits
-    matrix_level = IntField(required=True)
-    
-    # Reserve details
-    reserve_amount = DecimalField(required=True, precision=8)
-    currency = StringField(choices=['USDT'], default='USDT')
-    reserve_type = StringField(choices=['joining', 'upgrade', 'bonus'], required=True)
-    
-    # Status
-    status = StringField(choices=['pending', 'paid', 'accumulated'], default='pending')
-    paid_at = DateTimeField()
+    slot_number = IntField(required=True)  # 1-15
+    recycle_no = IntField(required=True)  # 1-based counter per user+slot
+    is_complete = BooleanField(default=False)  # True when 39 members complete
+    total_members = IntField(default=0)  # Total members in this recycle
+    level_1_members = IntField(default=0)
+    level_2_members = IntField(default=0)
+    level_3_members = IntField(default=0)
     created_at = DateTimeField(default=datetime.utcnow)
+    completed_at = DateTimeField()
     
     meta = {
-        'collection': 'matrix_upline_reserve',
+        'collection': 'matrix_recycle_instances',
         'indexes': [
             'user_id',
-            'upline_id',
-            'matrix_level',
-            'status'
+            'slot_number',
+            'recycle_no',
+            'is_complete',
+            'created_at'
+        ]
+    }
+
+class MatrixRecycleNode(Document):
+    """Immutable snapshot of matrix recycle nodes"""
+    instance_id = ObjectIdField(required=True)  # Reference to MatrixRecycleInstance
+    user_id = ObjectIdField(required=True)  # User who owns this recycle
+    slot_number = IntField(required=True)
+    recycle_no = IntField(required=True)
+    level = IntField(required=True)  # 1, 2, or 3
+    position = IntField(required=True)  # 0-based position within level
+    occupant_user_id = ObjectIdField(required=True)  # User occupying this position
+    placed_at = DateTimeField(required=True)
+    
+    meta = {
+        'collection': 'matrix_recycle_nodes',
+        'indexes': [
+            'instance_id',
+            'user_id',
+            'slot_number',
+            'recycle_no',
+            'level',
+            'position'
         ]
     }

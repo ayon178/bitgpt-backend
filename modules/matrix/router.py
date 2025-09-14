@@ -1,46 +1,54 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel
+from decimal import Decimal
+from typing import Optional
 from bson import ObjectId
+
+from auth.service import authentication_service
 from ..user.model import User
-from .model import (
-    MatrixTree, MatrixActivation, MatrixRecycle, 
-    MatrixAutoUpgrade, MatrixCommission, MatrixUplineReserve
-)
+from .service import MatrixService
 from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/matrix", tags=["Matrix Program"])
 
-# Pydantic models for request/response
 class MatrixJoinRequest(BaseModel):
     user_id: str
     referrer_id: str
     tx_hash: str
     amount: float
 
-class MatrixUpgradeRequest(BaseModel):
-    user_id: str
-    slot_no: int
-    tx_hash: str
-    amount: float
+class MatrixJoinResponse(BaseModel):
+    success: bool
+    matrix_tree_id: Optional[str] = None
+    activation_id: Optional[str] = None
+    slot_activated: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
 
-class MatrixRecycleRequest(BaseModel):
-    user_id: str
-    matrix_level: int
-    recycle_position: str
-    recycle_amount: float
-
-class MatrixAutoUpgradeRequest(BaseModel):
-    user_id: str
-    from_slot: int
-    to_slot: int
-    tx_hash: str
-
-# API Endpoints
-
-@router.post("/join")
-async def join_matrix(request: MatrixJoinRequest):
-    """Join Matrix program with $11 USDT"""
+@router.post("/join", response_model=MatrixJoinResponse)
+async def join_matrix(
+    request: MatrixJoinRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """
+    Join Matrix program with $11 USDT and trigger all auto calculations
+    
+    This endpoint implements Section 1.1 Joining Requirements from MATRIX_TODO.md:
+    - Cost: $11 USDT to join Matrix program
+    - Structure: 3x Matrix structure (3, 9, 27 members per level)
+    - Slots: 15 slots total (STARTER to STAR)
+    - Recycle System: Each slot completes with 39 members (3+9+27)
+    
+    Auto calculations triggered:
+    - MatrixTree Creation
+    - Slot-1 Activation (STARTER)
+    - Tree Placement in referrer's matrix
+    - All commission distributions (100% total)
+    - Special program integrations
+    """
     try:
         # Validate user exists
         user = User.objects(id=ObjectId(request.user_id)).first()
@@ -52,320 +60,247 @@ async def join_matrix(request: MatrixJoinRequest):
         if not referrer:
             raise HTTPException(status_code=404, detail="Referrer not found")
         
-        # Check if user already joined Matrix
-        existing_matrix = MatrixTree.objects(user_id=ObjectId(request.user_id)).first()
-        if existing_matrix:
-            raise HTTPException(status_code=400, detail="User already joined Matrix program")
+        # Convert amount to Decimal
+        amount = Decimal(str(request.amount))
         
-        # Create Matrix tree entry
-        matrix_tree = MatrixTree(
-            user_id=ObjectId(request.user_id),
-            parent_id=ObjectId(request.referrer_id),
-            current_slot=1,
-            current_level=1,
-            is_active=True,
-            is_activated=False
-        )
+        # Initialize service
+        matrix_service = MatrixService()
         
-        # Initialize Matrix positions (left, center, right)
-        from .model import MatrixPosition
-        matrix_tree.positions = [
-            MatrixPosition(position='left', is_active=False),
-            MatrixPosition(position='center', is_upline_reserve=True, is_active=False),
-            MatrixPosition(position='right', is_active=False)
-        ]
-        
-        # Initialize STARTER slot
-        from .model import MatrixSlotInfo
-        matrix_tree.matrix_slots = [
-            MatrixSlotInfo(
-                slot_name='STARTER',
-                slot_value=Decimal('11.0'),
-                level=1,
-                is_active=True,
-                member_count=3,
-                activated_at=datetime.utcnow()
-            )
-        ]
-        
-        matrix_tree.save()
-        
-        # Create activation record
-        activation = MatrixActivation(
-            user_id=ObjectId(request.user_id),
-            slot_no=1,
-            slot_name='STARTER',
-            activation_type='initial',
-            amount_paid=Decimal(str(request.amount)),
+        # Process Matrix join
+        result = matrix_service.join_matrix(
+            user_id=request.user_id,
+            referrer_id=request.referrer_id,
             tx_hash=request.tx_hash,
-            status='completed',
-            activated_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
-        )
-        activation.save()
-        
-        # Update user's Matrix status
-        user.matrix_joined = True
-        user.save()
-        
-        return success_response(
-            data={
-                "matrix_tree_id": str(matrix_tree.id),
-                "activation_id": str(activation.id),
-                "message": "Successfully joined Matrix program"
-            },
-            message="Matrix join successful"
+            amount=amount
         )
         
+        if result["success"]:
+            return MatrixJoinResponse(
+                success=True,
+                matrix_tree_id=result["matrix_tree_id"],
+                activation_id=result["activation_id"],
+                slot_activated=result["slot_activated"],
+                amount=result["amount"],
+                currency=result["currency"],
+                message=result["message"]
+            )
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
     except Exception as e:
         return error_response(str(e))
 
-@router.post("/upgrade")
-async def upgrade_matrix_slot(request: MatrixUpgradeRequest):
-    """Upgrade Matrix slot"""
+@router.get("/status/{user_id}")
+async def get_matrix_status(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get user's matrix program status"""
     try:
-        # Validate user exists
-        user = User.objects(id=ObjectId(request.user_id)).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        matrix_service = MatrixService()
+        result = matrix_service.get_matrix_status(user_id)
         
-        # Get Matrix tree
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(request.user_id)).first()
-        if not matrix_tree:
-            raise HTTPException(status_code=404, detail="User not in Matrix program")
+        if result["success"]:
+            return success_response(result)
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/slots")
+async def get_matrix_slots(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get all matrix slot information"""
+    try:
+        matrix_service = MatrixService()
+        slots = []
         
-        # Validate slot upgrade
-        if request.slot_no <= matrix_tree.current_slot:
-            raise HTTPException(status_code=400, detail="Invalid slot upgrade")
+        for slot_no, slot_info in matrix_service.MATRIX_SLOTS.items():
+            slots.append({
+                "slot_no": slot_no,
+                "slot_name": slot_info['name'],
+                "slot_value": float(slot_info['value']),
+                "level": slot_info['level'],
+                "members": slot_info['members'],
+                "currency": "USDT"
+            })
         
-        if request.slot_no > 5:
-            raise HTTPException(status_code=400, detail="Maximum slot is 5 (PLATINUM)")
-        
-        # Create activation record
-        slot_names = {1: 'STARTER', 2: 'BRONZE', 3: 'SILVER', 4: 'GOLD', 5: 'PLATINUM'}
-        activation = MatrixActivation(
-            user_id=ObjectId(request.user_id),
-            slot_no=request.slot_no,
-            slot_name=slot_names[request.slot_no],
-            activation_type='upgrade',
-            amount_paid=Decimal(str(request.amount)),
-            tx_hash=request.tx_hash,
-            status='completed',
-            activated_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
-        )
-        activation.save()
-        
-        # Update Matrix tree
-        matrix_tree.current_slot = request.slot_no
-        matrix_tree.current_level = request.slot_no
-        
-        # Add new slot info
-        from .model import MatrixSlotInfo
-        slot_values = {1: 11, 2: 33, 3: 99, 4: 297, 5: 891}
-        member_counts = {1: 3, 2: 9, 3: 27, 4: 81, 5: 243}
-        
-        new_slot = MatrixSlotInfo(
-            slot_name=slot_names[request.slot_no],
-            slot_value=Decimal(str(slot_values[request.slot_no])),
-            level=request.slot_no,
-            is_active=True,
-            member_count=member_counts[request.slot_no],
-            activated_at=datetime.utcnow()
-        )
-        matrix_tree.matrix_slots.append(new_slot)
-        matrix_tree.save()
-        
-        return success_response(
-            data={
-                "activation_id": str(activation.id),
-                "new_slot": slot_names[request.slot_no],
-                "message": f"Successfully upgraded to {slot_names[request.slot_no]}"
-            },
-            message="Matrix upgrade successful"
-        )
+        return success_response({
+            "slots": slots,
+            "total_slots": len(slots)
+        })
         
     except Exception as e:
         return error_response(str(e))
 
 @router.get("/tree/{user_id}")
-async def get_matrix_tree(user_id: str):
-    """Get Matrix tree structure for a user"""
+async def get_matrix_tree(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get user's matrix tree structure"""
     try:
+        from .model import MatrixTree
+        
         matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-        if not matrix_tree:
-            raise HTTPException(status_code=404, detail="Matrix tree not found")
-        
-        # Get children
-        children = MatrixTree.objects(parent_id=ObjectId(user_id)).all()
-        
-        return success_response(
-            data={
-                "matrix_tree": {
-                    "user_id": str(matrix_tree.user_id),
-                    "current_slot": matrix_tree.current_slot,
-                    "current_level": matrix_tree.current_level,
-                    "positions": [
-                        {
-                            "position": pos.position,
-                            "is_active": pos.is_active,
-                            "is_upline_reserve": pos.is_upline_reserve,
-                            "user_id": str(pos.user_id) if pos.user_id else None
-                        } for pos in matrix_tree.positions
-                    ],
-                    "matrix_slots": [
-                        {
-                            "slot_name": slot.slot_name,
-                            "slot_value": float(slot.slot_value),
-                            "level": slot.level,
-                            "is_active": slot.is_active,
-                            "member_count": slot.member_count
-                        } for slot in matrix_tree.matrix_slots
-                    ],
-                    "total_team_size": matrix_tree.total_team_size,
-                    "auto_upgrade_enabled": matrix_tree.auto_upgrade_enabled,
-                    "is_activated": matrix_tree.is_activated
-                },
-                "children": [
-                    {
-                        "user_id": str(child.user_id),
-                        "current_slot": child.current_slot,
-                        "current_level": child.current_level
-                    } for child in children
-                ]
-            },
-            message="Matrix tree retrieved successfully"
-        )
-        
-    except Exception as e:
-        return error_response(str(e))
-
-@router.get("/activations/{user_id}")
-async def get_matrix_activations(user_id: str):
-    """Get Matrix activation history for a user"""
-    try:
-        activations = MatrixActivation.objects(user_id=ObjectId(user_id)).order_by('-created_at').all()
-        
-        return success_response(
-            data={
-                "activations": [
-                    {
-                        "id": str(activation.id),
-                        "slot_no": activation.slot_no,
-                        "slot_name": activation.slot_name,
-                        "activation_type": activation.activation_type,
-                        "amount_paid": float(activation.amount_paid),
-                        "status": activation.status,
-                        "activated_at": activation.activated_at,
-                        "tx_hash": activation.tx_hash
-                    } for activation in activations
-                ]
-            },
-            message="Matrix activations retrieved successfully"
-        )
-        
-    except Exception as e:
-        return error_response(str(e))
-
-@router.post("/auto-upgrade")
-async def process_auto_upgrade(request: MatrixAutoUpgradeRequest):
-    """Process Matrix auto upgrade using middle 3 members earnings"""
-    try:
-        # Validate user exists
-        user = User.objects(id=ObjectId(request.user_id)).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Get Matrix tree
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(request.user_id)).first()
         if not matrix_tree:
             raise HTTPException(status_code=404, detail="User not in Matrix program")
         
-        # Check if auto upgrade is possible
-        if not matrix_tree.auto_upgrade_enabled:
-            raise HTTPException(status_code=400, detail="Auto upgrade not enabled")
+        # Convert nodes to serializable format
+        nodes = []
+        for node in matrix_tree.nodes:
+            nodes.append({
+                "level": node.level,
+                "position": node.position,
+                "user_id": str(node.user_id),
+                "placed_at": node.placed_at.isoformat(),
+                "is_active": node.is_active
+            })
         
-        if request.to_slot <= matrix_tree.current_slot:
-            raise HTTPException(status_code=400, detail="Invalid auto upgrade")
+        # Convert slots to serializable format
+        slots = []
+        for slot in matrix_tree.slots:
+            slots.append({
+                "slot_no": slot.slot_no,
+                "slot_name": slot.slot_name,
+                "slot_value": float(slot.slot_value),
+                "level": slot.level,
+                "members_count": slot.members_count,
+                "is_active": slot.is_active,
+                "activated_at": slot.activated_at.isoformat() if slot.activated_at else None,
+                "total_income": float(slot.total_income),
+                "upgrade_cost": float(slot.upgrade_cost),
+                "wallet_amount": float(slot.wallet_amount)
+            })
         
-        # Create auto upgrade record
-        auto_upgrade = MatrixAutoUpgrade(
-            user_id=ObjectId(request.user_id),
-            from_slot=request.from_slot,
-            to_slot=request.to_slot,
-            upgrade_cost=Decimal('0'),  # Will be calculated
-            tx_hash=request.tx_hash,
-            status='pending'
-        )
-        auto_upgrade.save()
+        return success_response({
+            "user_id": user_id,
+            "current_slot": matrix_tree.current_slot,
+            "current_level": matrix_tree.current_level,
+            "total_members": matrix_tree.total_members,
+            "level_1_members": matrix_tree.level_1_members,
+            "level_2_members": matrix_tree.level_2_members,
+            "level_3_members": matrix_tree.level_3_members,
+            "is_complete": matrix_tree.is_complete,
+            "nodes": nodes,
+            "slots": slots,
+            "created_at": matrix_tree.created_at.isoformat(),
+            "updated_at": matrix_tree.updated_at.isoformat()
+        })
         
-        return success_response(
-            data={
-                "auto_upgrade_id": str(auto_upgrade.id),
-                "message": "Auto upgrade initiated"
-            },
-            message="Matrix auto upgrade initiated"
-        )
-        
+    except HTTPException:
+        raise
     except Exception as e:
         return error_response(str(e))
 
-@router.get("/commissions/{user_id}")
-async def get_matrix_commissions(user_id: str):
-    """Get Matrix commission history for a user"""
+@router.get("/auto-upgrade-status/{user_id}")
+async def get_matrix_auto_upgrade_status(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get user's matrix auto upgrade status"""
     try:
-        commissions = MatrixCommission.objects(user_id=ObjectId(user_id)).order_by('-created_at').all()
+        from ..auto_upgrade.model import MatrixAutoUpgrade
         
-        return success_response(
-            data={
-                "commissions": [
-                    {
-                        "id": str(commission.id),
-                        "slot_no": commission.slot_no,
-                        "slot_name": commission.slot_name,
-                        "commission_amount": float(commission.commission_amount),
-                        "commission_type": commission.commission_type,
-                        "commission_percentage": commission.commission_percentage,
-                        "status": commission.status,
-                        "created_at": commission.created_at
-                    } for commission in commissions
-                ]
-            },
-            message="Matrix commissions retrieved successfully"
-        )
+        auto_upgrade = MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+        if not auto_upgrade:
+            raise HTTPException(status_code=404, detail="User not in Matrix auto upgrade system")
         
+        return success_response({
+            "user_id": user_id,
+            "current_slot_no": auto_upgrade.current_slot_no,
+            "current_level": auto_upgrade.current_level,
+            "middle_three_required": auto_upgrade.middle_three_required,
+            "middle_three_available": auto_upgrade.middle_three_available,
+            "is_eligible": auto_upgrade.is_eligible,
+            "next_upgrade_cost": float(auto_upgrade.next_upgrade_cost),
+            "can_upgrade": auto_upgrade.can_upgrade,
+            "last_updated": auto_upgrade.last_updated.isoformat() if auto_upgrade.last_updated else None
+        })
+        
+    except HTTPException:
+        raise
     except Exception as e:
         return error_response(str(e))
 
-@router.get("/stats/{user_id}")
-async def get_matrix_stats(user_id: str):
-    """Get Matrix program statistics for a user"""
+# ==================== RECYCLE SYSTEM API ENDPOINTS ====================
+
+@router.get("/recycle-tree")
+async def get_recycle_tree_endpoint(
+    user_id: str,
+    slot: int,
+    recycle_no: Optional[int] = None,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get matrix tree by recycle number or current in-progress tree."""
     try:
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-        if not matrix_tree:
-            raise HTTPException(status_code=404, detail="Matrix tree not found")
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's tree")
         
-        # Get activation count
-        activation_count = MatrixActivation.objects(user_id=ObjectId(user_id)).count()
+        if slot < 1 or slot > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
         
-        # Get commission total
-        total_commissions = MatrixCommission.objects(user_id=ObjectId(user_id), status='paid').sum('commission_amount')
+        service = MatrixService()
+        tree_data = service.get_recycle_tree(user_id, slot, recycle_no)
         
-        # Get team size
-        team_size = MatrixTree.objects(parent_id=ObjectId(user_id)).count()
+        if tree_data:
+            return success_response(tree_data, "Recycle tree fetched successfully")
+        return error_response("Recycle tree not found", status_code=404)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/recycles")
+async def get_recycle_history_endpoint(
+    user_id: str,
+    slot: int,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get recycle history for user+slot."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's recycle history")
         
-        return success_response(
-            data={
-                "current_slot": matrix_tree.current_slot,
-                "current_level": matrix_tree.current_level,
-                "activation_count": activation_count,
-                "total_commissions": float(total_commissions) if total_commissions else 0,
-                "team_size": team_size,
-                "auto_upgrade_enabled": matrix_tree.auto_upgrade_enabled,
-                "is_activated": matrix_tree.is_activated
-            },
-            message="Matrix stats retrieved successfully"
-        )
+        if slot < 1 or slot > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
         
+        service = MatrixService()
+        recycle_history = service.get_recycle_history(user_id, slot)
+        
+        return success_response(recycle_history, "Recycle history fetched successfully")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/process-recycle")
+async def process_recycle_completion_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Process recycle completion: detect, snapshot, re-entry."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to process recycle for this user")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.process_recycle_completion(user_id, slot_no)
+        
+        if result.get("success"):
+            return success_response(result, "Recycle completion processed successfully")
+        return error_response(result.get("error", "Failed to process recycle completion"))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         return error_response(str(e))
