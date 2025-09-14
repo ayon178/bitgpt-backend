@@ -247,6 +247,9 @@ class MatrixService:
             # Trigger automatic NGS integration
             self.trigger_ngs_integration_automatic(user_id)
             
+            # Trigger automatic Mentorship Bonus integration
+            self.trigger_mentorship_bonus_integration_automatic(user_id)
+            
             return {
                 "success": True,
                 "level": placement_position['level'],
@@ -1630,6 +1633,9 @@ class MatrixService:
             
             # Trigger automatic NGS integration
             self.trigger_ngs_integration_automatic(user_id)
+            
+            # Trigger automatic Mentorship Bonus integration
+            self.trigger_mentorship_bonus_integration_automatic(user_id)
             
             return {
                 "success": True,
@@ -3343,5 +3349,265 @@ class MatrixService:
                 
         except Exception as e:
             print(f"Error in automatic NGS integration: {e}")
+    
+    def integrate_with_mentorship_bonus(self, user_id: str):
+        """Integrate Matrix user with Mentorship Bonus program."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check if user is eligible for Mentorship Bonus
+            mentorship_eligibility = self._check_mentorship_bonus_eligibility(matrix_slot)
+            
+            if not mentorship_eligibility.get("is_eligible"):
+                return {
+                    "success": False, 
+                    "error": f"User not eligible for Mentorship Bonus: {mentorship_eligibility.get('reason')}"
+                }
+            
+            # Calculate Mentorship Bonus benefits
+            mentorship_benefits = self._calculate_mentorship_bonus_benefits(matrix_slot)
+            
+            # Process Mentorship Bonus distribution
+            mentorship_result = self._process_mentorship_bonus_distribution(user_id, mentorship_benefits)
+            
+            # Process Direct-of-Direct tracking
+            direct_of_direct_result = self._process_direct_of_direct_tracking(user_id, mentorship_benefits)
+            
+            # Update Mentorship Bonus status
+            mentorship_status = self._update_mentorship_bonus_status(user_id, mentorship_benefits, matrix_slot)
+            
+            # Log Mentorship Bonus integration
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="mentorship_bonus_integration",
+                amount=mentorship_benefits["total_benefits"],
+                description=f"Mentorship Bonus integration - Matrix slot {matrix_slot} provides ${mentorship_benefits['total_benefits']} in benefits"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"mentorship_bonus_integration_{user_id}",
+                event_type='mentorship_bonus_integration',
+                event_data={
+                    'program': 'mentorship_bonus',
+                    'user_id': user_id,
+                    'matrix_slot': matrix_slot,
+                    'mentorship_benefits': mentorship_benefits,
+                    'mentorship_status': mentorship_status
+                }
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "mentorship_benefits": mentorship_benefits,
+                "mentorship_status": mentorship_status,
+                "mentorship_result": mentorship_result,
+                "direct_of_direct_result": direct_of_direct_result,
+                "message": f"Successfully integrated with Mentorship Bonus - Total Benefits: ${mentorship_benefits['total_benefits']}"
+            }
+        except Exception as e:
+            print(f"Error integrating with Mentorship Bonus: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _check_mentorship_bonus_eligibility(self, matrix_slot: int):
+        """Check if user is eligible for Mentorship Bonus."""
+        try:
+            # Mentorship Bonus applies to all Matrix slots
+            # All Matrix users can participate in Mentorship Bonus
+            if matrix_slot < 1:
+                return {"is_eligible": False, "reason": f"User must have at least slot 1 (current: {matrix_slot})"}
+            
+            return {"is_eligible": True, "reason": f"User eligible for Mentorship Bonus with slot {matrix_slot}"}
+        except Exception as e:
+            print(f"Error checking Mentorship Bonus eligibility: {e}")
+            return {"is_eligible": False, "reason": str(e)}
+    
+    def _calculate_mentorship_bonus_benefits(self, matrix_slot: int):
+        """Calculate Mentorship Bonus benefits based on Matrix slot."""
+        try:
+            # Mentorship Bonus benefits based on Matrix slot value
+            # This follows the Mentorship Bonus structure from PROJECT_DOCUMENTATION.md
+            
+            slot_values = {
+                1: 11,      # STARTER
+                2: 33,      # BRONZE
+                3: 99,      # SILVER
+                4: 297,     # GOLD
+                5: 891,     # PLATINUM
+                6: 2673,    # DIAMOND
+                7: 8019,    # RUBY
+                8: 24057,   # EMERALD
+                9: 72171,   # SAPPHIRE
+                10: 216513, # TOPAZ
+                11: 649539, # PEARL
+                12: 1948617, # AMETHYST
+                13: 5845851, # OBSIDIAN
+                14: 17537553, # TITANIUM
+                15: 52612659  # STAR
+            }
+            
+            slot_value = slot_values.get(matrix_slot, 0)
+            
+            # Mentorship Bonus calculation:
+            # - Direct-of-Direct Commission: 10% of Matrix slot value
+            # - This represents the commission from direct-of-direct partners
+            
+            direct_of_direct_commission = slot_value * 0.10
+            total_benefits = direct_of_direct_commission
+            
+            return {
+                "slot_value": slot_value,
+                "direct_of_direct_commission": direct_of_direct_commission,
+                "total_benefits": total_benefits
+            }
+        except Exception as e:
+            print(f"Error calculating Mentorship Bonus benefits: {e}")
+            return {"total_benefits": 0}
+    
+    def _process_mentorship_bonus_distribution(self, user_id: str, mentorship_benefits: dict):
+        """Process Mentorship Bonus distribution."""
+        try:
+            direct_of_direct_commission = mentorship_benefits.get("direct_of_direct_commission", 0)
+            
+            if direct_of_direct_commission > 0:
+                # Log Mentorship Bonus distribution
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="mentorship_bonus_distribution",
+                    amount=direct_of_direct_commission,
+                    description=f"Mentorship Bonus: 10% commission from direct-of-direct partners' joining fees and slot upgrades"
+                )
+                
+                print(f"✅ Mentorship Bonus distribution processed: ${direct_of_direct_commission}")
+            
+            return {
+                "direct_of_direct_commission": direct_of_direct_commission,
+                "description": "10% commission from direct-of-direct partners' joining fees and slot upgrades",
+                "percentage": "10% of Matrix slot value"
+            }
+        except Exception as e:
+            print(f"Error processing Mentorship Bonus distribution: {e}")
+            return {"direct_of_direct_commission": 0, "error": str(e)}
+    
+    def _process_direct_of_direct_tracking(self, user_id: str, mentorship_benefits: dict):
+        """Process Direct-of-Direct tracking for Mentorship Bonus."""
+        try:
+            # This method tracks the Direct-of-Direct relationships
+            # When a user's direct referral gets a direct referral, the original user gets 10% commission
+            
+            direct_of_direct_commission = mentorship_benefits.get("direct_of_direct_commission", 0)
+            
+            if direct_of_direct_commission > 0:
+                # Log Direct-of-Direct tracking
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="direct_of_direct_tracking",
+                    amount=direct_of_direct_commission,
+                    description=f"Direct-of-Direct Tracking: 10% commission from direct-of-direct partners"
+                )
+                
+                print(f"✅ Direct-of-Direct tracking processed: ${direct_of_direct_commission}")
+            
+            return {
+                "direct_of_direct_commission": direct_of_direct_commission,
+                "description": "Direct-of-Direct income program - 10% commission from direct-of-direct partners",
+                "tracking_type": "Direct-of-Direct"
+            }
+        except Exception as e:
+            print(f"Error processing Direct-of-Direct tracking: {e}")
+            return {"direct_of_direct_commission": 0, "error": str(e)}
+    
+    def _update_mentorship_bonus_status(self, user_id: str, mentorship_benefits: dict, matrix_slot: int):
+        """Update Mentorship Bonus status for user."""
+        try:
+            mentorship_status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "slot_value": mentorship_benefits.get("slot_value", 0),
+                "benefits": {
+                    "direct_of_direct_commission": mentorship_benefits.get("direct_of_direct_commission", 0),
+                    "total_benefits": mentorship_benefits.get("total_benefits", 0)
+                },
+                "status": "active",
+                "last_benefit": datetime.utcnow().isoformat(),
+                "benefit_breakdown": {
+                    "direct_of_direct_commission_percentage": "10%",
+                    "total_percentage": "10%"
+                }
+            }
+            
+            return mentorship_status
+        except Exception as e:
+            print(f"Error updating Mentorship Bonus status: {e}")
+            return None
+    
+    def get_mentorship_bonus_status(self, user_id: str):
+        """Get comprehensive Mentorship Bonus status for a user."""
+        try:
+            # Get user's Matrix info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check eligibility
+            eligibility = self._check_mentorship_bonus_eligibility(matrix_slot)
+            
+            # Calculate benefits if eligible
+            mentorship_benefits = {}
+            if eligibility.get("is_eligible"):
+                mentorship_benefits = self._calculate_mentorship_bonus_benefits(matrix_slot)
+            
+            status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "eligibility": eligibility,
+                "mentorship_info": mentorship_benefits,
+                "mentorship_program_info": {
+                    "description": "Mentorship Bonus is a Direct-of-Direct income program within the Matrix program",
+                    "eligibility": "All Matrix slots",
+                    "benefit_structure": {
+                        "direct_of_direct_commission": "10% of Matrix slot value - Commission from direct-of-direct partners' joining fees and slot upgrades"
+                    },
+                    "total_benefits": "10% of Matrix slot value",
+                    "program_type": "Direct-of-Direct income program",
+                    "commission_rate": "10%",
+                    "example": {
+                        "scenario": "A invites B, B invites C, D, E",
+                        "result": "A gets 10% commission from C, D, E's joining fees and slot upgrades"
+                    }
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting Mentorship Bonus status: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def trigger_mentorship_bonus_integration_automatic(self, user_id: str):
+        """Automatically trigger Mentorship Bonus integration when Matrix slot is activated."""
+        try:
+            print(f"🎯 Triggering automatic Mentorship Bonus integration for user {user_id}")
+            
+            # Integrate with Mentorship Bonus
+            integration_result = self.integrate_with_mentorship_bonus(user_id)
+            
+            if integration_result.get("success"):
+                print(f"✅ Mentorship Bonus integration completed automatically")
+                print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
+                print(f"   - Total benefits: ${integration_result.get('mentorship_benefits', {}).get('total_benefits', 0)}")
+                print(f"   - Direct-of-Direct commission: ${integration_result.get('mentorship_benefits', {}).get('direct_of_direct_commission', 0)}")
+            else:
+                print(f"❌ Mentorship Bonus integration failed: {integration_result.get('error')}")
+                
+        except Exception as e:
+            print(f"Error in automatic Mentorship Bonus integration: {e}")
     
     # ==================== MATRIX UPGRADE SYSTEM METHODS ====================

@@ -1099,3 +1099,76 @@ async def get_ngs_info_endpoint(
         return success_response(ngs_info, "NGS information fetched successfully")
     except Exception as e:
         return error_response(str(e))
+
+# ==================== MENTORSHIP BONUS INTEGRATION API ENDPOINTS ====================
+
+@router.get("/mentorship-bonus-status/{user_id}")
+async def get_mentorship_bonus_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Mentorship Bonus status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Mentorship Bonus status")
+        
+        service = MatrixService()
+        result = service.get_mentorship_bonus_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Mentorship Bonus status fetched successfully")
+        return error_response(result.get("error", "Failed to get Mentorship Bonus status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/integrate-mentorship-bonus/{user_id}")
+async def integrate_mentorship_bonus_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Integrate Matrix user with Mentorship Bonus."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to integrate this user with Mentorship Bonus")
+        
+        service = MatrixService()
+        result = service.integrate_with_mentorship_bonus(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Mentorship Bonus integration completed successfully")
+        return error_response(result.get("error", "Failed to integrate with Mentorship Bonus"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/mentorship-bonus-info")
+async def get_mentorship_bonus_info_endpoint(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Mentorship Bonus information."""
+    try:
+        mentorship_bonus_info = {
+            "eligibility": "All Matrix slots",
+            "benefit_structure": {
+                "direct_of_direct_commission": "10% of Matrix slot value - Commission from direct-of-direct partners' joining fees and slot upgrades"
+            },
+            "total_benefits": "10% of Matrix slot value",
+            "program_type": "Direct-of-Direct income program",
+            "commission_rate": "10%",
+            "example": {
+                "scenario": "A invites B, B invites C, D, E",
+                "result": "A gets 10% commission from C, D, E's joining fees and slot upgrades"
+            },
+            "integration_points": {
+                "matrix_join": "Automatic Mentorship Bonus integration on Matrix join",
+                "matrix_upgrade": "Automatic Mentorship Bonus integration on Matrix upgrade"
+            },
+            "description": "Mentorship Bonus is a Direct-of-Direct income program within the Matrix program. The Super Upline receives 10% commission from their direct referrals' direct referrals' joining fees and slot upgrades."
+        }
+        
+        return success_response(mentorship_bonus_info, "Mentorship Bonus information fetched successfully")
+    except Exception as e:
+        return error_response(str(e))
