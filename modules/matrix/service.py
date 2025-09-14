@@ -695,8 +695,8 @@ class MatrixService:
         try:
             if recycle_no is None or recycle_no == "current":
                 # Return current in-progress tree
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if not matrix_tree:
+                matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+                if not matrix_tree:
                     return None
                 
                 return {
@@ -1314,7 +1314,7 @@ class MatrixService:
             earnings_result = self.calculate_dream_matrix_earnings(user_id)
             
             # Get matrix tree info
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
             
             status = {
                 "user_id": user_id,
@@ -1445,8 +1445,8 @@ class MatrixService:
                     'activity_type': activity_type
                 }
             )
-        
-        return {
+            
+            return {
                 "success": True,
                 "super_upline_id": super_upline_id,
                 "direct_referral_id": direct_referral_id,
@@ -1542,8 +1542,8 @@ class MatrixService:
                 return {"success": False, "error": "Target slot must be between 1 and 15"}
             
             # Get user's matrix tree
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-        if not matrix_tree:
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
                 return {"success": False, "error": "Matrix tree not found"}
             
             # Check if user has the current slot
@@ -1579,7 +1579,7 @@ class MatrixService:
             # Update matrix tree
             matrix_tree.current_slot = to_slot_no
             matrix_tree.last_upgrade_at = datetime.utcnow()
-                matrix_tree.save()
+            matrix_tree.save()
     
             # Create upgrade log
             self._create_matrix_upgrade_log(
@@ -1697,7 +1697,7 @@ class MatrixService:
             # Get user
             user = User.objects(id=ObjectId(user_id)).first()
             if not user:
-            return
+                return
         
             # Calculate rank based on slot (simplified ranking)
             rank_mapping = {
@@ -1919,8 +1919,8 @@ class MatrixService:
         """Get number of Matrix slots activated for a user."""
         try:
             # Get Matrix tree
-        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-        if not matrix_tree:
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
                 return 0
             
             # Return current slot (highest activated slot)
@@ -2428,7 +2428,7 @@ class MatrixService:
             stipend_eligibility = self._check_leadership_stipend_eligibility(matrix_slot)
             
             if not stipend_eligibility.get("is_eligible"):
-        return {
+                return {
                     "success": False, 
                     "error": f"User not eligible for Leadership Stipend: {stipend_eligibility.get('reason')}"
                 }
