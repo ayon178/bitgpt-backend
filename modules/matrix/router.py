@@ -402,3 +402,97 @@ async def get_auto_upgrade_status_endpoint(
         raise e
     except Exception as e:
         return error_response(str(e))
+
+# ==================== DREAM MATRIX SYSTEM API ENDPOINTS ====================
+
+@router.get("/dream-matrix-status/{user_id}")
+async def get_dream_matrix_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Dream Matrix status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Dream Matrix status")
+        
+        service = MatrixService()
+        result = service.get_dream_matrix_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Dream Matrix status fetched successfully")
+        return error_response(result.get("error", "Failed to get Dream Matrix status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/dream-matrix-earnings/{user_id}")
+async def get_dream_matrix_earnings_endpoint(
+    user_id: str,
+    slot_no: int = 5,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Calculate Dream Matrix earnings based on 5th slot ($800 total value)."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Dream Matrix earnings")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.calculate_dream_matrix_earnings(user_id, slot_no)
+        
+        if result.get("success"):
+            return success_response(result, "Dream Matrix earnings calculated successfully")
+        return error_response(result.get("error", "Failed to calculate Dream Matrix earnings"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/dream-matrix-distribute")
+async def distribute_dream_matrix_endpoint(
+    user_id: str,
+    slot_no: int = 5,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Process Dream Matrix distribution when user meets requirements."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to process Dream Matrix distribution for this user")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.process_dream_matrix_distribution(user_id, slot_no)
+        
+        if result.get("success"):
+            return success_response(result, "Dream Matrix distribution processed successfully")
+        return error_response(result.get("error", "Failed to process Dream Matrix distribution"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/dream-matrix-eligibility/{user_id}")
+async def check_dream_matrix_eligibility_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Check if user meets Dream Matrix eligibility (3 direct partners)."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to check this user's Dream Matrix eligibility")
+        
+        service = MatrixService()
+        result = service.check_dream_matrix_eligibility(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Dream Matrix eligibility checked successfully")
+        return error_response(result.get("error", "Failed to check Dream Matrix eligibility"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))

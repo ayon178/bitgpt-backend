@@ -1041,3 +1041,219 @@ class MatrixService:
                 
         except Exception as e:
             print(f"Error in automatic upgrade check: {e}")
+    
+    # ==================== DREAM MATRIX SYSTEM METHODS ====================
+    
+    def check_dream_matrix_eligibility(self, user_id: str):
+        """Check if user meets Dream Matrix eligibility (3 direct partners)."""
+        try:
+            # Count direct partners in matrix tree
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"success": False, "error": "Matrix tree not found"}
+            
+            # Count Level 1 members (direct partners)
+            direct_partners = [node for node in matrix_tree.nodes if node.level == 1]
+            direct_partner_count = len(direct_partners)
+            
+            # Dream Matrix requires exactly 3 direct partners
+            is_eligible = direct_partner_count >= 3
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "direct_partner_count": direct_partner_count,
+                "required_partners": 3,
+                "is_eligible": is_eligible,
+                "direct_partners": [str(node.user_id) for node in direct_partners]
+            }
+        except Exception as e:
+            print(f"Error checking Dream Matrix eligibility: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def calculate_dream_matrix_earnings(self, user_id: str, slot_no: int = 5):
+        """Calculate Dream Matrix earnings based on 5th slot ($800 total value)."""
+        try:
+            # Check eligibility first
+            eligibility_result = self.check_dream_matrix_eligibility(user_id)
+            if not eligibility_result.get("success"):
+                return {"success": False, "error": eligibility_result.get("error")}
+            
+            if not eligibility_result.get("is_eligible"):
+                return {
+                    "success": False, 
+                    "error": f"Dream Matrix eligibility not met. Required: 3 direct partners, Found: {eligibility_result.get('direct_partner_count')}"
+                }
+            
+            # Dream Matrix calculation based on 5th slot ($800 total value)
+            dream_matrix_base_value = 800.0  # $800 as per documentation
+            
+            # Progressive commission percentages per level
+            dream_matrix_distribution = {
+                1: {"members": 3, "percentage": 10, "amount": 80, "total": 240},
+                2: {"members": 9, "percentage": 10, "amount": 80, "total": 720},
+                3: {"members": 27, "percentage": 15, "amount": 120, "total": 3240},
+                4: {"members": 81, "percentage": 25, "amount": 200, "total": 16200},
+                5: {"members": 243, "percentage": 40, "amount": 320, "total": 77760}
+            }
+            
+            # Calculate total potential earnings
+            total_potential_earnings = sum(level["total"] for level in dream_matrix_distribution.values())
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "slot_no": slot_no,
+                "base_value": dream_matrix_base_value,
+                "eligibility": eligibility_result,
+                "distribution": dream_matrix_distribution,
+                "total_potential_earnings": total_potential_earnings,
+                "total_members": sum(level["members"] for level in dream_matrix_distribution.values()),
+                "calculation_note": "Based on 5th slot ($800) with progressive commission percentages"
+            }
+        except Exception as e:
+            print(f"Error calculating Dream Matrix earnings: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def process_dream_matrix_distribution(self, user_id: str, slot_no: int = 5):
+        """Process Dream Matrix distribution when user meets requirements."""
+        try:
+            # Calculate Dream Matrix earnings
+            earnings_result = self.calculate_dream_matrix_earnings(user_id, slot_no)
+            if not earnings_result.get("success"):
+                return {"success": False, "error": earnings_result.get("error")}
+            
+            # Get matrix tree for distribution
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"success": False, "error": "Matrix tree not found"}
+            
+            # Process distribution for each level
+            distribution_results = []
+            total_distributed = 0
+            
+            for level, level_info in earnings_result.get("distribution", {}).items():
+                # Find members at this level
+                level_members = [node for node in matrix_tree.nodes if node.level == level]
+                
+                if level_members:
+                    # Calculate amount per member
+                    amount_per_member = level_info["amount"] / len(level_members)
+                    
+                    # Distribute to each member
+                    for member in level_members:
+                        # Create earning history for each member
+                        self._log_earning_history(
+                            user_id=str(member.user_id),
+                            earning_type="dream_matrix_distribution",
+                            amount=amount_per_member,
+                            description=f"Dream Matrix Level {level} distribution from user {user_id}"
+                        )
+                        
+                        # Create commission record
+                        self._create_dream_matrix_commission(
+                            from_user_id=user_id,
+                            to_user_id=str(member.user_id),
+                            level=level,
+                            amount=amount_per_member,
+                            percentage=level_info["percentage"]
+                        )
+                        
+                        total_distributed += amount_per_member
+                    
+                    distribution_results.append({
+                        "level": level,
+                        "members_count": len(level_members),
+                        "expected_members": level_info["members"],
+                        "amount_per_member": amount_per_member,
+                        "total_distributed": amount_per_member * len(level_members),
+                        "percentage": level_info["percentage"]
+                    })
+            
+            # Log Dream Matrix completion
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="dream_matrix_completion",
+                amount=total_distributed,
+                description=f"Dream Matrix distribution completed - Total distributed: ${total_distributed}"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"dream_matrix_{user_id}_{slot_no}",
+                event_type='dream_matrix_distribution',
+                event_data={
+                    'program': 'dream_matrix',
+                    'slot_no': slot_no,
+                    'user_id': user_id,
+                    'total_distributed': total_distributed,
+                    'distribution_results': distribution_results
+                }
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "slot_no": slot_no,
+                "total_distributed": total_distributed,
+                "distribution_results": distribution_results,
+                "message": f"Dream Matrix distribution completed successfully. Total distributed: ${total_distributed}"
+            }
+        except Exception as e:
+            print(f"Error processing Dream Matrix distribution: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _create_dream_matrix_commission(self, from_user_id: str, to_user_id: str, 
+                                      level: int, amount: float, percentage: float):
+        """Create Dream Matrix commission record."""
+        try:
+            MatrixCommission(
+                from_user_id=ObjectId(from_user_id),
+                to_user_id=ObjectId(to_user_id),
+                program='dream_matrix',
+                commission_type='dream_matrix_level',
+                slot_no=5,  # Based on 5th slot
+                amount=amount,
+                currency='USDT',
+                status='paid',
+                created_at=datetime.utcnow(),
+                paid_at=datetime.utcnow()
+            ).save()
+        except Exception as e:
+            print(f"Error creating Dream Matrix commission: {e}")
+    
+    def get_dream_matrix_status(self, user_id: str):
+        """Get comprehensive Dream Matrix status for a user."""
+        try:
+            # Check eligibility
+            eligibility_result = self.check_dream_matrix_eligibility(user_id)
+            
+            # Calculate earnings
+            earnings_result = self.calculate_dream_matrix_earnings(user_id)
+            
+            # Get matrix tree info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            
+            status = {
+                "user_id": user_id,
+                "eligibility": eligibility_result,
+                "earnings_calculation": earnings_result,
+                "matrix_tree_info": {
+                    "current_slot": matrix_tree.current_slot if matrix_tree else 0,
+                    "total_members": matrix_tree.total_members if matrix_tree else 0,
+                    "level_1_members": matrix_tree.level_1_members if matrix_tree else 0,
+                    "level_2_members": matrix_tree.level_2_members if matrix_tree else 0,
+                    "level_3_members": matrix_tree.level_3_members if matrix_tree else 0
+                } if matrix_tree else None,
+                "dream_matrix_rules": {
+                    "required_direct_partners": 3,
+                    "calculation_base": "5th slot ($800)",
+                    "progressive_commissions": True,
+                    "mandatory_requirement": True
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting Dream Matrix status: {e}")
+            return {"success": False, "error": str(e)}
