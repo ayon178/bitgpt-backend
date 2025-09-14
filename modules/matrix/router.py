@@ -597,3 +597,101 @@ async def track_mentorship_relationship_endpoint(
         raise e
     except Exception as e:
         return error_response(str(e))
+
+# ==================== MATRIX UPGRADE SYSTEM API ENDPOINTS ====================
+
+@router.post("/upgrade-slot")
+async def upgrade_matrix_slot_endpoint(
+    user_id: str,
+    from_slot_no: int,
+    to_slot_no: int,
+    upgrade_type: str = "manual",
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Upgrade user from one Matrix slot to another."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to upgrade this user's Matrix slot")
+        
+        if from_slot_no < 1 or from_slot_no > 15:
+            raise HTTPException(status_code=400, detail="From slot number must be between 1 and 15")
+        
+        if to_slot_no < 1 or to_slot_no > 15:
+            raise HTTPException(status_code=400, detail="To slot number must be between 1 and 15")
+        
+        if upgrade_type not in ["manual", "auto"]:
+            raise HTTPException(status_code=400, detail="Upgrade type must be 'manual' or 'auto'")
+        
+        service = MatrixService()
+        result = service.upgrade_matrix_slot(user_id, from_slot_no, to_slot_no, upgrade_type)
+        
+        if result.get("success"):
+            return success_response(result, "Matrix slot upgraded successfully")
+        return error_response(result.get("error", "Failed to upgrade Matrix slot"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/upgrade-options/{user_id}")
+async def get_upgrade_options_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get available upgrade options for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's upgrade options")
+        
+        service = MatrixService()
+        result = service.get_upgrade_options(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Upgrade options fetched successfully")
+        return error_response(result.get("error", "Failed to get upgrade options"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/upgrade-history/{user_id}")
+async def get_upgrade_history_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get user's Matrix upgrade history."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's upgrade history")
+        
+        service = MatrixService()
+        result = service.get_upgrade_history(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Upgrade history fetched successfully")
+        return error_response(result.get("error", "Failed to get upgrade history"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/upgrade-status/{user_id}")
+async def get_matrix_upgrade_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Matrix upgrade status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's upgrade status")
+        
+        service = MatrixService()
+        result = service.get_matrix_upgrade_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Matrix upgrade status fetched successfully")
+        return error_response(result.get("error", "Failed to get Matrix upgrade status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))

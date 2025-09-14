@@ -1513,4 +1513,290 @@ class MatrixService:
             return {"success": True, "status": status}
         except Exception as e:
             print(f"Error getting mentorship status: {e}")
+    
+    # ==================== MATRIX UPGRADE SYSTEM METHODS ====================
+    
+    def upgrade_matrix_slot(self, user_id: str, from_slot_no: int, to_slot_no: int, upgrade_type: str = "manual"):
+        """Upgrade user from one Matrix slot to another."""
+        try:
+            # Validate upgrade parameters
+            if from_slot_no >= to_slot_no:
+                return {"success": False, "error": "Target slot must be higher than current slot"}
+            
+            if to_slot_no < 1 or to_slot_no > 15:
+                return {"success": False, "error": "Target slot must be between 1 and 15"}
+            
+            # Get user's matrix tree
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"success": False, "error": "Matrix tree not found"}
+            
+            # Check if user has the current slot
+            if matrix_tree.current_slot != from_slot_no:
+                return {"success": False, "error": f"User is not currently on slot {from_slot_no}"}
+            
+            # Get slot costs
+            slot_costs = self._get_matrix_slot_costs()
+            upgrade_cost = slot_costs.get(to_slot_no, 0) - slot_costs.get(from_slot_no, 0)
+            
+            if upgrade_cost <= 0:
+                return {"success": False, "error": "Invalid upgrade cost calculation"}
+            
+            # Check if user has sufficient funds (for manual upgrades)
+            if upgrade_type == "manual":
+                # Get user's wallet balance
+                user = User.objects(id=ObjectId(user_id)).first()
+                if not user:
+                    return {"success": False, "error": "User not found"}
+                
+                # Check wallet balance
+                wallet_balance = getattr(user, 'wallet_balance', 0)
+                if wallet_balance < upgrade_cost:
+                    return {
+                        "success": False, 
+                        "error": f"Insufficient funds. Required: ${upgrade_cost}, Available: ${wallet_balance}"
+                    }
+                
+                # Deduct from wallet
+                user.wallet_balance -= upgrade_cost
+                user.save()
+            
+            # Update matrix tree
+            matrix_tree.current_slot = to_slot_no
+            matrix_tree.last_upgrade_at = datetime.utcnow()
+            matrix_tree.save()
+            
+            # Create upgrade log
+            self._create_matrix_upgrade_log(
+                user_id=user_id,
+                from_slot_no=from_slot_no,
+                to_slot_no=to_slot_no,
+                upgrade_cost=upgrade_cost,
+                earnings_used=0,  # Manual upgrade uses wallet funds
+                profit_gained=0,  # No profit from manual upgrade
+                trigger_type=upgrade_type,
+                contributors=[]
+            )
+            
+            # Log earning history
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="matrix_upgrade",
+                amount=-upgrade_cost,  # Negative because it's a cost
+                description=f"Matrix upgrade from slot {from_slot_no} to slot {to_slot_no} (${upgrade_cost})"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"matrix_upgrade_{user_id}_{from_slot_no}_{to_slot_no}",
+                event_type='matrix_upgrade',
+                event_data={
+                    'program': 'matrix_upgrade',
+                    'user_id': user_id,
+                    'from_slot_no': from_slot_no,
+                    'to_slot_no': to_slot_no,
+                    'upgrade_cost': upgrade_cost,
+                    'upgrade_type': upgrade_type
+                }
+            )
+            
+            # Trigger all auto-calculations for the new slot
+            self._trigger_slot_upgrade_calculations(user_id, to_slot_no)
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "from_slot_no": from_slot_no,
+                "to_slot_no": to_slot_no,
+                "upgrade_cost": upgrade_cost,
+                "upgrade_type": upgrade_type,
+                "message": f"Successfully upgraded from slot {from_slot_no} to slot {to_slot_no}"
+            }
+        except Exception as e:
+            print(f"Error upgrading matrix slot: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _get_matrix_slot_costs(self):
+        """Get Matrix slot costs in USDT."""
+        return {
+            1: 11,      # STARTER
+            2: 33,      # BRONZE
+            3: 99,      # SILVER
+            4: 297,     # GOLD
+            5: 891,     # PLATINUM
+            6: 2673,    # DIAMOND
+            7: 8019,    # RUBY
+            8: 24057,   # EMERALD
+            9: 72171,   # SAPPHIRE
+            10: 216513, # TOPAZ
+            11: 649539, # PEARL
+            12: 1948617, # AMETHYST
+            13: 5845851, # OBSIDIAN
+            14: 17537553, # TITANIUM
+            15: 52612659  # STAR
+        }
+    
+    def _trigger_slot_upgrade_calculations(self, user_id: str, slot_no: int):
+        """Trigger all auto-calculations when a slot is upgraded."""
+        try:
+            print(f"🎯 Triggering auto-calculations for slot {slot_no} upgrade")
+            
+            # 1. Check Dream Matrix eligibility
+            self._check_and_process_dream_matrix_eligibility(user_id, slot_no)
+            
+            # 2. Check for auto-upgrade eligibility
+            self.check_and_process_automatic_upgrade(user_id, slot_no)
+            
+            # 3. Update user rank based on new slot
+            self._update_user_rank_from_matrix_slot(user_id, slot_no)
+            
+            # 4. Check for recycle completion
+            self._check_and_process_automatic_recycle(user_id, slot_no)
+            
+            print(f"✅ Auto-calculations completed for slot {slot_no}")
+        except Exception as e:
+            print(f"Error in slot upgrade calculations: {e}")
+    
+    def _update_user_rank_from_matrix_slot(self, user_id: str, slot_no: int):
+        """Update user rank based on Matrix slot."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return
+            
+            # Calculate rank based on slot (simplified ranking)
+            rank_mapping = {
+                1: "Bitron", 2: "Cryzen", 3: "Neura", 4: "Glint", 5: "Stellar",
+                6: "Ignis", 7: "Quanta", 8: "Lumix", 9: "Arion", 10: "Nexus",
+                11: "Fyre", 12: "Axion", 13: "Trion", 14: "Spectra", 15: "Omega"
+            }
+            
+            new_rank = rank_mapping.get(slot_no, "Bitron")
+            
+            # Update user rank
+            user.rank = new_rank
+            user.save()
+            
+            print(f"✅ User {user_id} rank updated to {new_rank} (slot {slot_no})")
+        except Exception as e:
+            print(f"Error updating user rank: {e}")
+    
+    def get_upgrade_options(self, user_id: str):
+        """Get available upgrade options for a user."""
+        try:
+            # Get user's matrix tree
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"success": False, "error": "Matrix tree not found"}
+            
+            current_slot = matrix_tree.current_slot
+            slot_costs = self._get_matrix_slot_costs()
+            
+            # Get user's wallet balance
+            user = User.objects(id=ObjectId(user_id)).first()
+            wallet_balance = getattr(user, 'wallet_balance', 0) if user else 0
+            
+            # Calculate upgrade options
+            upgrade_options = []
+            for slot_no in range(current_slot + 1, 16):  # Next slot to slot 15
+                upgrade_cost = slot_costs.get(slot_no, 0) - slot_costs.get(current_slot, 0)
+                can_afford = wallet_balance >= upgrade_cost
+                
+                upgrade_options.append({
+                    "slot_no": slot_no,
+                    "slot_name": self._get_slot_name(slot_no),
+                    "upgrade_cost": upgrade_cost,
+                    "can_afford": can_afford,
+                    "wallet_balance": wallet_balance,
+                    "shortfall": max(0, upgrade_cost - wallet_balance) if not can_afford else 0
+                })
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "current_slot": current_slot,
+                "current_slot_name": self._get_slot_name(current_slot),
+                "wallet_balance": wallet_balance,
+                "upgrade_options": upgrade_options
+            }
+        except Exception as e:
+            print(f"Error getting upgrade options: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _get_slot_name(self, slot_no: int):
+        """Get slot name by slot number."""
+        slot_names = {
+            1: "STARTER", 2: "BRONZE", 3: "SILVER", 4: "GOLD", 5: "PLATINUM",
+            6: "DIAMOND", 7: "RUBY", 8: "EMERALD", 9: "SAPPHIRE", 10: "TOPAZ",
+            11: "PEARL", 12: "AMETHYST", 13: "OBSIDIAN", 14: "TITANIUM", 15: "STAR"
+        }
+        return slot_names.get(slot_no, f"SLOT_{slot_no}")
+    
+    def get_upgrade_history(self, user_id: str):
+        """Get user's Matrix upgrade history."""
+        try:
+            # Get upgrade logs
+            upgrade_logs = MatrixUpgradeLog.objects(user_id=ObjectId(user_id)).order_by('-created_at')
+            
+            history = []
+            for log in upgrade_logs:
+                history.append({
+                    "from_slot_no": log.from_slot_no,
+                    "to_slot_no": log.to_slot_no,
+                    "from_slot_name": self._get_slot_name(log.from_slot_no),
+                    "to_slot_name": self._get_slot_name(log.to_slot_no),
+                    "upgrade_cost": float(log.upgrade_cost),
+                    "earnings_used": float(log.earnings_used),
+                    "profit_gained": float(log.profit_gained),
+                    "trigger_type": log.trigger_type,
+                    "contributors": [str(c) for c in log.contributors],
+                    "created_at": log.created_at.isoformat()
+                })
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "upgrade_history": history,
+                "total_upgrades": len(history)
+            }
+        except Exception as e:
+            print(f"Error getting upgrade history: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def get_matrix_upgrade_status(self, user_id: str):
+        """Get comprehensive Matrix upgrade status for a user."""
+        try:
+            # Get upgrade options
+            options_result = self.get_upgrade_options(user_id)
+            
+            # Get upgrade history
+            history_result = self.get_upgrade_history(user_id)
+            
+            # Get matrix tree info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            
+            status = {
+                "user_id": user_id,
+                "current_status": {
+                    "current_slot": matrix_tree.current_slot if matrix_tree else 1,
+                    "current_slot_name": self._get_slot_name(matrix_tree.current_slot) if matrix_tree else "STARTER",
+                    "total_members": matrix_tree.total_members if matrix_tree else 0,
+                    "is_complete": matrix_tree.is_complete if matrix_tree else False
+                },
+                "upgrade_options": options_result.get("upgrade_options", []) if options_result.get("success") else [],
+                "upgrade_history": history_result.get("upgrade_history", []) if history_result.get("success") else [],
+                "wallet_info": {
+                    "balance": options_result.get("wallet_balance", 0) if options_result.get("success") else 0
+                },
+                "upgrade_rules": {
+                    "manual_upgrade": "Available using wallet funds",
+                    "auto_upgrade": "Available using middle-3 earnings",
+                    "reserve_combination": "2 reserves + 1 wallet or 1 reserve + 2 wallet"
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting Matrix upgrade status: {e}")
             return {"success": False, "error": str(e)}
