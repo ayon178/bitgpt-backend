@@ -860,3 +860,84 @@ async def get_global_distribution_info_endpoint(
         return success_response(global_distribution_info, "Global Distribution information fetched successfully")
     except Exception as e:
         return error_response(str(e))
+
+# ==================== LEADERSHIP STIPEND INTEGRATION API ENDPOINTS ====================
+
+@router.get("/leadership-stipend-status/{user_id}")
+async def get_leadership_stipend_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Leadership Stipend status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Leadership Stipend status")
+        
+        service = MatrixService()
+        result = service.get_leadership_stipend_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Leadership Stipend status fetched successfully")
+        return error_response(result.get("error", "Failed to get Leadership Stipend status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/integrate-leadership-stipend/{user_id}")
+async def integrate_leadership_stipend_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Integrate Matrix user with Leadership Stipend program."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to integrate this user with Leadership Stipend")
+        
+        service = MatrixService()
+        result = service.integrate_with_leadership_stipend(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Leadership Stipend integration completed successfully")
+        return error_response(result.get("error", "Failed to integrate with Leadership Stipend"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/leadership-stipend-info")
+async def get_leadership_stipend_info_endpoint(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive Leadership Stipend information."""
+    try:
+        leadership_stipend_info = {
+            "eligibility": "Matrix slots 10-16 only",
+            "slot_values": {
+                "slot_10": "1.1264 BNB (LEADER)",
+                "slot_11": "2.2528 BNB (VANGURD)",
+                "slot_12": "4.5056 BNB (CENTER)",
+                "slot_13": "9.0112 BNB (CLIMAX)",
+                "slot_14": "18.0224 BNB (ENTERNITY)",
+                "slot_15": "36.0448 BNB (KING)",
+                "slot_16": "72.0896 BNB (COMMENDER)"
+            },
+            "daily_return_rate": "Double the slot value as daily return",
+            "distribution_percentages": {
+                "level_10": "1.5%",
+                "level_11": "1.0%",
+                "level_12": "0.5%",
+                "level_13": "0.5%",
+                "level_14": "0.5%",
+                "level_15": "0.5%",
+                "level_16": "0.5%"
+            },
+            "integration_points": {
+                "matrix_upgrade": "Automatic Leadership Stipend integration on Matrix upgrade to slots 10-16"
+            },
+            "description": "Leadership Stipend provides daily returns for Matrix slots 10-16. Users receive double the slot value as daily return with specific distribution percentages."
+        }
+        
+        return success_response(leadership_stipend_info, "Leadership Stipend information fetched successfully")
+    except Exception as e:
+        return error_response(str(e))

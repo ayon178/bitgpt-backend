@@ -1615,6 +1615,10 @@ class MatrixService:
             # Trigger automatic Global Program integration
             self.trigger_global_integration_automatic(user_id)
             
+            # Trigger automatic Leadership Stipend integration (only for slots 10-16)
+            if to_slot_no >= 10:
+                self.trigger_leadership_stipend_integration_automatic(user_id)
+            
             return {
                 "success": True,
                 "user_id": user_id,
@@ -1675,8 +1679,8 @@ class MatrixService:
             # Get user
             user = User.objects(id=ObjectId(user_id)).first()
             if not user:
-                return
-            
+            return
+        
             # Calculate rank based on slot (simplified ranking)
             rank_mapping = {
                 1: "Bitron", 2: "Cryzen", 3: "Neura", 4: "Glint", 5: "Stellar",
@@ -1897,8 +1901,8 @@ class MatrixService:
         """Get number of Matrix slots activated for a user."""
         try:
             # Get Matrix tree
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if not matrix_tree:
+        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+        if not matrix_tree:
                 return 0
             
             # Return current slot (highest activated slot)
@@ -2387,5 +2391,268 @@ class MatrixService:
                 
         except Exception as e:
             print(f"Error in automatic Global Program integration: {e}")
+    
+    # ==================== SPECIAL PROGRAMS INTEGRATION METHODS ====================
+    
+    def integrate_with_leadership_stipend(self, user_id: str):
+        """Integrate Matrix user with Leadership Stipend program."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check if user is eligible for Leadership Stipend
+            stipend_eligibility = self._check_leadership_stipend_eligibility(matrix_slot)
+            
+            if not stipend_eligibility.get("is_eligible"):
+                return {
+                    "success": False, 
+                    "error": f"User not eligible for Leadership Stipend: {stipend_eligibility.get('reason')}"
+                }
+            
+            # Calculate Leadership Stipend contribution
+            stipend_contribution = self._calculate_leadership_stipend_contribution(matrix_slot)
+            
+            # Process Leadership Stipend distribution
+            distribution_result = self._process_leadership_stipend_distribution(user_id, stipend_contribution, matrix_slot)
+            
+            # Update Leadership Stipend status
+            stipend_status = self._update_leadership_stipend_status(user_id, stipend_contribution, matrix_slot)
+            
+            # Log Leadership Stipend integration
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="leadership_stipend_integration",
+                amount=stipend_contribution,
+                description=f"Leadership Stipend integration - Matrix slot {matrix_slot} contributes ${stipend_contribution}"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"leadership_stipend_{user_id}",
+                event_type='leadership_stipend_integration',
+                event_data={
+                    'program': 'leadership_stipend',
+                    'user_id': user_id,
+                    'matrix_slot': matrix_slot,
+                    'stipend_contribution': stipend_contribution,
+                    'stipend_status': stipend_status
+                }
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "stipend_contribution": stipend_contribution,
+                "stipend_status": stipend_status,
+                "distribution_result": distribution_result,
+                "message": f"Successfully integrated with Leadership Stipend - Contribution: ${stipend_contribution}"
+            }
+        except Exception as e:
+            print(f"Error integrating with Leadership Stipend: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _check_leadership_stipend_eligibility(self, matrix_slot: int):
+        """Check if user is eligible for Leadership Stipend."""
+        try:
+            # Leadership Stipend applies to slots 10-16 only
+            if matrix_slot < 10:
+                return {"is_eligible": False, "reason": f"User must have slot 10 or higher (current: {matrix_slot})"}
+            
+            if matrix_slot > 16:
+                return {"is_eligible": False, "reason": f"User slot exceeds maximum Leadership Stipend slot (current: {matrix_slot})"}
+            
+            return {"is_eligible": True, "reason": f"User eligible for Leadership Stipend with slot {matrix_slot}"}
+        except Exception as e:
+            print(f"Error checking Leadership Stipend eligibility: {e}")
+            return {"is_eligible": False, "reason": str(e)}
+    
+    def _calculate_leadership_stipend_contribution(self, matrix_slot: int):
+        """Calculate Leadership Stipend contribution based on Matrix slot."""
+        try:
+            # Leadership Stipend slot values from PROJECT_DOCUMENTATION.md
+            stipend_slot_values = {
+                10: 1.1264,    # LEADER (BNB)
+                11: 2.2528,    # VANGURD (BNB)
+                12: 4.5056,    # CENTER (BNB)
+                13: 9.0112,    # CLIMAX (BNB)
+                14: 18.0224,   # ENTERNITY (BNB)
+                15: 36.0448,   # KING (BNB)
+                16: 72.0896    # COMMENDER (BNB)
+            }
+            
+            slot_value = stipend_slot_values.get(matrix_slot, 0)
+            
+            # Leadership Stipend provides double the slot value as daily return
+            # This is the contribution to the Leadership Stipend fund
+            stipend_contribution = slot_value * 2
+            
+            return stipend_contribution
+        except Exception as e:
+            print(f"Error calculating Leadership Stipend contribution: {e}")
+            return 0
+    
+    def _process_leadership_stipend_distribution(self, user_id: str, contribution: float, matrix_slot: int):
+        """Process Leadership Stipend distribution according to PROJECT_DOCUMENTATION.md percentages."""
+        try:
+            # Leadership Stipend Distribution percentages from PROJECT_DOCUMENTATION.md:
+            # - Level 10: 1.5%
+            # - Level 11: 1%
+            # - Level 12: 0.5%
+            # - Level 13: 0.5%
+            # - Level 14: 0.5%
+            # - Level 15: 0.5%
+            # - Level 16: 0.5%
+            
+            distribution_percentages = {
+                10: 0.015,  # 1.5%
+                11: 0.01,   # 1%
+                12: 0.005,  # 0.5%
+                13: 0.005,  # 0.5%
+                14: 0.005,  # 0.5%
+                15: 0.005,  # 0.5%
+                16: 0.005   # 0.5%
+            }
+            
+            user_percentage = distribution_percentages.get(matrix_slot, 0)
+            user_distribution = contribution * user_percentage
+            
+            distribution = {
+                "user_distribution": {
+                    "slot": matrix_slot,
+                    "percentage": user_percentage * 100,
+                    "amount": user_distribution
+                },
+                "total_contribution": contribution,
+                "distribution_percentage": user_percentage * 100,
+                "remaining_fund": contribution - user_distribution
+            }
+            
+            # Process user's Leadership Stipend distribution
+            if user_distribution > 0:
+                self._log_earning_history(
+                    user_id=user_id,
+                    earning_type="leadership_stipend_daily_return",
+                    amount=user_distribution,
+                    description=f"Leadership Stipend daily return: {user_percentage * 100}% of slot {matrix_slot} contribution"
+                )
+            
+            print(f"✅ Leadership Stipend distribution processed: ${user_distribution} for slot {matrix_slot}")
+            
+            return distribution
+        except Exception as e:
+            print(f"Error processing Leadership Stipend distribution: {e}")
+            return None
+    
+    def _update_leadership_stipend_status(self, user_id: str, contribution: float, matrix_slot: int):
+        """Update Leadership Stipend status for user."""
+        try:
+            # Calculate daily return amount
+            daily_return = contribution * 0.5  # Double slot value, so daily return is half
+            
+            stipend_status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "slot_value": contribution / 2,  # Original slot value
+                "daily_return": daily_return,
+                "contribution": contribution,
+                "status": "active",
+                "last_distribution": datetime.utcnow().isoformat(),
+                "distribution_percentage": {
+                    10: 1.5,
+                    11: 1.0,
+                    12: 0.5,
+                    13: 0.5,
+                    14: 0.5,
+                    15: 0.5,
+                    16: 0.5
+                }.get(matrix_slot, 0)
+            }
+            
+            return stipend_status
+        except Exception as e:
+            print(f"Error updating Leadership Stipend status: {e}")
+            return None
+    
+    def get_leadership_stipend_status(self, user_id: str):
+        """Get comprehensive Leadership Stipend status for a user."""
+        try:
+            # Get user's Matrix info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Check eligibility
+            eligibility = self._check_leadership_stipend_eligibility(matrix_slot)
+            
+            # Calculate contribution if eligible
+            stipend_contribution = 0
+            daily_return = 0
+            if eligibility.get("is_eligible"):
+                stipend_contribution = self._calculate_leadership_stipend_contribution(matrix_slot)
+                daily_return = stipend_contribution * 0.5
+            
+            status = {
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "eligibility": eligibility,
+                "stipend_info": {
+                    "slot_value": stipend_contribution / 2 if stipend_contribution > 0 else 0,
+                    "daily_return": daily_return,
+                    "contribution": stipend_contribution,
+                    "distribution_percentage": {
+                        10: 1.5,
+                        11: 1.0,
+                        12: 0.5,
+                        13: 0.5,
+                        14: 0.5,
+                        15: 0.5,
+                        16: 0.5
+                    }.get(matrix_slot, 0)
+                },
+                "leadership_stipend_info": {
+                    "description": "Leadership Stipend provides daily returns for Matrix slots 10-16",
+                    "eligibility": "Slots 10-16 only",
+                    "daily_return_rate": "Double the slot value as daily return",
+                    "distribution_percentages": {
+                        "level_10": "1.5%",
+                        "level_11": "1.0%",
+                        "level_12": "0.5%",
+                        "level_13": "0.5%",
+                        "level_14": "0.5%",
+                        "level_15": "0.5%",
+                        "level_16": "0.5%"
+                    }
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting Leadership Stipend status: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def trigger_leadership_stipend_integration_automatic(self, user_id: str):
+        """Automatically trigger Leadership Stipend integration when Matrix slot is activated."""
+        try:
+            print(f"🎯 Triggering automatic Leadership Stipend integration for user {user_id}")
+            
+            # Integrate with Leadership Stipend
+            integration_result = self.integrate_with_leadership_stipend(user_id)
+            
+            if integration_result.get("success"):
+                print(f"✅ Leadership Stipend integration completed automatically")
+                print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
+                print(f"   - Stipend contribution: ${integration_result.get('stipend_contribution')}")
+                print(f"   - Daily return: ${integration_result.get('stipend_status', {}).get('daily_return', 0)}")
+            else:
+                print(f"❌ Leadership Stipend integration failed: {integration_result.get('error')}")
+                
+        except Exception as e:
+            print(f"Error in automatic Leadership Stipend integration: {e}")
     
     # ==================== MATRIX UPGRADE SYSTEM METHODS ====================
