@@ -496,3 +496,104 @@ async def check_dream_matrix_eligibility_endpoint(
         raise e
     except Exception as e:
         return error_response(str(e))
+
+# ==================== MENTORSHIP BONUS SYSTEM API ENDPOINTS ====================
+
+@router.get("/mentorship-status/{user_id}")
+async def get_mentorship_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive mentorship status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's mentorship status")
+        
+        service = MatrixService()
+        result = service.get_mentorship_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Mentorship status fetched successfully")
+        return error_response(result.get("error", "Failed to get mentorship status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/mentorship-bonus/{super_upline_id}")
+async def calculate_mentorship_bonus_endpoint(
+    super_upline_id: str,
+    direct_referral_id: str,
+    amount: float,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Calculate 10% mentorship bonus for super upline."""
+    try:
+        if str(current_user["user_id"]) != super_upline_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to calculate mentorship bonus for this user")
+        
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+        
+        service = MatrixService()
+        result = service.calculate_mentorship_bonus(super_upline_id, direct_referral_id, amount)
+        
+        if result.get("success"):
+            return success_response(result, "Mentorship bonus calculated successfully")
+        return error_response(result.get("error", "Failed to calculate mentorship bonus"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/mentorship-bonus-distribute")
+async def distribute_mentorship_bonus_endpoint(
+    super_upline_id: str,
+    direct_referral_id: str,
+    amount: float,
+    activity_type: str = "joining",
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Process mentorship bonus distribution to super upline."""
+    try:
+        if str(current_user["user_id"]) != super_upline_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to process mentorship bonus for this user")
+        
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+        
+        if activity_type not in ["joining", "upgrade"]:
+            raise HTTPException(status_code=400, detail="Activity type must be 'joining' or 'upgrade'")
+        
+        service = MatrixService()
+        result = service.process_mentorship_bonus(super_upline_id, direct_referral_id, amount, activity_type)
+        
+        if result.get("success"):
+            return success_response(result, "Mentorship bonus distributed successfully")
+        return error_response(result.get("error", "Failed to distribute mentorship bonus"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/track-mentorship")
+async def track_mentorship_relationship_endpoint(
+    user_id: str,
+    direct_referral_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Track mentorship relationships when a direct referral joins."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to track mentorship for this user")
+        
+        service = MatrixService()
+        result = service.track_mentorship_relationships(user_id, direct_referral_id)
+        
+        if result.get("success"):
+            return success_response(result, "Mentorship relationship tracked successfully")
+        return error_response(result.get("error", "Failed to track mentorship relationship"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))

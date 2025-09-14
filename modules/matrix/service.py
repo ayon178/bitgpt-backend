@@ -229,6 +229,12 @@ class MatrixService:
             # Check for automatic upgrade after placement
             self.check_and_process_automatic_upgrade(str(referrer_tree.user_id), referrer_tree.current_slot)
             
+            # Check for Dream Matrix eligibility after placement
+            self._check_and_process_dream_matrix_eligibility(str(referrer_tree.user_id), referrer_tree.current_slot)
+            
+            # Track mentorship relationships (automatic)
+            self._track_mentorship_relationships_automatic(str(referrer_tree.user_id), user_id)
+            
             return {
                 "success": True,
                 "level": placement_position['level'],
@@ -268,7 +274,7 @@ class MatrixService:
         try:
             if not MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first():
                 MatrixAutoUpgrade(
-                    user_id=ObjectId(user_id),
+                user_id=ObjectId(user_id),
                     current_slot_no=1,
                     current_level=1,
                     middle_three_required=3,
@@ -674,8 +680,8 @@ class MatrixService:
         try:
             if recycle_no is None or recycle_no == "current":
                 # Return current in-progress tree
-                matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-                if not matrix_tree:
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
                     return None
                 
                 return {
@@ -990,7 +996,7 @@ class MatrixService:
             to_slot_info = self.MATRIX_SLOTS.get(to_slot_no, {})
             
             MatrixUpgradeLog(
-                user_id=ObjectId(user_id),
+            user_id=ObjectId(user_id),
                 from_slot_no=from_slot_no,
                 to_slot_no=to_slot_no,
                 from_slot_name=from_slot_info.get('name', f'SLOT_{from_slot_no}'),
@@ -1001,9 +1007,9 @@ class MatrixService:
                 profit_gained=profit_gained,
                 trigger_type=trigger_type,
                 contributors=[ObjectId(contributor) for contributor in contributors],
-                status='completed',
+            status='completed',
                 created_at=datetime.utcnow(),
-                completed_at=datetime.utcnow()
+            completed_at=datetime.utcnow()
             ).save()
         except Exception as e:
             print(f"Error creating matrix upgrade log: {e}")
@@ -1041,6 +1047,67 @@ class MatrixService:
                 
         except Exception as e:
             print(f"Error in automatic upgrade check: {e}")
+    
+    def _check_and_process_dream_matrix_eligibility(self, user_id: str, slot_no: int):
+        """Automatically check and process Dream Matrix eligibility when conditions are met."""
+        try:
+            # Check if user now has 3 direct partners
+            eligibility_result = self.check_dream_matrix_eligibility(user_id)
+            
+            if eligibility_result.get("success") and eligibility_result.get("is_eligible"):
+                print(f"🎯 Dream Matrix eligibility achieved for user {user_id}")
+                print(f"   - Direct partners: {eligibility_result.get('direct_partner_count')}")
+                
+                # Automatically process Dream Matrix distribution
+                distribution_result = self.process_dream_matrix_distribution(user_id, slot_no)
+                
+                if distribution_result.get("success"):
+                    print(f"✅ Dream Matrix distribution completed automatically")
+                    print(f"   - Total distributed: ${distribution_result.get('total_distributed')}")
+                else:
+                    print(f"❌ Dream Matrix distribution failed: {distribution_result.get('error')}")
+            else:
+                print(f"ℹ️ Dream Matrix eligibility not yet met for user {user_id}")
+                if eligibility_result.get("success"):
+                    print(f"   - Current direct partners: {eligibility_result.get('direct_partner_count')}")
+                    print(f"   - Required: {eligibility_result.get('required_partners')}")
+                
+        except Exception as e:
+            print(f"Error in automatic Dream Matrix eligibility check: {e}")
+    
+    def _track_mentorship_relationships_automatic(self, user_id: str, direct_referral_id: str):
+        """Automatically track mentorship relationships when a direct referral joins."""
+        try:
+            # Track mentorship relationship
+            mentorship_result = self.track_mentorship_relationships(user_id, direct_referral_id)
+            
+            if mentorship_result.get("success"):
+                print(f"🎯 Mentorship relationship tracked automatically")
+                print(f"   - Super Upline: {mentorship_result.get('mentorship_record', {}).get('super_upline_id')}")
+                print(f"   - Upline: {user_id}")
+                print(f"   - Direct Referral: {direct_referral_id}")
+                
+                # Process mentorship bonus for joining (10% of $11 = $1.10)
+                super_upline_id = mentorship_result.get('mentorship_record', {}).get('super_upline_id')
+                if super_upline_id:
+                    bonus_result = self.process_mentorship_bonus(
+                        super_upline_id=super_upline_id,
+                        direct_referral_id=direct_referral_id,
+                        amount=11.0,  # $11 joining fee
+                        activity_type="joining"
+                    )
+                    
+                    if bonus_result.get("success"):
+                        print(f"✅ Mentorship bonus processed automatically")
+                        print(f"   - Amount: ${bonus_result.get('mentorship_bonus')}")
+                        print(f"   - Super Upline: {super_upline_id}")
+                    else:
+                        print(f"❌ Mentorship bonus failed: {bonus_result.get('error')}")
+            else:
+                print(f"ℹ️ Mentorship relationship not tracked: {mentorship_result.get('error')}")
+                
+        except Exception as e:
+            print(f"Error in automatic mentorship tracking: {e}")
     
     # ==================== DREAM MATRIX SYSTEM METHODS ====================
     
@@ -1214,10 +1281,10 @@ class MatrixService:
                 commission_type='dream_matrix_level',
                 slot_no=5,  # Based on 5th slot
                 amount=amount,
-                currency='USDT',
-                status='paid',
+            currency='USDT',
+            status='paid',
                 created_at=datetime.utcnow(),
-                paid_at=datetime.utcnow()
+            paid_at=datetime.utcnow()
             ).save()
         except Exception as e:
             print(f"Error creating Dream Matrix commission: {e}")
@@ -1232,7 +1299,7 @@ class MatrixService:
             earnings_result = self.calculate_dream_matrix_earnings(user_id)
             
             # Get matrix tree info
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
             
             status = {
                 "user_id": user_id,
@@ -1256,4 +1323,194 @@ class MatrixService:
             return {"success": True, "status": status}
         except Exception as e:
             print(f"Error getting Dream Matrix status: {e}")
+    
+    # ==================== MENTORSHIP BONUS SYSTEM METHODS ====================
+    
+    def track_mentorship_relationships(self, user_id: str, direct_referral_id: str):
+        """Track mentorship relationships when a direct referral joins."""
+        try:
+            # Get the super upline (user's upline)
+            user_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not user_tree:
+                return {"success": False, "error": "User matrix tree not found"}
+            
+            # Find the super upline (user's referrer)
+            super_upline_id = None
+            for node in user_tree.nodes:
+                if str(node.user_id) == user_id:
+                    # Find the upline of this user
+                    super_upline_id = str(node.upline_id) if node.upline_id else None
+                    break
+            
+            if not super_upline_id:
+                return {"success": False, "error": "Super upline not found"}
+            
+            # Create mentorship relationship record
+            mentorship_record = {
+                "super_upline_id": super_upline_id,
+                "upline_id": user_id,
+                "direct_referral_id": direct_referral_id,
+                "relationship_type": "direct_of_direct",
+                "created_at": datetime.utcnow(),
+                "status": "active"
+            }
+            
+            # Log mentorship relationship
+            self._log_earning_history(
+                user_id=super_upline_id,
+                earning_type="mentorship_relationship_created",
+                amount=0,
+                description=f"Mentorship relationship: {super_upline_id} -> {user_id} -> {direct_referral_id}"
+            )
+            
+            return {
+                "success": True,
+                "mentorship_record": mentorship_record,
+                "message": f"Mentorship relationship tracked: Super Upline {super_upline_id} will receive 10% from {direct_referral_id}"
+            }
+        except Exception as e:
+            print(f"Error tracking mentorship relationship: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def calculate_mentorship_bonus(self, super_upline_id: str, direct_referral_id: str, amount: float):
+        """Calculate 10% mentorship bonus for super upline."""
+        try:
+            mentorship_bonus = amount * 0.10  # 10% commission
+            
+            return {
+                "success": True,
+                "super_upline_id": super_upline_id,
+                "direct_referral_id": direct_referral_id,
+                "original_amount": amount,
+                "mentorship_bonus": mentorship_bonus,
+                "commission_percentage": 10,
+                "description": f"10% mentorship bonus from {direct_referral_id}'s activity"
+            }
+        except Exception as e:
+            print(f"Error calculating mentorship bonus: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def process_mentorship_bonus(self, super_upline_id: str, direct_referral_id: str, amount: float, activity_type: str = "joining"):
+        """Process mentorship bonus distribution to super upline."""
+        try:
+            # Calculate mentorship bonus
+            bonus_result = self.calculate_mentorship_bonus(super_upline_id, direct_referral_id, amount)
+            if not bonus_result.get("success"):
+                return {"success": False, "error": bonus_result.get("error")}
+            
+            mentorship_bonus = bonus_result.get("mentorship_bonus")
+            
+            # Create earning history for super upline
+            self._log_earning_history(
+                user_id=super_upline_id,
+                earning_type="mentorship_bonus",
+                amount=mentorship_bonus,
+                description=f"Mentorship bonus: 10% from {direct_referral_id}'s {activity_type} (${amount})"
+            )
+            
+            # Create commission record
+            self._create_mentorship_commission(
+                super_upline_id=super_upline_id,
+                direct_referral_id=direct_referral_id,
+                amount=mentorship_bonus,
+                original_amount=amount,
+                activity_type=activity_type
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"mentorship_bonus_{super_upline_id}_{direct_referral_id}",
+                event_type='mentorship_bonus',
+                event_data={
+                    'program': 'mentorship_bonus',
+                    'super_upline_id': super_upline_id,
+                    'direct_referral_id': direct_referral_id,
+                    'original_amount': amount,
+                    'mentorship_bonus': mentorship_bonus,
+                    'activity_type': activity_type
+                }
+            )
+        
+        return {
+                "success": True,
+                "super_upline_id": super_upline_id,
+                "direct_referral_id": direct_referral_id,
+                "original_amount": amount,
+                "mentorship_bonus": mentorship_bonus,
+                "message": f"Mentorship bonus of ${mentorship_bonus} distributed to super upline {super_upline_id}"
+            }
+        except Exception as e:
+            print(f"Error processing mentorship bonus: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _create_mentorship_commission(self, super_upline_id: str, direct_referral_id: str, 
+                                    amount: float, original_amount: float, activity_type: str):
+        """Create mentorship commission record."""
+        try:
+            MatrixCommission(
+                from_user_id=ObjectId(direct_referral_id),
+                to_user_id=ObjectId(super_upline_id),
+                program='mentorship_bonus',
+                commission_type='direct_of_direct',
+                slot_no=1,  # Based on joining
+                amount=amount,
+                currency='USDT',
+                status='paid',
+                created_at=datetime.utcnow(),
+                paid_at=datetime.utcnow(),
+                metadata={
+                    'original_amount': original_amount,
+                    'activity_type': activity_type,
+                    'commission_percentage': 10
+                }
+            ).save()
+        except Exception as e:
+            print(f"Error creating mentorship commission: {e}")
+    
+    def get_mentorship_status(self, user_id: str):
+        """Get comprehensive mentorship status for a user."""
+        try:
+            # Get user's matrix tree
+            user_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            
+            # Count direct referrals
+            direct_referrals = [node for node in user_tree.nodes if node.level == 1] if user_tree else []
+            
+            # Count direct-of-direct referrals
+            direct_of_direct_count = 0
+            mentorship_relationships = []
+            
+            for direct_ref in direct_referrals:
+                # Find direct referrals of each direct referral
+                direct_ref_tree = MatrixTree.objects(user_id=direct_ref.user_id).first()
+                if direct_ref_tree:
+                    direct_ref_directs = [node for node in direct_ref_tree.nodes if node.level == 1]
+                    direct_of_direct_count += len(direct_ref_directs)
+                    
+                    for d_o_d in direct_ref_directs:
+                        mentorship_relationships.append({
+                            "direct_referral": str(direct_ref.user_id),
+                            "direct_of_direct": str(d_o_d.user_id),
+                            "relationship": f"{user_id} -> {direct_ref.user_id} -> {d_o_d.user_id}"
+                        })
+            
+            # Calculate potential mentorship earnings
+            potential_earnings = direct_of_direct_count * 11 * 0.10  # Assuming $11 joining fee
+            
+            status = {
+                "user_id": user_id,
+                "direct_referrals_count": len(direct_referrals),
+                "direct_of_direct_count": direct_of_direct_count,
+                "mentorship_relationships": mentorship_relationships,
+                "potential_earnings": potential_earnings,
+                "mentorship_rules": {
+                    "commission_percentage": 10,
+                    "applies_to": "direct_of_direct activities",
+                    "includes": "joining fees and slot upgrades"
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting mentorship status: {e}")
             return {"success": False, "error": str(e)}
