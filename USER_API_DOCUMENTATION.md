@@ -179,6 +179,56 @@ Authorization: Bearer <your_access_token>
 ### 3.4 Get All Tree Data (সব ট্রি ডেটা)
 **GET** `/tree/{user_id}/all`
 
+### 3.5 Get Matrix Recycle Tree (ম্যাট্রিক্স রিসাইকেল ট্রি)
+**GET** `/matrix/recycle-tree?user_id={uid}&slot={1-15}&recycle_no={n|current}`
+
+**Parameters:**
+- `user_id` (string, required): User ID
+- `slot` (integer, required): Slot number (1-15)
+- `recycle_no` (integer|string, required): Recycle number or "current"
+
+**Response:**
+```json
+{
+  "user_id": "507f1f77bcf86cd799439011",
+  "slot_number": 1,
+  "recycle_no": 2,
+  "is_snapshot": true,
+  "is_complete": true,
+  "total_recycles": 3,
+  "nodes": [
+    { "level": 1, "position": 0, "user_id": "507f1f77bcf86cd799439012" },
+    { "level": 1, "position": 1, "user_id": "507f1f77bcf86cd799439013" },
+    { "level": 1, "position": 2, "user_id": "507f1f77bcf86cd799439014" },
+    { "level": 2, "position": 0, "user_id": "507f1f77bcf86cd799439015" }
+  ]
+}
+```
+
+### 3.6 Get Matrix Recycle History (ম্যাট্রিক্স রিসাইকেল ইতিহাস)
+**GET** `/matrix/recycles?user_id={uid}&slot={1-15}`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "recycle_no": 1,
+      "is_complete": true,
+      "created_at": "2024-01-10T08:00:00Z",
+      "completed_at": "2024-01-15T12:00:00Z"
+    },
+    {
+      "recycle_no": 2,
+      "is_complete": true,
+      "created_at": "2024-01-15T12:00:00Z",
+      "completed_at": "2024-01-20T16:00:00Z"
+    }
+  ]
+}
+```
+
 ---
 
 ## 4. User Data Structure (ব্যবহারকারী ডেটা স্ট্রাকচার)
@@ -463,9 +513,10 @@ Slot 16: EVEREST    - $58,555 USD
 ### 8.3 Global Distribution (100%):
 ```
 পার্টনার ইনসেনটিভ: 10%
-লেভেল পেআউট: 60%
-🌟 রয়েল ক্যাপ্টেন: 4%
-🌟 প্রেসিডেন্ট রিওয়ার্ড: 3%
+লেভেল পেআউট: 30%
+প্রফিট: 30%
+🌟 রয়েল ক্যাপ্টেন: 15%
+🌟 প্রেসিডেন্ট রিওয়ার্ড: 15%
 🌟 ট্রিপল এন্ট্রি রিওয়ার্ড: 5%
 🌟 শেয়ারহোল্ডার: 5%
 ```

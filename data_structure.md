@@ -349,7 +349,36 @@ This document defines the complete data structure for the BitGPT MLM platform ba
 }
 ```
 
-### 2️⃣0️⃣ SystemConfig Collection
+### 2️⃣0️⃣ MatrixRecycleInstance Collection
+**Purpose**: Track Matrix program recycle instances
+
+```json
+{
+  "_id": "ObjectId",
+  "user_id": "ObjectId (reference Users)",
+  "slot_number": "integer (1-15)",
+  "recycle_no": "integer (1-based counter per user+slot)",
+  "is_complete": "boolean (39 members filled)",
+  "created_at": "DateTime",
+  "completed_at": "DateTime"
+}
+```
+
+### 2️⃣1️⃣ MatrixRecycleNode Collection
+**Purpose**: Track individual nodes in recycle instances
+
+```json
+{
+  "_id": "ObjectId",
+  "instance_id": "ObjectId (reference MatrixRecycleInstance)",
+  "occupant_user_id": "ObjectId (reference Users)",
+  "level_index": "integer (1, 2, or 3)",
+  "position_index": "integer (0-based within level)",
+  "placed_at": "DateTime"
+}
+```
+
+### 2️⃣2️⃣ SystemConfig Collection
 **Purpose**: Store system-wide configuration
 
 ```json
@@ -440,6 +469,8 @@ db.blockchainevent.createIndex({ "status": 1, "created_at": 1 })
 - `GET /users/{uid}/summary` - User overview
 - `GET /users/{uid}/tree` - Tree structure
 - `GET /users/{uid}/incomes` - Income history
+- `GET /matrix/recycle-tree?user_id={uid}&slot={1-15}&recycle_no={n|current}` - Matrix recycle tree
+- `GET /matrix/recycles?user_id={uid}&slot={1-15}` - Matrix recycle history
 - `GET /jackpot/current` - Current jackpot status
 - `GET /spark/cycles` - Spark bonus cycles
 - `GET /leaderboards` - Various leaderboards
@@ -479,7 +510,7 @@ This data structure supports all the complex MLM logic described in the BitGPT d
 🌟 লেভেল পেআউট: 40% → IncomeEvent collection (level_payout)
 ```
 
-## 🌍 **Global Matrix Distribution (Total 110%)**
+## 🌍 **Global Matrix Distribution (Total 100%)**
 ```
 🌟 লেভেল + পার্টনার ইনসেনটিভ: 30% + 10% = 40% → IncomeEvent collection
 🌟 প্রফিট: 30% → IncomeEvent collection

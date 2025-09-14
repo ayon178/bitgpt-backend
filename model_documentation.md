@@ -393,6 +393,35 @@
 
 ---
 
+---
+
+## 🔄 **Matrix Recycle Module**
+
+### **MatrixRecycleInstance Model**
+**উদ্দেশ্য**: Matrix program এর recycle instances track করা
+
+| **Key** | **Type** | **উদ্দেশ্য** | **Example** |
+|---------|----------|-------------|-------------|
+| `user_id` | ObjectIdField | কোন user এর recycle instance | `ObjectId("507f1f77bcf86cd799439011")` - recycle owner |
+| `slot_number` | IntField | কোন slot এর recycle (1-15) | `5` - Slot 5 recycle |
+| `recycle_no` | IntField | Recycle number (1-based counter) | `2` - 2nd recycle for this user+slot |
+| `is_complete` | BooleanField | 39 members complete হয়েছে কিনা | `true` - All 39 positions filled |
+| `created_at` | DateTimeField | কখন recycle শুরু হয়েছে | `"2024-01-15 10:00:00"` |
+| `completed_at` | DateTimeField | কখন recycle complete হয়েছে | `"2024-01-15 12:30:00"` |
+
+### **MatrixRecycleNode Model**
+**উদ্দেশ্য**: Recycle instance এর প্রতিটি node track করা
+
+| **Key** | **Type** | **উদ্দেশ্য** | **Example** |
+|---------|----------|-------------|-------------|
+| `instance_id` | ObjectIdField | কোন recycle instance এর node | `ObjectId("507f1f77bcf86cd799439012")` - recycle instance |
+| `occupant_user_id` | ObjectIdField | কোন user এই position এ আছে | `ObjectId("507f1f77bcf86cd799439013")` - node occupant |
+| `level_index` | IntField | কোন level এ (1, 2, বা 3) | `2` - Level 2 position |
+| `position_index` | IntField | Level এর মধ্যে কোন position (0-based) | `5` - Position 5 in level 2 |
+| `placed_at` | DateTimeField | কখন এই position এ place হয়েছে | `"2024-01-15 11:15:00"` |
+
+---
+
 ## 📝 **Summary**
 
 এই documentation এ BitGPT platform এর সকল model এর প্রতিটি key এর উদ্দেশ্য এবং ব্যবহার বিস্তারিতভাবে বর্ণনা করা হয়েছে। প্রতিটি model একটি নির্দিষ্ট business logic serve করে এবং একসাথে মিলে একটি complete MLM platform তৈরি করে।

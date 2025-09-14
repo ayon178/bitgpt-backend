@@ -94,9 +94,9 @@ This note consolidates everything that must happen automatically when a user joi
 
 ## 9) Top Leader / Royal Captain / President Tracking (Counters only at join)
 - Increment/track counters that contribute to:
-  - Royal Captain Bonus (Matrix+Global referrals in sets of 5)
-  - President Reward (30 direct invites thresholds with global team tiers)
-  - Top Leader Gift (self rank, direct partners’ ranks, total team size)
+  - Royal Captain Bonus (Matrix+Global referrals: 5 maintained, global team 0/10/20/30/40/50 with $200/$200/$200/$200/$250/$250)
+  - President Reward (10 direct invites + 80 global team = $500, then 150/200/250/300=$700, 15→400/500/600/700=$800, 20→1000=$1500, 1500=$1500, 2000=$2000, 2500=$2500, 3000=$2500, 30→4000=$5000)
+  - Top Leader Gift (self rank, direct partners' ranks, total team size)
 - No immediate payout at join unless thresholds are met; hook evaluations run after each qualifying event
 
 ## 10) Data to Persist/Update (Summary)

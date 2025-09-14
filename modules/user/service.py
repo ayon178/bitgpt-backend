@@ -117,11 +117,106 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             ref_pg.save()
             # Royal Captain / President counters on join (Matrix+Global for Royal Captain; direct invites for President)
             try:
-                # Update referrer model fields if exist
-                if hasattr(referrer, 'royal_captain_qualifications') and (user.matrix_joined and user.global_joined):
-                    referrer.royal_captain_qualifications = int(getattr(referrer, 'royal_captain_qualifications', 0) or 0) + 1
+                # Royal Captain Bonus Tracking
+                if user.matrix_joined and user.global_joined:
+                    # Increment referrer's direct Matrix+Global referral count
+                    if hasattr(referrer, 'royal_captain_qualifications'):
+                        referrer.royal_captain_qualifications = int(getattr(referrer, 'royal_captain_qualifications', 0) or 0) + 1
+                    
+                    # Check if referrer maintains 5 direct Matrix+Global referrals
+                    if referrer.royal_captain_qualifications >= 5:
+                        # Get referrer's global team size
+                        ref_pg = PartnerGraph.objects(user_id=ObjectId(referrer.id)).first()
+                        global_team_size = len(ref_pg.global_team_members) if ref_pg and ref_pg.global_team_members else 0
+                        
+                        # Check global team size thresholds: 0/10/20/30/40/50
+                        if global_team_size >= 0 and global_team_size < 10:
+                            award_amount = 200
+                        elif global_team_size >= 10 and global_team_size < 20:
+                            award_amount = 200
+                        elif global_team_size >= 20 and global_team_size < 30:
+                            award_amount = 200
+                        elif global_team_size >= 30 and global_team_size < 40:
+                            award_amount = 200
+                        elif global_team_size >= 40 and global_team_size < 50:
+                            award_amount = 250
+                        elif global_team_size >= 50:
+                            award_amount = 250
+                        else:
+                            award_amount = 0
+                        
+                        # Create RoyalCaptainBonus record if threshold met
+                        if award_amount > 0:
+                            try:
+                                from modules.royal_captain.model import RoyalCaptainBonus
+                                RoyalCaptainBonus(
+                                    user_id=ObjectId(referrer.id),
+                                    award_amount=award_amount,
+                                    global_team_size=global_team_size,
+                                    matrix_global_referrals=referrer.royal_captain_qualifications,
+                                    status='pending',
+                                    created_at=datetime.utcnow()
+                                ).save()
+                            except Exception:
+                                pass
+                
+                # President Reward Tracking
                 if hasattr(referrer, 'president_reward_qualifications'):
                     referrer.president_reward_qualifications = int(getattr(referrer, 'president_reward_qualifications', 0) or 0) + 1
+                
+                # Get referrer's global team size for President Reward
+                ref_pg = PartnerGraph.objects(user_id=ObjectId(referrer.id)).first()
+                global_team_size = len(ref_pg.global_team_members) if ref_pg and ref_pg.global_team_members else 0
+                direct_invites = referrer.president_reward_qualifications
+                
+                # Evaluate qualification tiers
+                award_amount = 0
+                if direct_invites >= 10 and global_team_size >= 80:
+                    award_amount = 500  # Tier 1
+                elif global_team_size >= 150 and global_team_size < 200:
+                    award_amount = 700  # Tier 2
+                elif global_team_size >= 200 and global_team_size < 250:
+                    award_amount = 700  # Tier 2
+                elif global_team_size >= 250 and global_team_size < 300:
+                    award_amount = 700  # Tier 2
+                elif global_team_size >= 300 and global_team_size < 400:
+                    award_amount = 700  # Tier 2
+                elif direct_invites >= 15 and global_team_size >= 400 and global_team_size < 500:
+                    award_amount = 800  # Tier 3
+                elif direct_invites >= 15 and global_team_size >= 500 and global_team_size < 600:
+                    award_amount = 800  # Tier 3
+                elif direct_invites >= 15 and global_team_size >= 600 and global_team_size < 700:
+                    award_amount = 800  # Tier 3
+                elif direct_invites >= 15 and global_team_size >= 700 and global_team_size < 1000:
+                    award_amount = 800  # Tier 3
+                elif direct_invites >= 20 and global_team_size >= 1000 and global_team_size < 1500:
+                    award_amount = 1500  # Tier 4
+                elif global_team_size >= 1500 and global_team_size < 2000:
+                    award_amount = 1500  # Tier 5
+                elif global_team_size >= 2000 and global_team_size < 2500:
+                    award_amount = 2000  # Tier 5
+                elif global_team_size >= 2500 and global_team_size < 3000:
+                    award_amount = 2500  # Tier 5
+                elif global_team_size >= 3000 and global_team_size < 4000:
+                    award_amount = 2500  # Tier 5
+                elif direct_invites >= 30 and global_team_size >= 4000:
+                    award_amount = 5000  # Tier 6
+                
+                # Create PresidentReward record if any threshold met
+                if award_amount > 0:
+                    try:
+                        from modules.president_reward.model import PresidentReward
+                        PresidentReward(
+                            user_id=ObjectId(referrer.id),
+                            award_amount=award_amount,
+                            global_team_size=global_team_size,
+                            direct_invites=direct_invites,
+                            status='pending',
+                            created_at=datetime.utcnow()
+                        ).save()
+                    except Exception:
+                        pass
+                
                 referrer.updated_at = datetime.utcnow()
                 referrer.save()
             except Exception:
