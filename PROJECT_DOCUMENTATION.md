@@ -202,6 +202,14 @@ The Global Program is organized into two phases:
 - **UPGRADE COST**: Generally equals the SLOT VALUE of the next level
 - **WALLET**: Calculated as TOTAL INCOME minus UPGRADE COST
 
+### Global Distribution
+- **Level (40%)**: 10% Partner Incentive to direct upline + 30% reserved to upgrade corresponding Phase/slot
+- **Profit (30%)**: Net profit portion
+- **Royal Captain Bonus (15%)**
+- **President Reward (15%)**
+- **Triple Entry Reward (5%)**
+- **Shareholders (5%)**
+
 ---
 
 ## 5. DEVELOPMENT REQUIREMENTS
@@ -382,7 +390,13 @@ The system uses a binary tree structure where:
 ## 11. UPGRADE COMMISSION SYSTEM
 
 ### Commission Distribution Rule
-**Whenever a partner upgrades to a specific slot, the upline at that exact level (corresponding to the slot number) will receive 30% upgrade commission. Rest of the 100% money is distributed 1-16 level.**
+**Whenever a partner upgrades to a specific slot, the upline at that exact level (corresponding to the slot number) will receive 30% upgrade commission. The remaining is distributed across Levels 1-16 as per Dual Tree rules.**
+
+### Level-1 Special Rule
+- For Slot 1 activations, the full Level-1 amount goes to the immediate upline.
+
+### First-Two Reserve (Auto-Upgrade) Rule
+- For Slots 2-16, the first two contributors at each level are reserved for the corresponding upline's upgrade at that slot number; remaining contributors are distributed by level rules.
 
 ### Example
 **If a partner upgrades to Slot 5, the 5th upline will receive 30% upgrade commission from that slot's value.**
@@ -573,13 +587,13 @@ The Royal Captain Bonus is a special reward program for members who refer others
 ### Royal Captain Bonus Chart
 
 | Directly Invited Partner | Global Team | Amount Of Dollar |
-| :---------------------- | :---------- | :-------------- |
-| 5                       | -           | $200            |
-| = (Maintaining 5)       | 10          | $200            |
-| = (Maintaining 5)       | 20          | $200            |
-| = (Maintaining 5)       | 30          | $200            |
-| = (Maintaining 5)       | 40          | $250            |
-| = (Maintaining 5)       | 50          | $250            |
+| :----------------------- | :---------- | :--------------- |
+| 5                        | 0           | $200             |
+| = (Maintaining 5)        | 10          | $200             |
+| = (Maintaining 5)        | 20          | $200             |
+| = (Maintaining 5)        | 30          | $200             |
+| = (Maintaining 5)        | 40          | $250             |
+| = (Maintaining 5)        | 50          | $250             |
 
 ### Royal Captain Logic
 - Requires both Matrix and Global package participation
@@ -595,27 +609,27 @@ The Royal Captain Bonus is a special reward program for members who refer others
 The President Reward is a special bonus program for members who achieve specific milestones in direct invitations and global team size.
 
 ### Qualification Criteria
-**If a person directly invites 30 people in both Global and Matrix, they will qualify for the President Reward and receive bonuses according to the chart below.**
+Qualify initially with 10 direct partners and a global team of 80. Rewards then scale by reaching the following thresholds:
 
 ### President Reward Tiers
 
-| Tier | Directly Invited Partner | Global Team | Amount Of Dollar |
-| :--- | :---------------------- | :---------- | :-------------- |
-| 1    | 10                      | 80          | $500            |
-| 2    | -                       | 150         | $700            |
-| 3    | -                       | 200         | $700            |
-| 4    | -                       | 250         | $700            |
-| 5    | -                       | 300         | $700            |
-| 6    | 15                      | 400         | $800            |
-| 7    | -                       | 500         | $800            |
-| 8    | -                       | 600         | $800            |
-| 9    | -                       | 700         | $800            |
-| 10   | 20                      | 1000        | $1500           |
-| 11   | -                       | 1500        | $1500           |
-| 12   | -                       | 2000        | $1500           |
-| 13   | -                       | 2500        | $1500           |
-| 14   | -                       | 3000        | $2000           |
-| 15   | 30                      | 40000       | $3000           |
+| Directly Invited Partner | Global Team | Amount Of Dollar |
+| :----------------------- | :---------- | :--------------- |
+| 10                       | 80          | $500             |
+| =                        | 150         | $700             |
+| =                        | 200         | $700             |
+| =                        | 250         | $700             |
+| =                        | 300         | $700             |
+| 15                       | 400         | $800             |
+| =                        | 500         | $800             |
+| =                        | 600         | $800             |
+| =                        | 700         | $800             |
+| 20                       | 1000        | $1500            |
+| =                        | 1500        | $1500            |
+| =                        | 2000        | $2000            |
+| =                        | 2500        | $2500            |
+| =                        | 3000        | $2500            |
+| 30                       | 4000        | $5000            |
 
 ### President Reward Logic
 - Requires 30 direct invitations in both Global and Matrix
@@ -651,6 +665,15 @@ The Leadership Stipend provides daily returns for members who upgrade to higher-
 - New slot upgrade resets the return calculation
 - Progressive daily income system
 
+#### Leadership Stipend Distribution
+- Level 10: 1.5%
+- Level 11: 1%
+- Level 12: 0.5%
+- Level 13: 0.5%
+- Level 14: 0.5%
+- Level 15: 0.5%
+- Level 16: 0.5%
+
 ---
 
 ## 18. MATRIX PARTNER INCENTIVE
@@ -672,6 +695,52 @@ The Matrix Partner Incentive provides commission structure for Matrix program pa
 - **Level 2**: 9 members (3 under each Level 1 member)
 - **Level 3**: 27 members (3 under each Level 2 member)
 - **Recycle System**: Special mechanism for matrix completion
+
+### Matrix Recycle System (Detailed)
+- Each slot (1-15) completes with 39 members across 3 levels (3 + 9 + 27).
+- When all 39 positions fill, that slot RECYCLES to the direct upline's corresponding slot, occupying the next available position per the matrix placement rules.
+- On recycle, no re-joining payment is required by the recycled user. The triggering join/upgrade is credited into the upline tree's marked circles, and level incomes are distributed to First/Second/Third upline according to the user's relative level in the new tree.
+- Placement cases: If recycled into upline's Level-1, the upline is your Level-2 and their upline is your Level-3; if placed into Level-2/3, relationships adjust accordingly for income distribution.
+- This same recycle and income distribution logic applies uniformly to every Matrix slot (1-15).
+
+### Matrix Recycle Data Model
+- A user can have multiple recycle instances per slot. Each recycle creates a separate, immutable snapshot of a 3-level tree (max 39 members).
+- Storage is snapshot-based so historical trees can be fetched reliably, even after multiple recycles.
+
+Entities:
+- MatrixRecycleInstance
+  - id (UUID/PK)
+  - user_id (FK → users)
+  - slot_number (1-15)
+  - recycle_no (1-based counter per user_id + slot_number)
+  - is_complete (boolean; true when all 39 positions are filled)
+  - created_at, completed_at (timestamps)
+  - UNIQUE(user_id, slot_number, recycle_no)
+- MatrixRecycleNode
+  - id (UUID/PK)
+  - instance_id (FK → MatrixRecycleInstance)
+  - occupant_user_id (FK → users)
+  - level_index (1, 2, or 3)
+  - position_index (0-based within level; 0..2 for L1, 0..8 for L2, 0..26 for L3)
+  - placed_at (timestamp)
+  - UNIQUE(instance_id, level_index, position_index)
+
+Notes:
+- If a user's slot has never recycled, the "current" tree is considered the in-progress tree; serve it partially with however many nodes exist.
+- On each recycle completion, increment recycle_no and start a fresh in-progress tree for that slot.
+
+### Placement and Indexing Rules (Authoritative)
+- Level sizes: L1 = 3, L2 = 9, L3 = 27. Completion at 39 occupants.
+- L1 index mapping: 0 = left, 1 = upline-reserve (middle), 2 = right.
+- L2 indexing is breadth-first, left-to-right under L1 parents:
+  - Positions 0..2 under L1[0]; 3..5 under L1[1]; 6..8 under L1[2].
+  - Formula: L2 index = parentL1Index * 3 + childOffset (childOffset ∈ {0,1,2}).
+- L3 indexing is breadth-first, left-to-right under L2 parents:
+  - Positions 0..2 under L2[0], 3..5 under L2[1], …, 24..26 under L2[8].
+  - Formula: L3 index = parentL2Index * 3 + childOffset.
+- Placement algorithm (BFS): always place at the shallowest level with a vacancy, scanning left→right. L1 fills strictly in order: left → middle (upline-reserve) → right.
+- Recycle re-entry placement: apply the same BFS algorithm in the direct upline's current in-progress tree for that slot. If that tree is full at the target level per rules, follow spillover to the next eligible upline path and continue BFS.
+- Duplicate occupants: the same `occupant_user_id` may appear multiple times across trees due to recycle re-entries. Treat nodes as placements, not a global uniqueness constraint.
 
 ---
 
@@ -728,6 +797,45 @@ The Matrix Auto Upgrade System automatically uses earnings from specific members
 - Automatic reinvestment for next slot upgrade
 - Applies from Level 1 to Level 15
 - Upline Reserve position for special handling
+
+### Manual Upgrade Options
+- You may upgrade manually using wallet funds.
+- Reserve combination is allowed: with 2 reserves + 1 wallet share, or 1 reserve + 2 wallet shares to complete an upgrade.
+- If the next slot is already upgraded, no further funds from that tree go into reserve.
+
+### Matrix Recycle Tree API
+- Fetch a user's matrix tree by recycle number and slot. Frontend provides user_id and recycle_no; backend returns the tree snapshot for that recycle. If multiple recycles happened, there will be multiple trees per user.
+- If no recycle exists yet for that slot, return the current in-progress tree (partial), with however many members exist.
+
+Endpoints:
+- GET `/matrix/recycle-tree?user_id={uid}&slot={1-15}&recycle_no={n|current}`
+  - recycle_no: integer ≥ 1, or the string `current` to force the in-progress tree
+  - Behavior:
+    - If recycle_no = current → return current in-progress tree
+    - If recycle_no ≤ max recycle for that user+slot → return the matching snapshot
+    - If recycle_no > max recycle (or none exist) → return current in-progress tree
+  - Response shape:
+    ```json
+    {
+      "user_id": "...",
+      "slot_number": 1,
+      "recycle_no": 2,
+      "is_snapshot": true,
+      "is_complete": true,
+      "total_recycles": 3,
+      "nodes": [
+        { "level": 1, "position": 0, "user_id": "..." },
+        { "level": 1, "position": 1, "user_id": "..." },
+        { "level": 1, "position": 2, "user_id": "..." },
+        { "level": 2, "position": 0, "user_id": "..." }
+        // ... up to 39 for complete snapshots; partial for in-progress
+      ]
+    }
+    ```
+  - Metadata helps frontend navigate between snapshots and current state.
+
+- GET `/matrix/recycles?user_id={uid}&slot={1-15}`
+  - Returns a list of recycle instances for that user+slot with `recycle_no`, `is_complete`, `created_at`, `completed_at`.
 
 ---
 
@@ -800,7 +908,7 @@ The Matrix Auto Upgrade System automatically uses earnings from specific members
 The Spark Bonus is a special fund distribution system that provides rewards across different levels of the Matrix program.
 
 ### Spark Bonus Fund Structure
-**20% OF THE SPARK BONUS FUND, WHICH IS MADE UP OF 8% BINARY AND MATRIX, IS ALLOCATED TO THE TRIPLE ENTRY REWARD, AND THE REMAINING 100% IS DISTRIBUTED ACROSS THE 1ST TO 15TH LEVELS OF THE MATRIX ACCORDING TO THE CHART BELOW**
+20% of the Spark Bonus fund (funded by 8% from Binary and 8% from Matrix), plus an additional 5% from Global, is allocated to the Triple Entry Reward. The remaining 80% (treated as 100% baseline) is distributed across Matrix Levels 1-14 according to the chart below.
 
 ### Spark Bonus Distribution Chart
 
@@ -979,6 +1087,7 @@ The Jackpot Program is a raffle draw system that provides opportunities to win m
 - **OPEN POOL**: 50%
 - **TOP DIRECT PROMOTERS POOL**: 30%
 - **TOP BUYERS POOL**: 10%
+- **BINARY CONTRIBUTION**: 5% deduction from each Binary slot activation is added to the Jackpot fund
 
 ### Free Coupons System
 **NOTE- FREE COUPONS FOR BINARY SLOT UPGRADES**
