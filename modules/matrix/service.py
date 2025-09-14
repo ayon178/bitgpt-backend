@@ -235,6 +235,9 @@ class MatrixService:
             # Track mentorship relationships (automatic)
             self._track_mentorship_relationships_automatic(str(referrer_tree.user_id), user_id)
             
+            # Trigger automatic rank update
+            self.trigger_rank_update_automatic(user_id)
+            
             return {
                 "success": True,
                 "level": placement_position['level'],
@@ -1454,8 +1457,8 @@ class MatrixService:
                 commission_type='direct_of_direct',
                 slot_no=1,  # Based on joining
                 amount=amount,
-                currency='USDT',
-                status='paid',
+            currency='USDT',
+            status='paid',
                 created_at=datetime.utcnow(),
                 paid_at=datetime.utcnow(),
                 metadata={
@@ -1527,8 +1530,8 @@ class MatrixService:
                 return {"success": False, "error": "Target slot must be between 1 and 15"}
             
             # Get user's matrix tree
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if not matrix_tree:
+        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+        if not matrix_tree:
                 return {"success": False, "error": "Matrix tree not found"}
             
             # Check if user has the current slot
@@ -1564,8 +1567,8 @@ class MatrixService:
             # Update matrix tree
             matrix_tree.current_slot = to_slot_no
             matrix_tree.last_upgrade_at = datetime.utcnow()
-            matrix_tree.save()
-            
+                matrix_tree.save()
+    
             # Create upgrade log
             self._create_matrix_upgrade_log(
                 user_id=user_id,
@@ -1602,6 +1605,9 @@ class MatrixService:
             
             # Trigger all auto-calculations for the new slot
             self._trigger_slot_upgrade_calculations(user_id, to_slot_no)
+            
+            # Trigger automatic rank update
+            self.trigger_rank_update_automatic(user_id)
             
             return {
                 "success": True,
@@ -1799,4 +1805,235 @@ class MatrixService:
             return {"success": True, "status": status}
         except Exception as e:
             print(f"Error getting Matrix upgrade status: {e}")
+    
+    # ==================== BINARY PROGRAM INTEGRATION METHODS ====================
+    
+    def update_user_rank_from_programs(self, user_id: str):
+        """Update user rank based on Binary and Matrix slot activations."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get Binary slots activated
+            binary_slots = self._get_binary_slots_activated(user_id)
+            
+            # Get Matrix slots activated
+            matrix_slots = self._get_matrix_slots_activated(user_id)
+            
+            # Calculate total slots activated
+            total_slots = binary_slots + matrix_slots
+            
+            # Determine rank based on total slots
+            new_rank = self._calculate_rank_from_slots(total_slots)
+            
+            # Update user rank
+            old_rank = getattr(user, 'rank', 'Bitron')
+            user.rank = new_rank
+            user.save()
+            
+            # Log rank update
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="rank_update",
+                amount=0,
+                description=f"Rank updated from {old_rank} to {new_rank} (Binary: {binary_slots}, Matrix: {matrix_slots}, Total: {total_slots})"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"rank_update_{user_id}",
+                event_type='rank_update',
+                event_data={
+                    'program': 'rank_system',
+                    'user_id': user_id,
+                    'old_rank': old_rank,
+                    'new_rank': new_rank,
+                    'binary_slots': binary_slots,
+                    'matrix_slots': matrix_slots,
+                    'total_slots': total_slots
+                }
+            )
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "old_rank": old_rank,
+                "new_rank": new_rank,
+                "binary_slots": binary_slots,
+                "matrix_slots": matrix_slots,
+                "total_slots": total_slots,
+                "message": f"Rank updated from {old_rank} to {new_rank}"
+            }
+        except Exception as e:
+            print(f"Error updating user rank: {e}")
             return {"success": False, "error": str(e)}
+    
+    def _get_binary_slots_activated(self, user_id: str):
+        """Get number of Binary slots activated for a user."""
+        try:
+            # This would integrate with Binary program
+            # For now, return 0 as placeholder
+            # In real implementation, this would query Binary program data
+            
+            # Placeholder: Check if user has Binary tree
+            # In actual implementation, this would be:
+            # binary_tree = BinaryTree.objects(user_id=ObjectId(user_id)).first()
+            # return binary_tree.activated_slots if binary_tree else 0
+            
+            return 0  # Placeholder for now
+        except Exception as e:
+            print(f"Error getting binary slots: {e}")
+            return 0
+    
+    def _get_matrix_slots_activated(self, user_id: str):
+        """Get number of Matrix slots activated for a user."""
+        try:
+            # Get Matrix tree
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return 0
+            
+            # Return current slot (highest activated slot)
+            return matrix_tree.current_slot
+        except Exception as e:
+            print(f"Error getting matrix slots: {e}")
+            return 0
+    
+    def _calculate_rank_from_slots(self, total_slots: int):
+        """Calculate rank based on total slots activated."""
+        rank_mapping = {
+            1: "Bitron",    # 1 slot
+            2: "Cryzen",    # 2 slots
+            3: "Neura",     # 3 slots
+            4: "Glint",     # 4 slots
+            5: "Stellar",   # 5 slots
+            6: "Ignis",     # 6 slots
+            7: "Quanta",    # 7 slots
+            8: "Lumix",     # 8 slots
+            9: "Arion",     # 9 slots
+            10: "Nexus",    # 10 slots
+            11: "Fyre",     # 11 slots
+            12: "Axion",    # 12 slots
+            13: "Trion",    # 13 slots
+            14: "Spectra",  # 14 slots
+            15: "Omega"     # 15 slots
+        }
+        
+        # Cap at 15 slots for Omega rank
+        effective_slots = min(total_slots, 15)
+        return rank_mapping.get(effective_slots, "Bitron")
+    
+    def get_user_rank_status(self, user_id: str):
+        """Get comprehensive rank status for a user."""
+        try:
+            # Get user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get current rank
+            current_rank = getattr(user, 'rank', 'Bitron')
+            
+            # Get Binary slots
+            binary_slots = self._get_binary_slots_activated(user_id)
+            
+            # Get Matrix slots
+            matrix_slots = self._get_matrix_slots_activated(user_id)
+            
+            # Calculate total slots
+            total_slots = binary_slots + matrix_slots
+            
+            # Get rank progression
+            rank_progression = self._get_rank_progression(total_slots)
+            
+            # Get next rank requirements
+            next_rank_info = self._get_next_rank_info(total_slots)
+            
+            status = {
+                "user_id": user_id,
+                "current_rank": current_rank,
+                "slot_breakdown": {
+                    "binary_slots": binary_slots,
+                    "matrix_slots": matrix_slots,
+                    "total_slots": total_slots
+                },
+                "rank_progression": rank_progression,
+                "next_rank": next_rank_info,
+                "rank_system_info": {
+                    "total_ranks": 15,
+                    "rank_names": ["Bitron", "Cryzen", "Neura", "Glint", "Stellar", 
+                                 "Ignis", "Quanta", "Lumix", "Arion", "Nexus",
+                                 "Fyre", "Axion", "Trion", "Spectra", "Omega"],
+                    "max_slots": 15,
+                    "description": "Ranks are achieved by activating slots in Binary and Matrix programs"
+                }
+            }
+            
+            return {"success": True, "status": status}
+        except Exception as e:
+            print(f"Error getting rank status: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _get_rank_progression(self, total_slots: int):
+        """Get rank progression information."""
+        ranks = ["Bitron", "Cryzen", "Neura", "Glint", "Stellar", 
+                "Ignis", "Quanta", "Lumix", "Arion", "Nexus",
+                "Fyre", "Axion", "Trion", "Spectra", "Omega"]
+        
+        current_rank_index = min(total_slots - 1, 14)
+        current_rank = ranks[current_rank_index]
+        
+        return {
+            "current_rank": current_rank,
+            "current_rank_index": current_rank_index + 1,
+            "total_ranks": 15,
+            "progress_percentage": ((current_rank_index + 1) / 15) * 100
+        }
+    
+    def _get_next_rank_info(self, total_slots: int):
+        """Get next rank information."""
+        ranks = ["Bitron", "Cryzen", "Neura", "Glint", "Stellar", 
+                "Ignis", "Quanta", "Lumix", "Arion", "Nexus",
+                "Fyre", "Axion", "Trion", "Spectra", "Omega"]
+        
+        if total_slots >= 15:
+            return {
+                "next_rank": "Omega (Max Rank)",
+                "slots_needed": 0,
+                "is_max_rank": True
+            }
+        
+        next_rank_index = total_slots
+        next_rank = ranks[next_rank_index]
+        slots_needed = 1
+        
+        return {
+            "next_rank": next_rank,
+            "slots_needed": slots_needed,
+            "is_max_rank": False
+        }
+    
+    def trigger_rank_update_automatic(self, user_id: str):
+        """Automatically trigger rank update when slots are activated."""
+        try:
+            print(f"🎯 Triggering automatic rank update for user {user_id}")
+            
+            # Update rank
+            rank_result = self.update_user_rank_from_programs(user_id)
+            
+            if rank_result.get("success"):
+                print(f"✅ Rank updated automatically")
+                print(f"   - Old rank: {rank_result.get('old_rank')}")
+                print(f"   - New rank: {rank_result.get('new_rank')}")
+                print(f"   - Binary slots: {rank_result.get('binary_slots')}")
+                print(f"   - Matrix slots: {rank_result.get('matrix_slots')}")
+                print(f"   - Total slots: {rank_result.get('total_slots')}")
+            else:
+                print(f"❌ Rank update failed: {rank_result.get('error')}")
+                
+        except Exception as e:
+            print(f"Error in automatic rank update: {e}")
+    
+    # ==================== MATRIX UPGRADE SYSTEM METHODS ====================

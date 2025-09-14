@@ -168,11 +168,11 @@ async def get_matrix_tree(
         for slot in matrix_tree.slots:
             slots.append({
                 "slot_no": slot.slot_no,
-                "slot_name": slot.slot_name,
-                "slot_value": float(slot.slot_value),
-                "level": slot.level,
+                            "slot_name": slot.slot_name,
+                            "slot_value": float(slot.slot_value),
+                            "level": slot.level,
                 "members_count": slot.members_count,
-                "is_active": slot.is_active,
+                            "is_active": slot.is_active,
                 "activated_at": slot.activated_at.isoformat() if slot.activated_at else None,
                 "total_income": float(slot.total_income),
                 "upgrade_cost": float(slot.upgrade_cost),
@@ -693,5 +693,90 @@ async def get_matrix_upgrade_status_endpoint(
         return error_response(result.get("error", "Failed to get Matrix upgrade status"))
     except HTTPException as e:
         raise e
+    except Exception as e:
+        return error_response(str(e))
+
+# ==================== RANK SYSTEM API ENDPOINTS ====================
+
+@router.get("/rank-status/{user_id}")
+async def get_user_rank_status_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive rank status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's rank status")
+        
+        service = MatrixService()
+        result = service.get_user_rank_status(user_id)
+        
+        if result.get("success"):
+            return success_response(result.get("status"), "Rank status fetched successfully")
+        return error_response(result.get("error", "Failed to get rank status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/update-rank/{user_id}")
+async def update_user_rank_endpoint(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Update user rank based on Binary and Matrix slot activations."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to update this user's rank")
+        
+        service = MatrixService()
+        result = service.update_user_rank_from_programs(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "Rank updated successfully")
+        return error_response(result.get("error", "Failed to update rank"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/rank-system-info")
+async def get_rank_system_info_endpoint(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive rank system information."""
+    try:
+        rank_system_info = {
+            "total_ranks": 15,
+            "rank_names": ["Bitron", "Cryzen", "Neura", "Glint", "Stellar", 
+                          "Ignis", "Quanta", "Lumix", "Arion", "Nexus",
+                          "Fyre", "Axion", "Trion", "Spectra", "Omega"],
+            "rank_descriptions": {
+                "Bitron": "1 slot activated",
+                "Cryzen": "2 slots activated", 
+                "Neura": "3 slots activated",
+                "Glint": "4 slots activated",
+                "Stellar": "5 slots activated",
+                "Ignis": "6 slots activated",
+                "Quanta": "7 slots activated",
+                "Lumix": "8 slots activated",
+                "Arion": "9 slots activated",
+                "Nexus": "10 slots activated",
+                "Fyre": "11 slots activated",
+                "Axion": "12 slots activated",
+                "Trion": "13 slots activated",
+                "Spectra": "14 slots activated",
+                "Omega": "15 slots activated (Max Rank)"
+            },
+            "slot_sources": {
+                "binary_program": "Binary slot activations",
+                "matrix_program": "Matrix slot activations"
+            },
+            "calculation_method": "Total slots = Binary slots + Matrix slots",
+            "max_slots": 15,
+            "description": "Ranks are achieved by activating slots in Binary and Matrix programs. Each rank represents leadership and growth within the platform."
+        }
+        
+        return success_response(rank_system_info, "Rank system information fetched successfully")
     except Exception as e:
         return error_response(str(e))
