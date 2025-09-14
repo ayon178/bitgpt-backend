@@ -226,6 +226,9 @@ class MatrixService:
                 # Automatically trigger recycle process
                 self._check_and_process_automatic_recycle(str(referrer_tree.user_id), 1)
             
+            # Check for automatic upgrade after placement
+            self.check_and_process_automatic_upgrade(str(referrer_tree.user_id), referrer_tree.current_slot)
+            
             return {
                 "success": True,
                 "level": placement_position['level'],
@@ -799,3 +802,242 @@ class MatrixService:
             ).save()
         except Exception as e:
             print(f"Error recording blockchain event: {str(e)}")
+    
+    # ==================== AUTO UPGRADE SYSTEM METHODS ====================
+    
+    def detect_middle_three_members(self, user_id: str, slot_no: int):
+        """Detect the middle 3 members at each level for auto upgrade."""
+        try:
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"success": False, "error": "Matrix tree not found"}
+            
+            # Get Level 2 nodes (positions 1, 4, 7 are middle 3)
+            level_2_nodes = [node for node in matrix_tree.nodes if node.level == 2]
+            
+            # Middle 3 positions in Level 2: 1, 4, 7 (one under each Level 1 member)
+            middle_three_positions = [1, 4, 7]
+            middle_three_members = []
+            
+            for node in level_2_nodes:
+                if node.position in middle_three_positions:
+                    middle_three_members.append({
+                        "user_id": str(node.user_id),
+                        "level": node.level,
+                        "position": node.position,
+                        "placed_at": node.placed_at
+                    })
+            
+            return {
+                "success": True,
+                "middle_three_members": middle_three_members,
+                "total_found": len(middle_three_members),
+                "required": 3,
+                "is_complete": len(middle_three_members) == 3
+            }
+        except Exception as e:
+            print(f"Error detecting middle three members: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def calculate_middle_three_earnings(self, user_id: str, slot_no: int):
+        """Calculate 100% earnings from middle 3 members for auto upgrade."""
+        try:
+            # Get middle 3 members
+            middle_three_result = self.detect_middle_three_members(user_id, slot_no)
+            if not middle_three_result.get("success"):
+                return {"success": False, "error": "Failed to detect middle three members"}
+            
+            middle_three_members = middle_three_result.get("middle_three_members", [])
+            if len(middle_three_members) != 3:
+                return {
+                    "success": False, 
+                    "error": f"Middle three not complete. Found: {len(middle_three_members)}, Required: 3"
+                }
+            
+            # Get current slot info
+            current_slot_info = self.MATRIX_SLOTS.get(slot_no, {})
+            if not current_slot_info:
+                return {"success": False, "error": f"Slot {slot_no} not found"}
+            
+            # Calculate 100% earnings from middle 3 members
+            slot_value = current_slot_info.get('value', 0)
+            total_earnings = slot_value * 3  # 100% from each of 3 members
+            
+            # Get next slot upgrade cost
+            next_slot_no = slot_no + 1
+            next_slot_info = self.MATRIX_SLOTS.get(next_slot_no, {})
+            next_upgrade_cost = next_slot_info.get('value', 0)
+            
+            return {
+                "success": True,
+                "current_slot": slot_no,
+                "current_slot_value": float(slot_value),
+                "middle_three_members": middle_three_members,
+                "total_earnings": float(total_earnings),
+                "next_slot": next_slot_no,
+                "next_upgrade_cost": float(next_upgrade_cost),
+                "can_upgrade": total_earnings >= next_upgrade_cost,
+                "surplus": float(total_earnings - next_upgrade_cost) if total_earnings >= next_upgrade_cost else 0
+            }
+        except Exception as e:
+            print(f"Error calculating middle three earnings: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def process_automatic_upgrade(self, user_id: str, slot_no: int):
+        """Process automatic upgrade using 100% earnings from middle 3 members."""
+        try:
+            # Calculate middle three earnings
+            earnings_result = self.calculate_middle_three_earnings(user_id, slot_no)
+            if not earnings_result.get("success"):
+                return {"success": False, "error": earnings_result.get("error")}
+            
+            if not earnings_result.get("can_upgrade"):
+                return {
+                    "success": False, 
+                    "error": f"Insufficient earnings. Required: {earnings_result.get('next_upgrade_cost')}, Available: {earnings_result.get('total_earnings')}"
+                }
+            
+            # Get current matrix tree
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not matrix_tree:
+                return {"success": False, "error": "Matrix tree not found"}
+            
+            # Update to next slot
+            next_slot_no = slot_no + 1
+            next_slot_info = self.MATRIX_SLOTS.get(next_slot_no, {})
+            
+            if not next_slot_info:
+                return {"success": False, "error": f"Next slot {next_slot_no} not available"}
+            
+            # Update matrix tree
+            matrix_tree.current_slot = next_slot_no
+            matrix_tree.current_level = next_slot_info.get('level', next_slot_no)
+            matrix_tree.last_updated = datetime.utcnow()
+            matrix_tree.save()
+            
+            # Update MatrixAutoUpgrade
+            matrix_auto_upgrade = MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+            if matrix_auto_upgrade:
+                matrix_auto_upgrade.current_slot_no = next_slot_no
+                matrix_auto_upgrade.current_level = next_slot_info.get('level', next_slot_no)
+                matrix_auto_upgrade.middle_three_available = 0  # Reset for new slot
+                matrix_auto_upgrade.is_eligible = False  # Reset eligibility
+                matrix_auto_upgrade.can_upgrade = False  # Reset upgrade status
+                
+                # Set next upgrade cost
+                next_next_slot = next_slot_no + 1
+                if next_next_slot <= 15:
+                    next_next_slot_info = self.MATRIX_SLOTS.get(next_next_slot, {})
+                    matrix_auto_upgrade.next_upgrade_cost = next_next_slot_info.get('value', 0)
+                
+                matrix_auto_upgrade.last_updated = datetime.utcnow()
+                matrix_auto_upgrade.save()
+            
+            # Create upgrade log
+            self._create_matrix_upgrade_log(
+                user_id=user_id,
+                from_slot_no=slot_no,
+                to_slot_no=next_slot_no,
+                upgrade_cost=earnings_result.get('next_upgrade_cost'),
+                earnings_used=earnings_result.get('total_earnings'),
+                profit_gained=earnings_result.get('surplus'),
+                trigger_type='auto',
+                contributors=[member['user_id'] for member in earnings_result.get('middle_three_members', [])]
+            )
+            
+            # Log earning history
+            self._log_earning_history(
+                user_id=user_id,
+                earning_type="automatic_upgrade",
+                amount=earnings_result.get('surplus', 0),
+                description=f"Automatic upgrade from Slot {slot_no} to Slot {next_slot_no} using middle 3 earnings"
+            )
+            
+            # Log blockchain event
+            self._log_blockchain_event(
+                tx_hash=f"auto_upgrade_{user_id}_{slot_no}_{next_slot_no}",
+                event_type='matrix_automatic_upgrade',
+                event_data={
+                    'program': 'matrix',
+                    'from_slot': slot_no,
+                    'to_slot': next_slot_no,
+                    'user_id': user_id,
+                    'earnings_used': earnings_result.get('total_earnings'),
+                    'profit_gained': earnings_result.get('surplus'),
+                    'contributors': earnings_result.get('middle_three_members', [])
+                }
+            )
+            
+            return {
+                "success": True,
+                "from_slot": slot_no,
+                "to_slot": next_slot_no,
+                "earnings_used": earnings_result.get('total_earnings'),
+                "profit_gained": earnings_result.get('surplus'),
+                "contributors": earnings_result.get('middle_three_members', []),
+                "message": f"Successfully upgraded from Slot {slot_no} to Slot {next_slot_no}"
+            }
+        except Exception as e:
+            print(f"Error processing automatic upgrade: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _create_matrix_upgrade_log(self, user_id: str, from_slot_no: int, to_slot_no: int, 
+                                 upgrade_cost: float, earnings_used: float, profit_gained: float,
+                                 trigger_type: str, contributors: list):
+        """Create matrix upgrade log entry."""
+        try:
+            from_slot_info = self.MATRIX_SLOTS.get(from_slot_no, {})
+            to_slot_info = self.MATRIX_SLOTS.get(to_slot_no, {})
+            
+            MatrixUpgradeLog(
+                user_id=ObjectId(user_id),
+                from_slot_no=from_slot_no,
+                to_slot_no=to_slot_no,
+                from_slot_name=from_slot_info.get('name', f'SLOT_{from_slot_no}'),
+                to_slot_name=to_slot_info.get('name', f'SLOT_{to_slot_no}'),
+                upgrade_cost=upgrade_cost,
+                currency='USDT',
+                earnings_used=earnings_used,
+                profit_gained=profit_gained,
+                trigger_type=trigger_type,
+                contributors=[ObjectId(contributor) for contributor in contributors],
+                status='completed',
+                created_at=datetime.utcnow(),
+                completed_at=datetime.utcnow()
+            ).save()
+        except Exception as e:
+            print(f"Error creating matrix upgrade log: {e}")
+    
+    def check_and_process_automatic_upgrade(self, user_id: str, slot_no: int):
+        """Check and automatically process upgrade when middle 3 earnings are sufficient."""
+        try:
+            # Calculate middle three earnings
+            earnings_result = self.calculate_middle_three_earnings(user_id, slot_no)
+            if not earnings_result.get("success"):
+                print(f"ℹ️ Auto upgrade check failed for user {user_id}, slot {slot_no}: {earnings_result.get('error')}")
+                return
+            
+            if earnings_result.get("can_upgrade"):
+                print(f"🔄 Automatic upgrade detected for user {user_id}, slot {slot_no}")
+                print(f"   - Middle 3 earnings: {earnings_result.get('total_earnings')} USDT")
+                print(f"   - Next upgrade cost: {earnings_result.get('next_upgrade_cost')} USDT")
+                print(f"   - Surplus: {earnings_result.get('surplus')} USDT")
+                
+                # Process the upgrade automatically
+                result = self.process_automatic_upgrade(user_id, slot_no)
+                
+                if result.get("success"):
+                    print(f"✅ Automatic upgrade completed successfully for user {user_id}")
+                    print(f"   - Upgraded from Slot {result.get('from_slot')} to Slot {result.get('to_slot')}")
+                    print(f"   - Earnings used: {result.get('earnings_used')} USDT")
+                    print(f"   - Profit gained: {result.get('profit_gained')} USDT")
+                else:
+                    print(f"❌ Automatic upgrade failed for user {user_id}: {result.get('error')}")
+            else:
+                print(f"ℹ️ Auto upgrade not ready for user {user_id}, slot {slot_no}")
+                print(f"   - Middle 3 earnings: {earnings_result.get('total_earnings')} USDT")
+                print(f"   - Required: {earnings_result.get('next_upgrade_cost')} USDT")
+                print(f"   - Shortfall: {earnings_result.get('next_upgrade_cost') - earnings_result.get('total_earnings')} USDT")
+                
+        except Exception as e:
+            print(f"Error in automatic upgrade check: {e}")

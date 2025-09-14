@@ -304,3 +304,101 @@ async def process_recycle_completion_endpoint(
         raise e
     except Exception as e:
         return error_response(str(e))
+
+# ==================== AUTO UPGRADE SYSTEM API ENDPOINTS ====================
+
+@router.get("/middle-three-earnings/{user_id}")
+async def get_middle_three_earnings_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get middle 3 earnings calculation for auto upgrade."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's earnings")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        earnings_result = service.calculate_middle_three_earnings(user_id, slot_no)
+        
+        if earnings_result.get("success"):
+            return success_response(earnings_result, "Middle three earnings calculated successfully")
+        return error_response(earnings_result.get("error", "Failed to calculate middle three earnings"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/trigger-auto-upgrade")
+async def trigger_automatic_upgrade_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Trigger automatic upgrade using middle 3 earnings."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to trigger upgrade for this user")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.process_automatic_upgrade(user_id, slot_no)
+        
+        if result.get("success"):
+            return success_response(result, "Automatic upgrade processed successfully")
+        return error_response(result.get("error", "Failed to process automatic upgrade"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/auto-upgrade-status/{user_id}")
+async def get_auto_upgrade_status_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive auto upgrade status for a user."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's auto upgrade status")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        
+        # Get middle three members
+        middle_three_result = service.detect_middle_three_members(user_id, slot_no)
+        
+        # Get earnings calculation
+        earnings_result = service.calculate_middle_three_earnings(user_id, slot_no)
+        
+        # Get matrix auto upgrade status
+        matrix_auto_upgrade = MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+        
+        status = {
+            "user_id": user_id,
+            "current_slot": slot_no,
+            "middle_three_detection": middle_three_result,
+            "earnings_calculation": earnings_result,
+            "auto_upgrade_status": {
+                "current_slot_no": matrix_auto_upgrade.current_slot_no if matrix_auto_upgrade else slot_no,
+                "current_level": matrix_auto_upgrade.current_level if matrix_auto_upgrade else 1,
+                "middle_three_available": matrix_auto_upgrade.middle_three_available if matrix_auto_upgrade else 0,
+                "is_eligible": matrix_auto_upgrade.is_eligible if matrix_auto_upgrade else False,
+                "can_upgrade": matrix_auto_upgrade.can_upgrade if matrix_auto_upgrade else False,
+                "next_upgrade_cost": float(matrix_auto_upgrade.next_upgrade_cost) if matrix_auto_upgrade else 0
+            } if matrix_auto_upgrade else None
+        }
+        
+        return success_response(status, "Auto upgrade status fetched successfully")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
