@@ -425,7 +425,7 @@ class MatrixService:
         try:
             BlockchainEvent(
                 tx_hash=tx_hash,
-                event_type='matrix_join',
+                event_type='join_payment',
                 event_data={
                     'program': 'matrix',
                     'slot_no': 1,
@@ -811,18 +811,63 @@ class MatrixService:
             return 0
     
     def _log_blockchain_event(self, tx_hash: str, event_type: str, event_data: dict):
-        """Log blockchain event for audit trail."""
+        """Log blockchain event for audit trail, normalizing to allowed event types."""
         try:
+            allowed = {
+                'join_payment',
+                'slot_activated',
+                'income_distributed',
+                'upgrade_triggered',
+                'spillover_occurred',
+                'jackpot_settled',
+                'spark_distributed'
+            }
+            # Normalize common internal event names
+            mapping = {
+                'matrix_join': 'join_payment',
+                'matrix_automatic_upgrade': 'upgrade_triggered',
+                'matrix_automatic_recycle': 'spillover_occurred'
+            }
+            normalized = mapping.get(event_type, event_type)
+            if normalized not in allowed:
+                normalized = 'income_distributed'
+
             from ..blockchain.model import BlockchainEvent
             BlockchainEvent(
                 tx_hash=tx_hash,
-                event_type=event_type,
+                event_type=normalized,
                 event_data=event_data,
                 status='processed',
                 processed_at=datetime.utcnow()
             ).save()
         except Exception as e:
             print(f"Error recording blockchain event: {str(e)}")
+
+    def _log_earning_history(self, user_id: str, earning_type: str, amount, description: str = "", slot_no: int = None, slot_name: str = None, source_user_id: str = None, source_type: str = None, level: int = None):
+        """Generic earning history logger with type normalization to allowed choices."""
+        try:
+            allowed_types = {'slot_activation', 'commission', 'level_income', 'mentorship', 'dream_matrix'}
+            type_mapping = {
+                'automatic_upgrade': 'level_income',
+                'automatic_recycle': 'level_income',
+                'matrix_upgrade': 'slot_activation',
+                'matrix_join': 'slot_activation'
+            }
+            normalized_type = type_mapping.get(earning_type, earning_type if earning_type in allowed_types else 'level_income')
+
+            MatrixEarningHistory(
+                user_id=ObjectId(user_id) if user_id else None,
+                earning_type=normalized_type,
+                slot_no=slot_no,
+                slot_name=slot_name,
+                amount=Decimal(str(amount)),
+                source_user_id=ObjectId(source_user_id) if source_user_id else None,
+                source_type=source_type,
+                level=level,
+                description=description
+            ).save()
+        except Exception as e:
+            print(f"Error logging earning history: {e}")
     
     # ==================== AUTO UPGRADE SYSTEM METHODS ====================
     

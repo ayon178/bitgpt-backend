@@ -199,6 +199,79 @@ async def get_matrix_tree(
     except Exception as e:
         return error_response(str(e))
 
+@router.get("/tree-graph/{user_id}")
+async def get_matrix_tree_graph(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Return Matrix tree in frontend graph-friendly structure."""
+    try:
+        from .model import MatrixTree
+        from .model import MatrixRecycleInstance
+
+        matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+        if not matrix_tree:
+            raise HTTPException(status_code=404, detail="User not in Matrix program")
+
+        # Helper to compute graph id from level/position according to frontend MatrixGraph
+        def compute_graph_id(level: int, position: int) -> int | None:
+            if level == 0:
+                return 1
+            if level == 1:
+                # Level-1 three positions map to ids 2,3,4? Frontend expects 2 and 3 and then children 4,10,16 under 1
+                # Based on MatrixGraph usage: ids used explicitly are 1,2,3 for top row
+                return 2 + position  # 2,3,4
+            if level == 2:
+                # Under parent id p in {2,3,4}, children are p+3, p+9, p+15
+                parent_l1_index = position // 3  # 0..2
+                child_offset = position % 3      # 0..2
+                parent_id = 2 + parent_l1_index  # 2,3,4
+                return parent_id + (3 + 6 * child_offset)  # 4/10/16, 5/11/17, 6/12/18
+            return None  # Deeper levels not displayed by current frontend graph
+
+        # Build users array
+        users = []
+        for node in matrix_tree.nodes:
+            gid = compute_graph_id(node.level, node.position)
+            if gid is None:
+                continue
+            node_type = "self" if str(node.user_id) == user_id and node.level == 0 else "downLine"
+            users.append({
+                "id": gid,
+                "type": node_type,
+                "userId": str(node.user_id)
+            })
+
+        # Ensure root exists in users
+        if not any(u.get("id") == 1 for u in users):
+            users.append({"id": 1, "type": "self", "userId": user_id})
+
+        # Meta fields for compatibility with mock data
+        ms = MatrixService()
+        current_slot = matrix_tree.current_slot or 1
+        slot_info = ms.MATRIX_SLOTS.get(current_slot, {"value": 11})
+        price = float(slot_info["value"]) if isinstance(slot_info["value"], (int, float)) else 11.0
+        recycle_count = MatrixRecycleInstance.objects(user_id=ObjectId(user_id), slot_number=current_slot).count()
+
+        payload = {
+            "id": current_slot * 10 + 1,  # synthetic id similar to mocks
+            "price": price,
+            "userId": str(user_id),
+            "recycle": recycle_count,
+            "isCompleted": bool(matrix_tree.is_complete),
+            "isProcess": False,
+            "isAutoUpgrade": False,
+            "isManualUpgrade": False,
+            "processPercent": 0,
+            "users": sorted(users, key=lambda x: x["id"])  # stable order
+        }
+
+        return success_response(payload, "Matrix tree graph data fetched successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
 @router.get("/auto-upgrade-status/{user_id}")
 async def get_matrix_auto_upgrade_status(
     user_id: str,
