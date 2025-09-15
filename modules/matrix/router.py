@@ -8,6 +8,7 @@ from auth.service import authentication_service
 from ..user.model import User
 from .service import MatrixService
 from utils.response import success_response, error_response
+from ..auto_upgrade.model import MatrixAutoUpgrade
 
 router = APIRouter(prefix="/matrix", tags=["Matrix Program"])
 
@@ -294,7 +295,7 @@ async def get_matrix_auto_upgrade_status(
             "is_eligible": auto_upgrade.is_eligible,
             "next_upgrade_cost": float(auto_upgrade.next_upgrade_cost),
             "can_upgrade": auto_upgrade.can_upgrade,
-            "last_updated": auto_upgrade.last_updated.isoformat() if auto_upgrade.last_updated else None
+            "last_updated": (auto_upgrade.updated_at.isoformat() if getattr(auto_upgrade, 'updated_at', None) else (auto_upgrade.last_check_at.isoformat() if getattr(auto_upgrade, 'last_check_at', None) else None))
         })
         
     except HTTPException:
