@@ -216,18 +216,16 @@ async def get_matrix_tree_graph(
 
         # Helper to compute graph id from level/position according to frontend MatrixGraph
         def compute_graph_id(level: int, position: int) -> int | None:
-            if level == 0:
-                return 1
+            # Frontend MatrixGraph expects:
+            # Level-1 positions → ids 1,2,3 (left, middle, right)
+            # Level-2 under parent p∈{1,2,3} → p+3, p+9, p+15 (e.g., 4/10/16 under 1)
             if level == 1:
-                # Level-1 three positions map to ids 2,3,4? Frontend expects 2 and 3 and then children 4,10,16 under 1
-                # Based on MatrixGraph usage: ids used explicitly are 1,2,3 for top row
-                return 2 + position  # 2,3,4
+                return position + 1  # 0→1, 1→2, 2→3
             if level == 2:
-                # Under parent id p in {2,3,4}, children are p+3, p+9, p+15
                 parent_l1_index = position // 3  # 0..2
                 child_offset = position % 3      # 0..2
-                parent_id = 2 + parent_l1_index  # 2,3,4
-                return parent_id + (3 + 6 * child_offset)  # 4/10/16, 5/11/17, 6/12/18
+                parent_id = parent_l1_index + 1  # 1,2,3
+                return parent_id + (3 + 6 * child_offset)  # 4/10/16 etc.
             return None  # Deeper levels not displayed by current frontend graph
 
         # Build users array
@@ -243,9 +241,7 @@ async def get_matrix_tree_graph(
                 "userId": str(node.user_id)
             })
 
-        # Ensure root exists in users
-        if not any(u.get("id") == 1 for u in users):
-            users.append({"id": 1, "type": "self", "userId": user_id})
+        # Do not inject a synthetic root; graph starts from level-1 (ids 1,2,3)
 
         # Meta fields for compatibility with mock data
         ms = MatrixService()
@@ -273,8 +269,8 @@ async def get_matrix_tree_graph(
     except Exception as e:
         return error_response(str(e))
 
-@router.get("/auto-upgrade-status/{user_id}")
-async def get_matrix_auto_upgrade_status(
+@router.get("/auto-upgrade/brief-status/{user_id}")
+async def get_matrix_auto_upgrade_brief_status(
     user_id: str,
     current_user: dict = Depends(authentication_service.verify_authentication)
 ):
@@ -312,9 +308,21 @@ async def get_recycle_tree_endpoint(
     recycle_no: Optional[int] = None,
     current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get matrix tree by recycle number or current in-progress tree."""
+    """Get matrix tree by recycle number or current in-progress tree.
+
+    Note: FastAPI treats spaces around '=' in query strings as part of the key, which can break parsing.
+    Ensure your query is formatted without spaces, e.g., '?user_id=...&slot=1'.
+    Alternatively, use the path-based route '/matrix/recycle-tree/{user_id}/{slot}'.
+    """
     try:
-        if str(current_user["user_id"]) != user_id:
+        requester_id = None
+        try:
+            requester_id = str(current_user.get("user_id")) if isinstance(current_user, dict) else None
+        except Exception:
+            requester_id = None
+        # If requester_id present and not the same user, block unless admin
+        requester_role = current_user.get("role") if isinstance(current_user, dict) else None
+        if requester_id and requester_id != user_id and requester_role != "admin":
             raise HTTPException(status_code=403, detail="Unauthorized to view this user's tree")
         
         if slot < 1 or slot > 15:
@@ -331,15 +339,35 @@ async def get_recycle_tree_endpoint(
     except Exception as e:
         return error_response(str(e))
 
+@router.get("/recycle-tree/{user_id}/{slot}")
+async def get_recycle_tree_path_endpoint(
+    user_id: str,
+    slot: int,
+    recycle_no: Optional[int] = None,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Path-based variant to fetch recycle tree (avoids query parsing issues)."""
+    return await get_recycle_tree_endpoint(user_id=user_id, slot=slot, recycle_no=recycle_no, current_user=current_user)
+
 @router.get("/recycles")
 async def get_recycle_history_endpoint(
     user_id: str,
     slot: int,
     current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get recycle history for user+slot."""
+    """Get recycle history for user+slot.
+
+    Note: Avoid spaces in query string: '?user_id=...&slot=1'.
+    Alternatively, use '/matrix/recycles/{user_id}/{slot}'.
+    """
     try:
-        if str(current_user["user_id"]) != user_id:
+        requester_id = None
+        try:
+            requester_id = str(current_user.get("user_id")) if isinstance(current_user, dict) else None
+        except Exception:
+            requester_id = None
+        requester_role = current_user.get("role") if isinstance(current_user, dict) else None
+        if requester_id and requester_id != user_id and requester_role != "admin":
             raise HTTPException(status_code=403, detail="Unauthorized to view this user's recycle history")
         
         if slot < 1 or slot > 15:
@@ -353,6 +381,15 @@ async def get_recycle_history_endpoint(
         raise e
     except Exception as e:
         return error_response(str(e))
+
+@router.get("/recycles/{user_id}/{slot}")
+async def get_recycle_history_path_endpoint(
+    user_id: str,
+    slot: int,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Path-based variant to fetch recycle history."""
+    return await get_recycle_history_endpoint(user_id=user_id, slot=slot, current_user=current_user)
 
 @router.post("/process-recycle")
 async def process_recycle_completion_endpoint(
