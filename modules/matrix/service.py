@@ -698,7 +698,7 @@ class MatrixService:
                 matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
                 if not matrix_tree:
                     return None
-                
+
                 return {
                     "user_id": str(matrix_tree.user_id),
                     "slot_number": slot_no,
@@ -2429,7 +2429,7 @@ class MatrixService:
             
             if not stipend_eligibility.get("is_eligible"):
                 return {
-                    "success": False, 
+                    "success": False,
                     "error": f"User not eligible for Leadership Stipend: {stipend_eligibility.get('reason')}"
                 }
             
