@@ -14,6 +14,7 @@ from utils import ensure_currency_for_program
 from ..leadership_stipend.model import LeadershipStipend
 from ..leadership_stipend.service import LeadershipStipendService
 from ..blockchain.model import BlockchainEvent
+from ..wallet.service import WalletService
 
 class CommissionService:
     """Commission Management Business Logic Service"""
@@ -27,6 +28,12 @@ class CommissionService:
     def __init__(self):
         pass
     
+    def _credit_wallet(self, user_id: str, amount: Decimal, currency: str, reason: str, tx_hash: str):
+        try:
+            WalletService().credit_main_wallet(user_id, amount, currency, reason, tx_hash)
+        except Exception:
+            pass
+
     def calculate_joining_commission(self, from_user_id: str, program: str, amount: Decimal, currency: str) -> Dict[str, Any]:
         """Calculate 10% joining commission for upline"""
         try:
@@ -56,6 +63,14 @@ class CommissionService:
                 status='pending'
             )
             commission.save()
+            # Auto-credit wallet and mark paid
+            try:
+                self._credit_wallet(str(upline_id), commission_amount, currency, f"{program}_joining_commission", f"JOIN-{from_user_id}-{datetime.utcnow().timestamp()}")
+                commission.status = 'paid'
+                commission.paid_at = datetime.utcnow()
+                commission.save()
+            except Exception:
+                pass
             # Receipt for joining commission
             try:
                 DistributionReceipt(
@@ -126,6 +141,14 @@ class CommissionService:
                 status='pending'
             )
             commission.save()
+            # Auto-credit wallet and mark paid
+            try:
+                self._credit_wallet(str(upline_id), commission_amount, currency, f"{program}_partner_incentive", f"PARTNER-{from_user_id}-{datetime.utcnow().timestamp()}")
+                commission.status = 'paid'
+                commission.paid_at = datetime.utcnow()
+                commission.save()
+            except Exception:
+                pass
             
             # Accumulate
             self._update_commission_accumulation(upline_id, program, commission_amount, currency, ctype)
@@ -202,6 +225,14 @@ class CommissionService:
                     level_commission_record.save()
                     # Update accumulation
                     self._update_commission_accumulation(level_upline, program, level_commission, currency, 'upgrade')
+                    # Auto-credit wallet and mark paid
+                    try:
+                        self._credit_wallet(str(level_upline), level_commission, currency, f"{program}_upgrade_level_{slot_no}", f"UPLVL-{from_user_id}-S{slot_no}-{datetime.utcnow().timestamp()}")
+                        level_commission_record.status = 'paid'
+                        level_commission_record.paid_at = datetime.utcnow()
+                        level_commission_record.save()
+                    except Exception:
+                        pass
                     # Receipt for level commission (30%)
                     try:
                         DistributionReceipt(
@@ -463,7 +494,9 @@ class CommissionService:
             return None
     
     def _distribute_across_levels(self, from_user_id: str, amount: Decimal, currency: str, program: str, source_slot_no: int, source_slot_name: str) -> List[Dict]:
-        """Distribute commission across levels 1-16 using Dual-Tree percentages and handle misses"""
+        """Distribute commission across levels 1-16 using Dual-Tree percentages and handle misses.
+        Also auto-credit eligible users' main wallets for their level share.
+        """
         level_distributions: List[Dict] = []
         percentages = self._dual_tree_percentages()
         for level in range(1, 17):
@@ -480,6 +513,17 @@ class CommissionService:
                 })
                 # Accumulate for eligible user
                 self._update_commission_accumulation(level_user, program, level_amount, currency, 'level')
+                # Auto-credit wallet for level distribution
+                try:
+                    self._credit_wallet(
+                        str(level_user),
+                        level_amount,
+                        currency,
+                        f"{program}_dual_tree_L{level}_S{source_slot_no}",
+                        f"DUALTREE-{from_user_id}-L{level}-S{source_slot_no}-{datetime.utcnow().timestamp()}"
+                    )
+                except Exception:
+                    pass
             else:
                 # Missed profit to stipend
                 try:

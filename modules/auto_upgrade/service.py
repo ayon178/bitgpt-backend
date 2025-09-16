@@ -9,12 +9,35 @@ from .model import (
     MatrixAutoUpgrade, GlobalPhaseProgression, AutoUpgradeSettings,
     AutoUpgradeEarnings, AutoUpgradeTrigger
 )
+from ..wallet.model import ReserveLedger
 
 class AutoUpgradeService:
     """Auto Upgrade System Business Logic Service"""
     
     def __init__(self):
         pass
+
+    def record_global_reserve_credit(self, user_id: str, slot_no: int, amount: Decimal, tx_hash: str) -> Dict[str, Any]:
+        try:
+            # Write a reserve ledger credit for audit
+            status = GlobalPhaseProgression.objects(user_id=ObjectId(user_id)).first()
+            if not status:
+                return {"success": False, "error": "Global status not found"}
+            # Compute balance after is not tracked per-user here; store amount and metadata
+            ReserveLedger(
+                user_id=ObjectId(user_id),
+                program='global',
+                slot_no=slot_no,
+                amount=Decimal(str(amount)),
+                direction='credit',
+                source='income',
+                balance_after=Decimal('0'),
+                tx_hash=tx_hash,
+                created_at=datetime.utcnow()
+            ).save()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
     def process_binary_auto_upgrade(self, user_id: str) -> Dict[str, Any]:
         """Process Binary auto upgrade using first 2 partners' earnings"""

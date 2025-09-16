@@ -10,6 +10,7 @@ from .model import (
     MentorshipFund, MentorshipSettings, MentorshipLog, 
     MentorshipStatistics, MentorshipReferral, MentorshipLevel
 )
+from ..wallet.service import WalletService
 
 class MentorshipService:
     """Mentorship Bonus Business Logic Service"""
@@ -254,6 +255,18 @@ class MentorshipService:
                 mentorship.last_updated = datetime.utcnow()
                 mentorship.save()
             
+            # Credit mentor's main wallet
+            try:
+                WalletService().credit_main_wallet(
+                    user_id=str(commission.user_id),
+                    amount=Decimal(str(commission.commission_amount)),
+                    currency='USDT',
+                    reason=f"mentorship_{commission.commission_level}",
+                    tx_hash=f"MNT-PAY-{commission.id}-{datetime.utcnow().timestamp()}"
+                )
+            except Exception:
+                pass
+            
             # Complete payment
             commission.payment_status = "paid"
             commission.paid_at = datetime.utcnow()
@@ -268,7 +281,7 @@ class MentorshipService:
                 "success": True,
                 "commission_id": commission_id,
                 "commission_amount": commission.commission_amount,
-                "currency": commission.commission_amount,  # Assuming USDT
+                "currency": 'USDT',
                 "payment_status": "paid",
                 "payment_reference": commission.payment_reference,
                 "paid_at": commission.paid_at,
