@@ -13,6 +13,7 @@ from modules.royal_captain.service import RoyalCaptainService
 from modules.president_reward.service import PresidentRewardService
 from modules.income.bonus_fund import BonusFund
 from modules.tree.model import TreePlacement
+from modules.wallet.company_service import CompanyWalletService
 from utils import ensure_currency_for_program
 
 
@@ -22,6 +23,7 @@ class GlobalService:
     def __init__(self) -> None:
         self.commission_service = CommissionService()
         self.spark_service = SparkService()
+        self.company_wallet = CompanyWalletService()
 
     def _count_phase_children(self, parent_id: ObjectId, phase: str) -> int:
         return TreePlacement.objects(parent_id=parent_id, program='global', phase=phase, is_active=True).count()
@@ -493,7 +495,7 @@ class GlobalService:
             except Exception:
                 pass
 
-            # Profit → BonusFund('net_profit','global')
+            # Profit → BonusFund and CompanyWallet
             try:
                 bf = BonusFund.objects(fund_type='net_profit', program='global').first()
                 if not bf:
@@ -502,6 +504,8 @@ class GlobalService:
                 bf.available_amount = float(getattr(bf, 'available_amount', 0.0) + float(profit_portion))
                 bf.updated_at = datetime.utcnow()
                 bf.save()
+                # Company wallet credit
+                self.company_wallet.credit(profit_portion, currency, 'global_net_profit_topup', f'GLB-NETPROFIT-{user_id}-{datetime.utcnow().timestamp()}')
             except Exception:
                 pass
 
@@ -546,7 +550,7 @@ class GlobalService:
             except Exception:
                 pass
 
-            # Shareholders → BonusFund('shareholders','global')
+            # Shareholders → BonusFund and CompanyWallet
             try:
                 bf_sh = BonusFund.objects(fund_type='shareholders', program='global').first()
                 if not bf_sh:
@@ -555,6 +559,8 @@ class GlobalService:
                 bf_sh.available_amount = float(getattr(bf_sh, 'available_amount', 0.0) + float(shareholders_portion))
                 bf_sh.updated_at = datetime.utcnow()
                 bf_sh.save()
+                # Company wallet credit
+                self.company_wallet.credit(shareholders_portion, currency, 'global_shareholders_topup', f'GLB-SHAREHOLDERS-{user_id}-{datetime.utcnow().timestamp()}')
             except Exception:
                 pass
 
