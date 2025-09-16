@@ -11,6 +11,10 @@ from .model import (
     AutoUpgradeEarnings
 )
 from utils.response import success_response, error_response
+from modules.slot.model import SlotActivation, SlotCatalog
+from modules.binary.service import BinaryService
+from modules.matrix.service import MatrixService
+from modules.rank.service import RankService
 
 router = APIRouter(prefix="/auto-upgrade", tags=["Auto Upgrade System"])
 
@@ -448,44 +452,158 @@ async def update_auto_upgrade_settings(request: AutoUpgradeSettingsRequest):
 # Helper functions
 async def _get_current_slot(user_id: str, program: str) -> Optional[dict]:
     """Get current slot information for user"""
-    # This is simplified - in real implementation, you'd get from user's program data
-    return {
-        "slot_no": 1,
-        "currency": "BNB" if program == "binary" else "USDT" if program == "matrix" else "USD"
-    }
+    # Determine highest activated slot for the program
+    activation = (
+        SlotActivation.objects(user_id=ObjectId(user_id), program=program)
+        .order_by('-slot_no')
+        .first()
+    )
+    if activation:
+        return {
+            "slot_no": activation.slot_no,
+            "currency": activation.currency
+        }
+    # Fallback defaults by program
+    if program == 'binary':
+        return {"slot_no": 2, "currency": "BNB"}
+    if program == 'matrix':
+        return {"slot_no": 0, "currency": "USDT"}
+    if program == 'global':
+        return {"slot_no": 0, "currency": "USD"}
+    return None
 
 async def _calculate_upgrade_cost(program: str, target_slot: int) -> Decimal:
-    """Calculate upgrade cost for target slot"""
-    # This is simplified - in real implementation, you'd get from slot catalog
-    slot_costs = {
-        "binary": [0.0022, 0.0044, 0.0088, 0.0176, 0.0352, 0.0704, 0.1408, 0.2816, 0.5632, 1.1264, 2.2528, 4.5056, 9.0112, 18.0224, 36.0448, 72.0896],
-        "matrix": [11, 33, 99, 297, 891],
-        "global": [30, 36, 86, 103, 247, 296, 710, 852, 2044, 2452, 5884, 7060, 16944, 20332, 48796, 58555]
-    }
-    
-    if target_slot <= len(slot_costs[program]):
-        return Decimal(str(slot_costs[program][target_slot - 1]))
-    return Decimal('0')
+    """Calculate upgrade cost for target slot using SlotCatalog"""
+    catalog = SlotCatalog.objects(program=program, slot_no=target_slot, is_active=True).first()
+    if not catalog or not catalog.price:
+        return Decimal('0')
+    return Decimal(str(catalog.price))
 
 async def _check_auto_upgrade_eligibility(user_id: str, program: str) -> dict:
-    """Check if user is eligible for auto upgrade"""
-    # This is simplified - in real implementation, you'd check actual conditions
-    return {
-        "is_eligible": True,
-        "earnings_available": Decimal('100.0'),
-        "partners_required": 2,
-        "partners_available": 2,
-        "middle_three_required": 3,
-        "middle_three_available": 3,
-        "next_upgrade_cost": Decimal('50.0')
-    }
+    """Check if user is eligible for auto upgrade using program-specific trackers"""
+    if program == 'binary':
+        status = BinaryAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+        if not status:
+            return {"is_eligible": False, "reason": "Binary auto upgrade status not found", "earnings_available": Decimal('0')}
+        next_cost = await _calculate_upgrade_cost('binary', status.current_slot_no + 1)
+        eligible = status.partners_available >= status.partners_required and status.earnings_from_partners >= next_cost
+        return {
+            "is_eligible": bool(eligible),
+            "reason": "" if eligible else "Insufficient partners/earnings",
+            "earnings_available": status.earnings_from_partners or Decimal('0'),
+            "partners_required": status.partners_required,
+            "partners_available": status.partners_available,
+            "next_upgrade_cost": next_cost
+        }
+    if program == 'matrix':
+        status = MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+        if not status:
+            return {"is_eligible": False, "reason": "Matrix auto upgrade status not found", "earnings_available": Decimal('0')}
+        next_cost = await _calculate_upgrade_cost('matrix', status.current_slot_no + 1)
+        eligible = status.middle_three_available >= status.middle_three_required and status.earnings_from_middle_three >= next_cost
+        return {
+            "is_eligible": bool(eligible),
+            "reason": "" if eligible else "Insufficient middle-three earnings",
+            "earnings_available": status.earnings_from_middle_three or Decimal('0'),
+            "middle_three_required": status.middle_three_required,
+            "middle_three_available": status.middle_three_available,
+            "next_upgrade_cost": next_cost
+        }
+    if program == 'global':
+        # Simple placeholder based on phase requirements
+        status = GlobalPhaseProgression.objects(user_id=ObjectId(user_id)).first()
+        if not status:
+            return {"is_eligible": False, "reason": "Global progression not found", "earnings_available": Decimal('0')}
+        return {"is_eligible": bool(status.next_phase_ready), "reason": "" if status.next_phase_ready else "Phase not ready", "earnings_available": Decimal('0')}
+    return {"is_eligible": False, "reason": "Invalid program", "earnings_available": Decimal('0')}
 
 async def _process_auto_upgrade_queue(queue_id: str):
     """Background task to process auto upgrade queue"""
-    # Implementation for background processing
-    pass
+    try:
+        entry = AutoUpgradeQueue.objects(id=ObjectId(queue_id)).first()
+        if not entry:
+            return
+        if entry.status not in ['pending', 'failed']:
+            return
+        entry.status = 'processing'
+        entry.processed_at = datetime.utcnow()
+        entry.save()
+        result = await _process_single_auto_upgrade(entry)
+        if result.get('success'):
+            entry.status = 'completed'
+            entry.completed_at = datetime.utcnow()
+            entry.save()
+        else:
+            entry.status = 'failed'
+            entry.error_message = result.get('error')
+            entry.save()
+    except Exception as e:
+        try:
+            entry = AutoUpgradeQueue.objects(id=ObjectId(queue_id)).first()
+            if entry:
+                entry.status = 'failed'
+                entry.error_message = str(e)
+                entry.save()
+        except Exception:
+            pass
 
 async def _process_single_auto_upgrade(queue_entry: AutoUpgradeQueue) -> dict:
-    """Process a single auto upgrade"""
-    # Implementation for processing single upgrade
-    return {"success": True, "upgrade_log_id": "mock_id"}
+    """Process a single auto upgrade by invoking the respective program service"""
+    try:
+        user_id_str = str(queue_entry.user_id)
+        from_slot = queue_entry.current_slot_no
+        to_slot = queue_entry.target_slot_no
+        upgrade_cost = queue_entry.upgrade_cost
+        currency = queue_entry.currency
+
+        tx_hash = f"AUTOUP-{user_id_str}-{queue_entry.program}-S{to_slot}-{int(datetime.utcnow().timestamp())}"
+
+        if queue_entry.program == 'binary':
+            service = BinaryService()
+            # For binary service, pass explicit amount
+            service.upgrade_binary_slot(user_id=user_id_str, slot_no=to_slot, tx_hash=tx_hash, amount=Decimal(str(upgrade_cost)))
+        elif queue_entry.program == 'matrix':
+            service = MatrixService()
+            # Matrix supports from->to upgrade path
+            service.upgrade_matrix_slot(user_id=user_id_str, from_slot_no=from_slot, to_slot_no=to_slot, upgrade_type="auto")
+        else:
+            return {"success": False, "error": "Unsupported program for auto processing"}
+
+        # Persist log
+        from_catalog = SlotCatalog.objects(program=queue_entry.program, slot_no=from_slot).first()
+        to_catalog = SlotCatalog.objects(program=queue_entry.program, slot_no=to_slot).first()
+        log = AutoUpgradeLog(
+            user_id=ObjectId(user_id_str),
+            program=queue_entry.program,
+            from_slot_no=from_slot,
+            to_slot_no=to_slot,
+            from_slot_name=from_catalog.name if from_catalog else str(from_slot),
+            to_slot_name=to_catalog.name if to_catalog else str(to_slot),
+            upgrade_cost=Decimal(str(upgrade_cost)),
+            currency=currency,
+            earnings_used=Decimal(str(upgrade_cost)),
+            profit_gained=Decimal('0'),
+            trigger_type=queue_entry.trigger.trigger_type if queue_entry.trigger else 'manual',
+            contributors=queue_entry.earnings_source or [],
+            contributor_details=[],
+            tx_hash=tx_hash,
+            status='completed',
+            completed_at=datetime.utcnow()
+        )
+        log.save()
+
+        # Trigger rank update after successful upgrade
+        try:
+            RankService().update_user_rank(user_id=user_id_str)
+        except Exception:
+            pass
+
+        # Update queue entry aggregation
+        queue_entry.earnings_used = Decimal(str(upgrade_cost))
+        queue_entry.status = 'completed'
+        queue_entry.completed_at = datetime.utcnow()
+        queue_entry.save()
+
+        return {"success": True, "upgrade_log_id": str(log.id)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

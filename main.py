@@ -27,7 +27,9 @@ from modules.spillover.router import router as spillover_router
 from modules.jackpot.router import router as jackpot_router
 from modules.spark.router import router as spark_router
 from modules.binary.router import router as binary_router
-from modules.matrix.router import router as matrix_router
+from importlib import import_module
+# Dynamic import because 'global' is a Python keyword
+global_router = import_module('modules.global.router').router
 
 # DB connection
 from core.db import connect_to_db
@@ -94,6 +96,7 @@ app.include_router(jackpot_router)
 app.include_router(spark_router)
 app.include_router(binary_router)
 app.include_router(matrix_router)
+app.include_router(global_router)
 
 @app.on_event("startup")
 async def startup_initializer():

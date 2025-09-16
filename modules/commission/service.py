@@ -88,6 +88,76 @@ class CommissionService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
+    def calculate_partner_incentive(self, from_user_id: str, program: str, amount: Decimal, currency: str, to_user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Calculate 10% partner incentive (direct upline) for Binary/Matrix/Global join or upgrade."""
+        try:
+            # Determine recipient: provided to_user_id or direct upline
+            if to_user_id:
+                upline_id = ObjectId(to_user_id)
+            else:
+                from_user = User.objects(id=ObjectId(from_user_id)).first()
+                if not from_user or not from_user.refered_by:
+                    return {"success": False, "error": "Upline not found"}
+                upline_id = from_user.refered_by
+            
+            # 10% of amount
+            commission_amount = amount * Decimal('0.10')
+            currency = ensure_currency_for_program(program, currency)
+            
+            # Commission type per program
+            if program == 'binary':
+                ctype = 'binary_partner'
+            elif program == 'matrix':
+                ctype = 'matrix_partner'
+            elif program == 'global':
+                ctype = 'global_partner'
+            else:
+                return {"success": False, "error": "Invalid program"}
+            
+            commission = Commission(
+                user_id=upline_id,
+                from_user_id=ObjectId(from_user_id),
+                commission_type=ctype,
+                program=program,
+                commission_amount=commission_amount,
+                currency=currency,
+                commission_percentage=10.0,
+                is_direct_commission=True,
+                status='pending'
+            )
+            commission.save()
+            
+            # Accumulate
+            self._update_commission_accumulation(upline_id, program, commission_amount, currency, ctype)
+            
+            # Receipt
+            try:
+                DistributionReceipt(
+                    user_id=upline_id,
+                    from_user_id=ObjectId(from_user_id),
+                    program=program,
+                    source_type='partner_incentive',
+                    source_slot_no=None,
+                    source_slot_name=None,
+                    distribution_level=1,
+                    amount=commission_amount,
+                    currency=currency,
+                    commission_id=commission.id,
+                    event=f'{ctype}_commission'
+                ).save()
+            except Exception:
+                pass
+            
+            return {
+                "success": True,
+                "commission_id": str(commission.id),
+                "commission_amount": float(commission_amount),
+                "upline_id": str(upline_id),
+                "commission_type": ctype
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     def calculate_upgrade_commission(self, from_user_id: str, program: str, slot_no: int, 
                                    slot_name: str, amount: Decimal, currency: str) -> Dict[str, Any]:
         """Calculate upgrade commission with 30% to corresponding level and 70% distribution"""
