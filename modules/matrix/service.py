@@ -556,8 +556,12 @@ class MatrixService:
     def _record_blockchain_event(self, tx_hash: str, user_id: str, referrer_id: str, amount: Decimal, currency: str):
         """Record blockchain event"""
         try:
+            from datetime import datetime
+            import random, string
+            unique = datetime.utcnow().strftime('%Y%m%d%H%M%S%f') + '_' + ''.join(random.choices(string.ascii_lowercase+string.digits, k=6))
+            txh = f"{tx_hash}_{unique}"
             BlockchainEvent(
-                tx_hash=tx_hash,
+                tx_hash=txh,
                 event_type='join_payment',
                 event_data={
                     'program': 'matrix',
@@ -918,12 +922,18 @@ class MatrixService:
             if not placement:
                 return {"success": False, "error": "Failed to place recycled user"}
             
-            # 5. Clear current tree for new cycle
-            matrix_tree.nodes = []
-            matrix_tree.total_members = 0
-            matrix_tree.current_slot = slot_no + 1 if slot_no < 15 else slot_no
-            matrix_tree.last_updated = datetime.utcnow()
-            matrix_tree.save()
+            # 4. Clear current tree for new cycle on same slot
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if matrix_tree:
+                matrix_tree.nodes = []
+                matrix_tree.total_members = 0
+                matrix_tree.level_1_members = 0
+                matrix_tree.level_2_members = 0
+                matrix_tree.level_3_members = 0
+                matrix_tree.is_complete = False
+                matrix_tree.current_slot = slot_no
+                matrix_tree.updated_at = datetime.utcnow()
+                matrix_tree.save()
             
             # Audit recycle placement
             try:
