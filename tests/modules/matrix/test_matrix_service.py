@@ -165,6 +165,34 @@ class TestMatrixService(unittest.TestCase):
         self.assertIn("User or referrer not found", result["error"])
     
     # ==================== TREE PLACEMENT TESTS ====================
+    def test_bfs_spillover_to_level2(self):
+        """When L1 is full, BFS should place next at Level 2 position 0."""
+        from backend.modules.matrix.model import MatrixNode
+        # Build a fake tree where L1 is full
+        mock_tree = SimpleNamespace(
+            nodes=[
+                MatrixNode(level=1, position=0, user_id=ObjectId()),
+                MatrixNode(level=1, position=1, user_id=ObjectId()),
+                MatrixNode(level=1, position=2, user_id=ObjectId()),
+            ]
+        )
+
+        pos = self.service._find_bfs_placement_position(mock_tree)
+        self.assertEqual(pos, {"level": 2, "position": 0})
+
+    def test_bfs_spillover_to_level3(self):
+        """When L1 and L2 are full, BFS should place next at Level 3 position 0."""
+        from backend.modules.matrix.model import MatrixNode
+        # Build a fake tree where L1 (3) and L2 (9) are full
+        nodes = [
+            MatrixNode(level=1, position=i, user_id=ObjectId()) for i in range(3)
+        ] + [
+            MatrixNode(level=2, position=i, user_id=ObjectId()) for i in range(9)
+        ]
+        mock_tree = SimpleNamespace(nodes=nodes)
+
+        pos = self.service._find_bfs_placement_position(mock_tree)
+        self.assertEqual(pos, {"level": 3, "position": 0})
     
     @pytest.mark.skip(reason="Requires DB-backed MatrixTree; integration covers placement")
     def test_place_user_in_matrix_tree_bfs_algorithm(self):
@@ -216,6 +244,46 @@ class TestMatrixService(unittest.TestCase):
                 mock_recycle.assert_called_once()
     
     # ==================== RECYCLE SYSTEM TESTS ====================
+    @patch('backend.modules.matrix.service.MatrixTree.objects')
+    @patch('backend.modules.matrix.service.User.objects')
+    def test_recycle_reentry_success(self, mock_user_objects, mock_matrix_tree_objects):
+        """Recycle flow: detect -> snapshot -> re-entry placed -> tree cleared."""
+        # Mock direct referrer resolution for recycled user
+        mock_user = Mock()
+        mock_user.refered_by = ObjectId(self.test_referrer_id)
+        mock_user_objects.return_value.first.return_value = mock_user
+
+        # Mock current matrix tree returned for clearing
+        mock_tree = Mock()
+        mock_tree.nodes = [Mock() for _ in range(39)]
+        mock_tree.total_members = 39
+        mock_tree.level_1_members = 3
+        mock_tree.level_2_members = 9
+        mock_tree.level_3_members = 27
+        mock_tree.is_complete = True
+        mock_tree.current_slot = 1
+        mock_tree.save = Mock()
+        mock_matrix_tree_objects.return_value.first.return_value = mock_tree
+
+        # Patch internal recycle steps
+        with patch.object(self.service, 'detect_recycle_completion', return_value=True), \
+             patch.object(self.service, 'create_recycle_snapshot') as mock_snapshot, \
+             patch.object(self.service, 'place_recycled_user') as mock_place:
+
+            mock_snapshot.return_value = SimpleNamespace(id=ObjectId(), recycle_no=1)
+            mock_place.return_value = {
+                "success": True,
+                "level": 1,
+                "position": 0,
+                "placed_under_user_id": self.test_referrer_id
+            }
+
+            res = self.service.process_recycle_completion(self.test_user_id, 1)
+
+        self.assertTrue(res.get("success"))
+        self.assertEqual(res.get("recycle_no"), 1)
+        self.assertEqual(res.get("new_position"), {"level": 1, "position": 0})
+        self.assertEqual(res.get("placed_under_user_id"), self.test_referrer_id)
     
     @patch('backend.modules.matrix.service.MatrixRecycleInstance')
     @patch('backend.modules.matrix.service.MatrixRecycleNode')

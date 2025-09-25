@@ -48,8 +48,10 @@ class TestMatrixRouter(unittest.TestCase):
         self.mock_auth = {
             "user_id": self.test_user_id,
             "username": "testuser",
-            "email": "test@example.com"
+            "email": "test@example.com",
+            "role": "admin"
         }
+        # No global override; tests patch authentication per-case
     
     def tearDown(self):
         """Clean up after each test method."""

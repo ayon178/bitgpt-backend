@@ -27,11 +27,15 @@ def create_response(
     :return: A JSONResponse object.
     """
 
+    # Derive a simple boolean success flag expected by some tests
+    is_success = 200 <= status_code < 400
+
     response_content = {
         "status": status,
         "message": message,
         "data": data,
-        "status_code": status_code
+        "status_code": status_code,
+        "success": is_success,
     }
 
     if meta:
