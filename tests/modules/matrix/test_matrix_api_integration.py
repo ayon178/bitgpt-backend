@@ -27,7 +27,7 @@ import os
 # Add the backend directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from modules.matrix.router import router
+from backend.modules.matrix.router import router
 from modules.matrix.service import MatrixService
 from tests.modules.matrix.test_config import MatrixTestConfig, MatrixTestFixtures, MatrixTestUtils
 

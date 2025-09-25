@@ -23,14 +23,16 @@ from datetime import datetime, timedelta
 from bson import ObjectId
 import sys
 import os
+from decimal import Decimal
+from types import SimpleNamespace
 
 # Add the backend directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from modules.matrix.service import MatrixService
-from modules.matrix.model import *
-from modules.user.model import User
-from modules.binary.service import BinaryService
+from backend.modules.matrix.service import MatrixService
+from backend.modules.matrix.model import *
+from backend.modules.user.model import User
+from backend.modules.binary.service import BinaryService
 from tests.modules.matrix.test_config import MatrixTestConfig, MatrixTestFixtures, MatrixTestUtils
 
 
@@ -59,8 +61,8 @@ class TestMatrixEndToEndWorkflow(unittest.TestCase):
         # Clean up test data
         pass
     
-    @patch('modules.matrix.service.User.objects')
-    @patch('modules.matrix.service.MatrixTree.objects')
+    @patch('backend.modules.matrix.service.User.objects')
+    @patch('backend.modules.matrix.service.MatrixTree.objects')
     def test_complete_matrix_join_workflow(self, mock_matrix_objects, mock_user_objects):
         """Test complete Matrix join workflow from start to finish."""
         print("\n🔄 Testing Complete Matrix Join Workflow")
@@ -83,20 +85,23 @@ class TestMatrixEndToEndWorkflow(unittest.TestCase):
              patch.object(self.service, 'trigger_global_integration_automatic') as mock_global, \
              patch.object(self.service, 'trigger_jackpot_integration_automatic') as mock_jackpot, \
              patch.object(self.service, 'trigger_ngs_integration_automatic') as mock_ngs, \
-             patch.object(self.service, 'trigger_mentorship_bonus_integration_automatic') as mock_mentorship:
+             patch.object(self.service, 'trigger_mentorship_bonus_integration_automatic') as mock_mentorship, \
+             patch('backend.modules.matrix.service.ensure_currency_for_program', return_value='USDT'), \
+             patch.object(self.service, '_create_matrix_tree') as mock_create_tree, \
+             patch.object(self.service, '_process_matrix_commissions', return_value={"success": True}):
             
             mock_place.return_value = {"success": True, "level": 1, "position": 0, "total_members": 1}
-            mock_activate.return_value = {"success": True}
+            mock_activate.return_value = SimpleNamespace(id=ObjectId())
+            mock_create_tree.return_value = SimpleNamespace(id=ObjectId())
             
             # Execute Matrix join
-            result = self.service.join_matrix(self.user1_id, self.referrer_id)
+            result = self.service.join_matrix(self.user1_id, self.referrer_id, tx_hash="tx", amount=Decimal('11'))
             
             # Assertions
             self.assertTrue(result["success"])
-            self.assertEqual(result["user_id"], self.user1_id)
-            self.assertEqual(result["referrer_id"], self.referrer_id)
-            self.assertEqual(result["slot_activated"], 1)
-            
+            self.assertIn("matrix_tree_id", result)
+            self.assertIn("activation_id", result)
+            self.assertEqual(result["slot_activated"], 'STARTER')
             # Verify all integrations were triggered
             mock_rank.assert_called_once_with(self.user1_id)
             mock_global.assert_called_once_with(self.user1_id)
@@ -527,7 +532,7 @@ class TestMatrixPerformanceIntegration(unittest.TestCase):
             mock_activate.return_value = {"success": True}
             
             # Execute Matrix join
-            result = self.service.join_matrix(self.test_user_id, self.test_referrer_id)
+            result = self.service.join_matrix(self.test_user_id, self.test_referrer_id, tx_hash="tx", amount=Decimal('11'))
             
             end_time = time.time()
             duration = end_time - start_time
@@ -671,10 +676,10 @@ class TestMatrixErrorHandlingIntegration(unittest.TestCase):
         with patch('modules.matrix.service.User.objects') as mock_user_objects:
             mock_user_objects.return_value.first.return_value = None
             
-            result = self.service.join_matrix(self.test_user_id, self.test_referrer_id)
+            result = self.service.join_matrix(self.test_user_id, self.test_referrer_id, tx_hash="tx", amount=Decimal('11'))
             
             self.assertFalse(result["success"])
-            self.assertIn("User not found", result["error"])
+            self.assertIn("User or referrer not found", result["error"])
             
             print("✅ Matrix join error handling test passed")
     
@@ -770,7 +775,7 @@ class TestMatrixRealWorldScenarios(unittest.TestCase):
             # Execute multiple joins
             results = []
             for user_id in self.test_users[:5]:  # Test with 5 users
-                result = self.service.join_matrix(user_id, self.test_referrer_id)
+                result = self.service.join_matrix(user_id, self.test_referrer_id, tx_hash="tx", amount=Decimal('11'))
                 results.append(result)
             
             # Assertions

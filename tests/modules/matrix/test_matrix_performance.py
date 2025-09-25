@@ -33,7 +33,7 @@ import gc
 # Add the backend directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from modules.matrix.service import MatrixService
+from backend.modules.matrix.service import MatrixService
 from modules.matrix.model import *
 from modules.user.model import User
 from tests.modules.matrix.test_config import MatrixTestConfig, MatrixTestFixtures, MatrixTestUtils
@@ -707,7 +707,7 @@ class TestMatrixMemoryUsagePerformance(unittest.TestCase):
         with patch.object(self.service, 'join_matrix') as mock_join:
             mock_join.return_value = {"success": True}
             
-            result = self.service.join_matrix(self.test_user_id, self.test_user_id)
+            result = self.service.join_matrix(self.test_user_id, self.test_user_id, tx_hash="tx", amount=Decimal('11'))
         
         end_memory = psutil.Process().memory_info().rss
         memory_used = end_memory - start_memory
@@ -749,7 +749,7 @@ class TestMatrixMemoryUsagePerformance(unittest.TestCase):
         for i in range(100):
             with patch.object(self.service, 'join_matrix') as mock_join:
                 mock_join.return_value = {"success": True}
-                result = self.service.join_matrix(f"user_{i}", self.test_user_id)
+                result = self.service.join_matrix(f"user_{i}", self.test_user_id, tx_hash="tx", amount=Decimal('11'))
         
         # Force garbage collection
         gc.collect()

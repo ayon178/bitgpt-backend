@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 from bson import ObjectId
 from datetime import datetime, timedelta
 from .model import TripleEntryReward
-from modules.user.model import User
+from ..user.model import User
 
 
 class SparkService:

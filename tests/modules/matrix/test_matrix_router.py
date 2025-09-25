@@ -27,8 +27,9 @@ import os
 # Add the backend directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from modules.matrix.router import router
-from modules.matrix.service import MatrixService
+from backend.modules.matrix.router import router
+from backend.modules.matrix.router import authentication_service
+from backend.modules.matrix.service import MatrixService
 
 
 class TestMatrixRouter(unittest.TestCase):
@@ -56,12 +57,9 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== CORE MATRIX API TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
-    def test_join_matrix_endpoint_success(self, mock_service_class, mock_auth):
+    @patch('backend.modules.matrix.router.MatrixService')
+    def test_join_matrix_endpoint_success(self, mock_service_class):
         """Test successful Matrix join API endpoint."""
-        # Mock authentication
-        mock_auth.return_value = self.mock_auth
         
         # Mock service
         mock_service = Mock()
@@ -75,8 +73,13 @@ class TestMatrixRouter(unittest.TestCase):
         
         # Make request
         response = self.client.post(
-            f"/matrix/join/{self.test_user_id}/{self.test_referrer_id}",
-            headers={"Authorization": "Bearer test_token"}
+            "/matrix/join",
+            json={
+                "user_id": self.test_user_id,
+                "referrer_id": self.test_referrer_id,
+                "tx_hash": "tx",
+                "amount": 11.0
+            }
         )
         
         # Assertions
@@ -86,7 +89,7 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["user_id"], self.test_user_id)
         self.assertEqual(data["data"]["referrer_id"], self.test_referrer_id)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
     def test_join_matrix_endpoint_unauthorized(self, mock_auth):
         """Test Matrix join API endpoint with unauthorized access."""
         # Mock authentication failure
@@ -94,15 +97,21 @@ class TestMatrixRouter(unittest.TestCase):
         
         # Make request
         response = self.client.post(
-            f"/matrix/join/{self.test_user_id}/{self.test_referrer_id}",
+            "/matrix/join",
+            json={
+                "user_id": self.test_user_id,
+                "referrer_id": self.test_referrer_id,
+                "tx_hash": "tx",
+                "amount": 11.0
+            },
             headers={"Authorization": "Bearer invalid_token"}
         )
         
         # Assertions
         self.assertEqual(response.status_code, 401)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_matrix_status_endpoint(self, mock_service_class, mock_auth):
         """Test Matrix status API endpoint."""
         # Mock authentication
@@ -137,8 +146,8 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== RECYCLE SYSTEM API TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_recycle_tree_endpoint(self, mock_service_class, mock_auth):
         """Test recycle tree API endpoint."""
         # Mock authentication
@@ -171,8 +180,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["user_id"], self.test_user_id)
         self.assertEqual(data["data"]["slot_number"], 1)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_recycles_endpoint(self, mock_service_class, mock_auth):
         """Test recycles list API endpoint."""
         # Mock authentication
@@ -208,8 +217,8 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== AUTO UPGRADE SYSTEM API TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_middle_three_earnings_endpoint(self, mock_service_class, mock_auth):
         """Test middle three earnings API endpoint."""
         # Mock authentication
@@ -241,8 +250,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["middle_three_earnings"], 150.0)
         self.assertTrue(data["data"]["sufficient_for_upgrade"])
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_trigger_auto_upgrade_endpoint(self, mock_service_class, mock_auth):
         """Test trigger auto upgrade API endpoint."""
         # Mock authentication
@@ -260,7 +269,8 @@ class TestMatrixRouter(unittest.TestCase):
         
         # Make request
         response = self.client.post(
-            f"/matrix/trigger-auto-upgrade/{self.test_user_id}",
+            "/matrix/trigger-auto-upgrade",
+            params={"user_id": self.test_user_id, "slot_no": 1},
             headers={"Authorization": "Bearer test_token"}
         )
         
@@ -274,8 +284,8 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== DREAM MATRIX SYSTEM API TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_dream_matrix_status_endpoint(self, mock_service_class, mock_auth):
         """Test Dream Matrix status API endpoint."""
         # Mock authentication
@@ -307,8 +317,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertTrue(data["data"]["eligible"])
         self.assertEqual(data["data"]["direct_partners"], 3)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_dream_matrix_distribute_endpoint(self, mock_service_class, mock_auth):
         """Test Dream Matrix distribute API endpoint."""
         # Mock authentication
@@ -338,8 +348,8 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== MENTORSHIP BONUS SYSTEM API TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_mentorship_status_endpoint(self, mock_service_class, mock_auth):
         """Test Mentorship Bonus status API endpoint."""
         # Mock authentication
@@ -371,8 +381,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["user_id"], self.test_user_id)
         self.assertEqual(data["data"]["super_upline"], self.test_referrer_id)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_mentorship_bonus_distribute_endpoint(self, mock_service_class, mock_auth):
         """Test Mentorship Bonus distribute API endpoint."""
         # Mock authentication
@@ -389,7 +399,8 @@ class TestMatrixRouter(unittest.TestCase):
         
         # Make request
         response = self.client.post(
-            f"/matrix/mentorship-bonus-distribute/{self.test_referrer_id}",
+            "/matrix/mentorship-bonus-distribute",
+            params={"super_upline_id": self.test_referrer_id, "direct_referral_id": self.test_user_id, "amount": 10.0, "activity_type": "joining"},
             headers={"Authorization": "Bearer test_token"}
         )
         
@@ -402,8 +413,8 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== MANUAL UPGRADE SYSTEM API TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_upgrade_slot_endpoint(self, mock_service_class, mock_auth):
         """Test Matrix slot upgrade API endpoint."""
         # Mock authentication
@@ -422,12 +433,8 @@ class TestMatrixRouter(unittest.TestCase):
         
         # Make request
         response = self.client.post(
-            f"/matrix/upgrade-slot/{self.test_user_id}",
-            json={
-                "from_slot_no": 1,
-                "to_slot_no": 2,
-                "upgrade_cost": 100.0
-            },
+            "/matrix/upgrade-slot",
+            params={"user_id": self.test_user_id, "from_slot_no": 1, "to_slot_no": 2},
             headers={"Authorization": "Bearer test_token"}
         )
         
@@ -438,8 +445,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["from_slot_no"], 1)
         self.assertEqual(data["data"]["to_slot_no"], 2)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_upgrade_options_endpoint(self, mock_service_class, mock_auth):
         """Test Matrix upgrade options API endpoint."""
         # Mock authentication
@@ -475,8 +482,8 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== SPECIAL PROGRAMS INTEGRATION API TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_rank_status_endpoint(self, mock_service_class, mock_auth):
         """Test Rank System status API endpoint."""
         # Mock authentication
@@ -508,8 +515,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["current_rank"], "Bitron")
         self.assertEqual(data["data"]["rank_number"], 1)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_global_program_status_endpoint(self, mock_service_class, mock_auth):
         """Test Global Program status API endpoint."""
         # Mock authentication
@@ -546,8 +553,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertTrue(data["data"]["integrated"])
         self.assertEqual(data["data"]["contribution"], 5.0)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_leadership_stipend_status_endpoint(self, mock_service_class, mock_auth):
         """Test Leadership Stipend status API endpoint."""
         # Mock authentication
@@ -584,8 +591,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertTrue(data["data"]["eligible"])
         self.assertEqual(data["data"]["matrix_slot"], 10)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_jackpot_program_status_endpoint(self, mock_service_class, mock_auth):
         """Test Jackpot Program status API endpoint."""
         # Mock authentication
@@ -623,8 +630,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["matrix_slot"], 5)
         self.assertEqual(data["data"]["coupons_awarded"], 1)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_ngs_status_endpoint(self, mock_service_class, mock_auth):
         """Test NGS status API endpoint."""
         # Mock authentication
@@ -660,8 +667,8 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertEqual(data["data"]["matrix_slot"], 1)
         self.assertEqual(data["data"]["benefits"]["total_benefits"], 1.10)
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_get_mentorship_bonus_status_endpoint(self, mock_service_class, mock_auth):
         """Test Mentorship Bonus status API endpoint."""
         # Mock authentication
@@ -697,8 +704,8 @@ class TestMatrixRouter(unittest.TestCase):
     
     # ==================== ERROR HANDLING TESTS ====================
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_api_error_handling(self, mock_service_class, mock_auth):
         """Test API error handling."""
         # Mock authentication
@@ -714,7 +721,13 @@ class TestMatrixRouter(unittest.TestCase):
         
         # Make request
         response = self.client.post(
-            f"/matrix/join/{self.test_user_id}/{self.test_referrer_id}",
+            "/matrix/join",
+            json={
+                "user_id": self.test_user_id,
+                "referrer_id": self.test_referrer_id,
+                "tx_hash": "tx",
+                "amount": 11.0
+            },
             headers={"Authorization": "Bearer test_token"}
         )
         
@@ -724,7 +737,7 @@ class TestMatrixRouter(unittest.TestCase):
         self.assertFalse(data["success"])
         self.assertIn("Test error message", data["error"])
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
     def test_api_unauthorized_access(self, mock_auth):
         """Test API unauthorized access."""
         # Mock authentication failure
@@ -758,9 +771,14 @@ class TestMatrixAPIIntegration(unittest.TestCase):
             "username": "testuser",
             "email": "test@example.com"
         }
+        # Override auth dependency to bypass Depends in tests
+        try:
+            self.app.dependency_overrides[authentication_service.verify_authentication] = lambda: self.mock_auth
+        except Exception:
+            pass
     
-    @patch('modules.matrix.router.authentication_service.verify_authentication')
-    @patch('modules.matrix.router.MatrixService')
+    @patch('backend.modules.matrix.router.authentication_service.verify_authentication')
+    @patch('backend.modules.matrix.router.MatrixService')
     def test_full_matrix_workflow_api(self, mock_service_class, mock_auth):
         """Test complete Matrix workflow through API endpoints."""
         # Mock authentication
@@ -799,7 +817,8 @@ class TestMatrixAPIIntegration(unittest.TestCase):
         
         # Test Matrix join
         join_response = self.client.post(
-            f"/matrix/join/{self.test_user_id}/{self.test_referrer_id}",
+            "/matrix/join",
+            json={"user_id": self.test_user_id, "referrer_id": self.test_referrer_id, "tx_hash": "tx", "amount": 11.0},
             headers={"Authorization": "Bearer test_token"}
         )
         self.assertEqual(join_response.status_code, 200)
@@ -813,12 +832,8 @@ class TestMatrixAPIIntegration(unittest.TestCase):
         
         # Test Matrix upgrade
         upgrade_response = self.client.post(
-            f"/matrix/upgrade-slot/{self.test_user_id}",
-            json={
-                "from_slot_no": 1,
-                "to_slot_no": 2,
-                "upgrade_cost": 100.0
-            },
+            "/matrix/upgrade-slot",
+            params={"user_id": self.test_user_id, "from_slot_no": 1, "to_slot_no": 2},
             headers={"Authorization": "Bearer test_token"}
         )
         self.assertEqual(upgrade_response.status_code, 200)

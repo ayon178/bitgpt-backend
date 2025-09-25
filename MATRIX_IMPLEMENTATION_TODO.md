@@ -58,7 +58,7 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 - [x] **MatrixAutoUpgrade Tracking**: Initialize middle-3 auto-upgrade system
 - [x] **Joining Commission**: 10% to direct upline
 - [x] **Partner Incentive**: 10% to upline from joining
-- [x] **Level Distribution**: 40% distributed across matrix levels
+- [x] **Level-Income Distribution (Authoritative)**: 20% / 20% / 60% across first, second, third tree-uplines
 - [x] **🌟 স্পার্ক বোনাস**: 8% contribution to Spark fund
 - [x] **🌟 রয়েল ক্যাপ্টেন**: 4% contribution to Royal Captain fund
 - [x] **🌟 প্রেসিডেন্ট রিওয়ার্ড**: 3% contribution to President Reward fund
@@ -81,6 +81,8 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 - [x] **Re-entry Placement**: User re-enters upline's corresponding slot at first available BFS position
 - [x] **No Payment**: No re-joining payment required
 - [x] **Income Distribution**: Level incomes distributed to First/Second/Third upline
+ - [x] **Sweepover-Compatible Re-entry (Authoritative)**: If immediate upline has the same slot active → place into their current in-progress tree via BFS; if their direct positions are full, continue BFS to lower levels. If immediate upline lacks that slot, escalate upward to an eligible upline (same slot + space) up to 60 levels; if none, place into Mother ID's tree.
+ - [x] **Direct vs Tree Upline**: Direct upline (referral) never changes; Tree upline (income ancestors) may change per slot/recycle due to sweepover and BFS placement.
 
 ### 2.2 Recycle Data Model ✅ COMPLETED
 - [x] **MatrixRecycleInstance**: Track recycle instances per user+slot
@@ -91,7 +93,7 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 ### 2.3 Recycle Implementation Tasks ✅ COMPLETED
 - [x] **Recycle Detection**: Monitor when 39 members complete
 - [x] **Snapshot Creation**: Create immutable tree snapshot
-- [x] **Re-entry Placement**: Place recycled user in upline's tree
+- [x] **Re-entry Placement (BFS)**: Place recycled user in the immediate upline's tree if eligible; otherwise escalate to higher upline per eligibility; fallback Mother ID
 - [x] **Income Redistribution**: Adjust income distribution relationships
 - [x] **Recycle API Endpoints**: GET /matrix/recycle-tree, GET /matrix/recycles
 
@@ -116,6 +118,7 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 - [x] **Auto Upgrade Trigger**: Process automatic upgrade when conditions met
 - [x] **Manual Upgrade Option**: Allow manual upgrade with wallet funds
 - [x] **Reserve Combination**: Support 2 reserves + 1 wallet or 1 reserve + 2 wallet
+ - [x] **Sweepover Independence**: PI and Mentorship bonuses remain referral-based and unaffected by sweepover/recycle
 
 ### 3.3 Auto Upgrade Models ✅ COMPLETED
 - [x] **MatrixAutoUpgrade**: Auto upgrade status tracking
@@ -190,7 +193,7 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 - [x] **POST /matrix/upgrade-slot**: Upgrade Matrix slot manually
 - [x] **Upgrade Validation**: Ensure proper slot progression
 - [x] **Commission Distribution**: 10% to upline on upgrade
-- [x] **Level Distribution**: 40% distributed across matrix levels
+- [x] **Level-Income Distribution (Authoritative)**: 20% / 20% / 60% across first, second, third tree-uplines
 - [x] **Special Program Triggers**: Spark, Royal Captain, President Reward, etc.
 
 ### 6.2 Upgrade Models ✅ COMPLETED
@@ -250,6 +253,8 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 - [x] **Test Runner**: Comprehensive test execution framework
 - [x] **Test Coverage**: Complete test coverage for all Matrix features
 - [x] **Test Documentation**: Detailed test documentation and examples
+ - [x] **Sweepover Placement Tests**: Eligibility escalation up to 60 levels and Mother ID fallback
+ - [x] **Tree vs Direct Upline Tests**: Validate referral invariance vs tree-upline variability
 
 ### 8.2 Integration Tests ✅ COMPLETED
 - [x] **End-to-End Tests**: Complete Matrix workflow testing including join, upgrade, recycle, auto-upgrade, Dream Matrix, and Mentorship Bonus workflows
@@ -259,6 +264,8 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 - [x] **API Integration Tests**: API integration testing for complete API workflows and cross-program API integration
 - [x] **Error Handling Integration Tests**: Comprehensive error handling and edge case testing
 - [x] **Real-World Scenario Tests**: Real-world scenario testing including multi-user, chain, and complex scenarios
+ - [x] **Chain Recycle Cascade Tests**: Downline-triggered upline recycle and multi-hop cascades
+ - [x] **Sweepover + Recycle Tests**: Verify same-tree re-entry until skipped upline upgrades; then re-attach under upgraded upline for higher slots
 
 ### 8.3 Performance Tests ✅ COMPLETED
 - [x] **Large Tree Traversal Tests**: Performance tests for large Matrix tree traversal operations (1000+ nodes)
@@ -455,6 +462,6 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 
 ---
 
-**Last Updated**: 2024-12-19  
+**Last Updated**: 2025-09-25  
 **Current Phase**: Phase 8 - Testing & Optimization  
 **Next Milestone**: Complete Testing & Optimization Implementation

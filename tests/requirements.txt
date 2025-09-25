@@ -15,7 +15,7 @@ pymongo>=4.0.0
 motor>=3.0.0
 
 # Test utilities
-unittest-mock>=1.0.0
+# unittest.mock is built into Python 3's standard library
 freezegun>=1.2.0
 
 # Performance testing
@@ -37,7 +37,7 @@ factory-boy>=3.2.0
 
 # Async testing
 pytest-asyncio>=0.21.0
-asyncio-mock>=0.1.0
+# asyncio-mock not required; use unittest.mock/pytest-asyncio
 
 # Database testing
 pytest-mongodb>=2.0.0
@@ -48,7 +48,6 @@ responses>=0.23.0
 
 # Mocking
 mock>=5.0.0
-unittest-mock>=1.0.0
 
 # Test reporting
 pytest-json-report>=1.5.0

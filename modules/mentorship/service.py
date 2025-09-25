@@ -70,6 +70,38 @@ class MentorshipService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def process_matrix_mentorship(self, user_id: str, referrer_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+        """Process Matrix Mentorship Bonus (10%) to super upline, referral-based and independent of tree.
+
+        - user_id: the user who joined/upgraded (source of amount)
+        - referrer_id: the direct sponsor of user_id
+        - super upline: sponsor of referrer_id (referrer.refered_by)
+        """
+        try:
+            # Validate users
+            user = User.objects(id=ObjectId(user_id)).first()
+            referrer = User.objects(id=ObjectId(referrer_id)).first()
+            if not user or not referrer:
+                return {"success": False, "error": "User or referrer not found"}
+
+            super_upline_id = getattr(referrer, 'refered_by', None)
+            if not super_upline_id:
+                # No super upline → nothing to distribute (as per rules)
+                return {"success": True, "status": "no_super_upline"}
+
+            # Calculate 10% mentorship bonus on the Matrix amount
+            source_amount = float(amount)
+            commission_result = self.process_commission(
+                mentor_id=str(super_upline_id),
+                source_user_id=str(user.id),
+                commission_type="matrix",
+                source_amount=source_amount
+            )
+
+            return {"success": True, "result": commission_result}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
     def check_eligibility(self, user_id: str, force_check: bool = False) -> Dict[str, Any]:
         """Check Mentorship eligibility for user"""

@@ -803,6 +803,86 @@ The Matrix Auto Upgrade System automatically uses earnings from specific members
 - Reserve combination is allowed: with 2 reserves + 1 wallet share, or 1 reserve + 2 wallet shares to complete an upgrade.
 - If the next slot is already upgraded, no further funds from that tree go into reserve.
 
+### Sweepover Rules (Updated, Authoritative)
+- Sweepover occurs when a junior upgrades a slot before their upline/senior has upgraded the same slot. In that case, the junior “jumps” into the super-upline’s current in-progress tree for that slot (placed by BFS per matrix rules).
+- The skipped upline does not receive any level-income from that slot for that junior’s activities (missed for that slot only). Future slots can restore normal distribution if the senior upgrades first at those later slots.
+- Placement and income references always resolve relative to the new tree where the junior was placed (i.e., first/second/third upline are the three ancestors above the placed position in that tree).
+
+### Eligibility Escalation and Fallback
+- When resolving sweepover placement, check eligibility upward to the 60th-level upline for an upgraded holder of the target slot.
+- If no eligible upline exists within 60 levels, place into the Mother ID’s tree for that slot.
+
+### Level Distribution (Matrix) — 3 Levels: 20% / 20% / 60%
+Matrix level-income distributes across the immediate three upline levels relative to the placed position:
+- Level-1 (closest ancestor): 20%
+- Level-2: 20%
+- Level-3: 60%
+
+Example with an $800 basis for illustration:
+
+| Level | Team | %   | Per-member | Total      |
+| :---- | :--- | :-- | :--------- | :--------- |
+| 1     | 3    | 20% | $160       | $160×3 = $480 |
+| 2     | 9    | 20% | $160       | $160×9 = $1440 |
+| 3     | 27   | 60% | $320       | $320×27 = $8640 |
+|       |      |      |            | **$10560** |
+
+Summary: 1) 20%, 2) 20%, 3) 60%.
+
+### Recycle Behavior with Sweepover
+- Each slot (1–15) completes at 39 occupants (3/9/27) and then recycles. On recycle, a user re-enters the direct upline’s corresponding slot using BFS placement.
+- If the user originally occupied a position via sweepover, they will re-enter the same super-upline’s tree on recycle, unless their immediate upline has upgraded that slot in the meantime. If the immediate upline later upgrades the same slot, subsequent upgrade/recycle for that slot will place under that upline per normal rules.
+- Chain recycle: If a downline’s final placement completes the upline’s tree and triggers the upline’s recycle, both recycles occur. The triggering join/upgrade amount is accounted for in the upline’s tree at the tick-marked circle, and level-income distributes to the first/second/third uplines relative to that placement. This cascade may repeat multiple times.
+
+### Direct vs Tree Upline (Authoritative)
+- Direct Upline: The referral relationship. This never changes across slots or recycles.
+- Tree Upline: The ancestor that receives level-income for a specific placement in a specific slot tree. This can change per slot and per recycle due to sweepover and BFS placement.
+
+#### Initial Placement Resolution (Clarified)
+- When a user joins Matrix for a given slot, resolve placement as follows:
+  1) If the user's direct referrer (B) is active in Matrix for the target slot (or any eligible slot per rules), place the new user (C) under B's current in-progress tree using BFS. In this case, direct_upline = B and initial tree_upline = B. On later recycle(s), only tree_upline may change; direct_upline remains B.
+  2) If the direct referrer (B) is not active in Matrix for that slot (or has not joined Matrix), escalate up to B's referrer (A) and check eligibility. If A is eligible, place C under A's tree using BFS. In this case, direct_upline = B (unchanged referral), but initial tree_upline = A. PI and Mentorship remain referral-based and continue to reference B (and B's referrer) regardless of tree placement.
+  3) Continue escalation up the referral chain as needed (up to 60 levels). If no eligible upline is found within the escalation depth, place under the configured Mother ID's tree. In all cases, direct_upline never changes once set.
+
+Notes:
+- This behavior ensures sweepover/escalation never mutates the referral chain. Recycles can cause tree_upline to change (per sweepover and BFS), but direct_upline is immutable.
+
+### Recycle Re-entry Algorithm (BFS with Ancestor Resolution)
+When a user completes a slot (39 occupants) and recycles:
+1) If the immediate upline has the same slot active, place the recycling user into the immediate upline’s current in-progress tree using BFS:
+   - Try Level-1 first (any of the 3 direct positions). If none are free, proceed breadth-first to Level-2 then Level-3.
+2) If the immediate upline does NOT have that slot active, escalate upward to the next upline who has that slot active and space available, using the same BFS rule. Continue escalation up to 60 levels; if none is eligible, place into the Mother ID’s tree for that slot.
+3) The resulting three ancestors above the placed position define Level-1/2/3 for income distribution (20/20/60).
+
+Implication: A user may temporarily appear under a super-upline’s tree (sweepover or recycle), while the direct upline relationship remains unchanged. Later, if the skipped upline activates the relevant slot (or a higher slot before the downline’s next upgrade), subsequent placements can return under that upline’s tree.
+
+### Worked Example (Slots 3 and 4)
+Assume the hierarchy: You (A) → Me (B) → My Downline (D).
+- A has Slot-3 active. D has Slot-3 active. B does NOT yet have Slot-3.
+- D completes Slot-3 and recycles. Since B lacks Slot-3, D is placed into A Slot-3 tree by BFS. This may place D at A Level-1 if a direct position is free, otherwise at Level-2/3 per BFS. During this time, Tree Upline for D@Slot-3 is A. Direct Upline remains B.
+- Later, B upgrades Slot-3. Before D upgrades to Slot-4, D’s next placement (e.g., D’s Slot-4 join/upgrade) will resolve under B’s tree if B has Slot-4 first (or activates the relevant slot before D’s corresponding upgrade). Thus Tree Upline for D@Slot-4 becomes B, while Direct Upline was always B.
+
+### Bonuses Unaffected by Sweepover
+- Partner Incentive (10%), Newcomer Growth Support, and Mentorship Bonus are not impacted by sweepover; they distribute per their normal rules regardless of the tree used for level-income.
+
+### Notes
+- “Second-level middle three fund the next slot” remains the authoritative auto-upgrade rule for Matrix and is unchanged here.
+- For concrete scenarios (e.g., junior upgrades $60 and sweeps over a non-upgraded upline into a super-upline’s tree), recycle re-entry will remain in that same tree so long as the skipped upline stays non-upgraded at that slot. If the upline later upgrades (e.g., $60 and $240), then when the junior reaches the higher slot (e.g., $240) the placement and distribution will occur under the upgraded upline per normal.
+
+### Partner Incentive & Mentorship Bonus (Matrix) — Distribution Rules
+- Partner Incentive (PI) — 10%: Paid to the direct sponsor/upline of the user who joins or upgrades a Matrix slot. This is always based on the referral chain (not tree placement). Unaffected by sweepover or recycle.
+- Mentorship Bonus — 10%: Paid to the “super upline” (the sponsor of the sponsor) for transactions made by the direct-of-direct partner (i.e., your direct’s direct). Also based on the referral chain and unaffected by sweepover or recycle.
+- Scope: Both apply on Matrix join ($11) and on every Matrix slot upgrade (slots 1–15) per slot value.
+- Independence: PI and Mentorship are independent of the 20/20/60 level-income and of reserve mechanics. They are computed in parallel with level-income.
+- Missing super upline: If a super upline does not exist for a user (no sponsor-of-sponsor), the Mentorship portion for that user does not apply.
+
+Example:
+- If X joins/upgrade a Matrix slot and S is X’s direct sponsor, Y is S’s sponsor:
+  - PI 10% of the slot amount → S (direct sponsor of X).
+  - Mentorship 10% of the slot amount → Y (sponsor of S), because X is a direct-of-direct relative to Y.
+  - These payouts are independent of whether X’s level-income flows under S’s tree or under any super-upline’s tree due to sweepover.
+
+
 ### Matrix Recycle Tree API
 - Fetch a user's matrix tree by recycle number and slot. Frontend provides user_id and recycle_no; backend returns the tree snapshot for that recycle. If multiple recycles happened, there will be multiple trees per user.
 - If no recycle exists yet for that slot, return the current in-progress tree (partial), with however many members exist.

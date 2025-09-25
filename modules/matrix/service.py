@@ -19,6 +19,7 @@ from .model import (
     MatrixEarningHistory, MatrixCommission, MatrixRecycleInstance, MatrixRecycleNode
 )
 from utils import ensure_currency_for_program
+from core.config import MATRIX_MAX_ESCALATION_DEPTH, MATRIX_MOTHER_ID
 
 
 class MatrixService:
@@ -76,6 +77,17 @@ class MatrixService:
             if not user or not referrer:
                 raise ValueError("User or referrer not found")
             
+            # Guard direct upline immutability across programs
+            # - If a platform-level referrer already exists, always use it and do NOT rewrite
+            # - If absent, set it once from the provided referrer_id
+            existing_direct = getattr(user, 'refered_by', None)
+            direct_referrer_id = referrer_id
+            if existing_direct is None:
+                user.refered_by = ObjectId(referrer_id)
+                user.save()
+            else:
+                direct_referrer_id = str(existing_direct)
+            
             # Validate amount ($11 USDT)
             expected_amount = self.MATRIX_SLOTS[1]['value']
             if amount != expected_amount:
@@ -97,14 +109,26 @@ class MatrixService:
                 'initial', amount, tx_hash
             )
             
-            # 3. Place user in referrer's matrix tree using BFS algorithm
-            placement_result = self._place_user_in_matrix_tree(user_id, referrer_id, matrix_tree)
+            # 3. Place user in upline tree with sweepover-aware BFS (slot 1 at join)
+            # Place under the direct referrer tree, with sweepover escalation as needed
+            placement_result = self._place_user_in_matrix_tree(user_id, direct_referrer_id, matrix_tree, slot_no=1)
             
             # 4. Initialize MatrixAutoUpgrade tracking
             self._initialize_matrix_auto_upgrade(user_id)
             
             # 5. Process all commission distributions (100% total)
-            commission_results = self._process_matrix_commissions(user_id, referrer_id, amount, currency)
+            commission_results = self._process_matrix_commissions(
+                user_id,
+                direct_referrer_id,
+                amount,
+                currency,
+                placement_context={
+                    "placed_under_user_id": placement_result.get("placed_under_user_id"),
+                    "level": placement_result.get("level"),
+                    "position": placement_result.get("position")
+                },
+                slot_no=1
+            )
             
             # 6. Process special program integrations
             special_programs_results = self._process_special_programs(user_id, referrer_id, amount, currency)
@@ -137,6 +161,14 @@ class MatrixService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _get_direct_upline_user_id(self, user_id: str) -> Optional[str]:
+        """Return the direct upline (referrer) for a user, without using tree placement."""
+        try:
+            user = User.objects(id=ObjectId(user_id)).first()
+            return str(user.refered_by) if user and getattr(user, 'refered_by', None) else None
+        except Exception:
+            return None
     
     def _create_matrix_tree(self, user_id: str) -> MatrixTree:
         """Create MatrixTree for user"""
@@ -181,19 +213,34 @@ class MatrixService:
         except Exception as e:
             raise ValueError(f"Failed to create matrix activation: {str(e)}")
     
-    def _place_user_in_matrix_tree(self, user_id: str, referrer_id: str, matrix_tree: MatrixTree) -> Dict[str, Any]:
-        """Place user in referrer's matrix tree using BFS algorithm"""
+    def _place_user_in_matrix_tree(self, user_id: str, referrer_id: str, matrix_tree: MatrixTree, slot_no: int = 1) -> Dict[str, Any]:
+        """Place user using sweepover-aware BFS with escalation.
+
+        - Try immediate upline (referrer_id) if they have the same slot active and space.
+        - If no slot or no space, escalate up to MATRIX_MAX_ESCALATION_DEPTH to find first eligible upline.
+        - If none, fallback to Mother ID tree when configured; else raise.
+        """
         try:
-            # Get referrer's matrix tree
-            referrer_tree = MatrixTree.objects(user_id=ObjectId(referrer_id)).first()
-            if not referrer_tree:
-                raise ValueError("Referrer not in Matrix program")
-            
-            # Find first available position using BFS
-            placement_position = self._find_bfs_placement_position(referrer_tree)
-            
+            # Resolve target parent via sweepover escalation
+            target_parent_tree = self._resolve_target_parent_tree_for_slot(referrer_id, slot_no)
+            if not target_parent_tree:
+                raise ValueError("No eligible parent tree found for placement")
+
+            # Find first available position using BFS within the resolved parent tree
+            placement_position = self._find_bfs_placement_position(target_parent_tree)
+            used_escalation = (str(target_parent_tree.user_id) != str(referrer_id))
+            used_mother = (MATRIX_MOTHER_ID and str(target_parent_tree.user_id) == MATRIX_MOTHER_ID)
             if not placement_position:
-                raise ValueError("No available positions in referrer's matrix tree")
+                # escalate one level further: attempt next eligible ancestor if current has no space
+                next_parent_tree = self._resolve_next_eligible_ancestor(target_parent_tree.user_id, slot_no, start_from_current=True)
+                if next_parent_tree:
+                    placement_position = self._find_bfs_placement_position(next_parent_tree)
+                    if placement_position:
+                        target_parent_tree = next_parent_tree
+                        used_escalation = True
+                        used_mother = (MATRIX_MOTHER_ID and str(target_parent_tree.user_id) == MATRIX_MOTHER_ID)
+            if not placement_position:
+                raise ValueError("No available positions in eligible matrix trees for placement")
             
             # Create matrix node for the new user
             matrix_node = MatrixNode(
@@ -204,7 +251,8 @@ class MatrixService:
                 is_active=True
             )
             
-            # Add node to referrer's tree
+            # Add node to target parent tree
+            referrer_tree = target_parent_tree
             referrer_tree.nodes.append(matrix_node)
             
             # Update member counts
@@ -223,8 +271,8 @@ class MatrixService:
             if referrer_tree.total_members >= 39:
                 referrer_tree.is_complete = True
                 referrer_tree.save()
-                # Automatically trigger recycle process
-                self._check_and_process_automatic_recycle(str(referrer_tree.user_id), 1)
+                # Automatically trigger recycle process for this tree's owner at their current slot
+                self._check_and_process_automatic_recycle(str(referrer_tree.user_id), referrer_tree.current_slot or slot_no)
             
             # Check for automatic upgrade after placement
             self.check_and_process_automatic_upgrade(str(referrer_tree.user_id), referrer_tree.current_slot)
@@ -250,16 +298,101 @@ class MatrixService:
             # Trigger automatic Mentorship Bonus integration
             self.trigger_mentorship_bonus_integration_automatic(user_id)
             
+            # Audit placement (blockchain event)
+            try:
+                self._log_matrix_placement(
+                    user_id=user_id,
+                    slot_no=slot_no,
+                    placed_under_user_id=str(referrer_tree.user_id),
+                    placement_level=placement_position['level'],
+                    placement_position=placement_position['position'],
+                    method='join_or_upgrade',
+                    escalated=bool(used_escalation),
+                    mother_fallback=bool(used_mother)
+                )
+            except Exception:
+                pass
+
             return {
                 "success": True,
                 "level": placement_position['level'],
                 "position": placement_position['position'],
                 "total_members": referrer_tree.total_members,
-                "is_complete": referrer_tree.is_complete
+                "is_complete": referrer_tree.is_complete,
+                "placed_under_user_id": str(referrer_tree.user_id)
             }
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _resolve_target_parent_tree_for_slot(self, referrer_id: str, slot_no: int) -> Optional[MatrixTree]:
+        """Return the first eligible parent MatrixTree for the given slot using escalation.
+
+        Eligibility: parent must have a MatrixTree, have the slot active (or at least a current slot >= slot_no),
+        and ideally have space; space is validated during BFS step.
+        """
+        try:
+            visited = 0
+            current_user_id = ObjectId(referrer_id)
+            while current_user_id and visited <= MATRIX_MAX_ESCALATION_DEPTH:
+                tree = MatrixTree.objects(user_id=current_user_id).first()
+                if tree and (tree.current_slot or 1) >= slot_no:
+                    return tree
+                # move to next upline by direct referral chain
+                next_user = User.objects(id=current_user_id).first()
+                current_user_id = getattr(next_user, 'refered_by', None)
+                visited += 1
+            # fallback to Mother ID if configured
+            if MATRIX_MOTHER_ID:
+                mother_tree = MatrixTree.objects(user_id=ObjectId(MATRIX_MOTHER_ID)).first()
+                if mother_tree:
+                    return mother_tree
+            return None
+        except Exception:
+            return None
+
+    def _resolve_next_eligible_ancestor(self, start_user_id: ObjectId, slot_no: int, start_from_current: bool = False) -> Optional[MatrixTree]:
+        """Find the next ancestor up the chain with an eligible tree for the slot."""
+        try:
+            visited = 0
+            current_user_id = start_user_id if not start_from_current else User.objects(id=start_user_id).first().refered_by
+            while current_user_id and visited <= MATRIX_MAX_ESCALATION_DEPTH:
+                tree = MatrixTree.objects(user_id=current_user_id).first()
+                if tree and (tree.current_slot or 1) >= slot_no and self._find_bfs_placement_position(tree) is not None:
+                    return tree
+                next_user = User.objects(id=current_user_id).first()
+                current_user_id = getattr(next_user, 'refered_by', None)
+                visited += 1
+            if MATRIX_MOTHER_ID:
+                mother_tree = MatrixTree.objects(user_id=ObjectId(MATRIX_MOTHER_ID)).first()
+                if mother_tree and self._find_bfs_placement_position(mother_tree) is not None:
+                    return mother_tree
+            return None
+        except Exception:
+            return None
+
+    def _log_matrix_placement(self, user_id: str, slot_no: int, placed_under_user_id: str, placement_level: int, placement_position: int, method: str = 'join', escalated: bool = False, mother_fallback: bool = False) -> None:
+        """Persist placement audit as a blockchain event for traceability."""
+        try:
+            BlockchainEvent(
+                tx_hash=f"MATRIX-PLACE-{user_id}-S{slot_no}-{datetime.utcnow().timestamp()}",
+                event_type='matrix_placement',
+                event_data={
+                    'program': 'matrix',
+                    'user_id': user_id,
+                    'slot_no': slot_no,
+                    'placed_under_user_id': placed_under_user_id,
+                    'placement_level': placement_level,
+                    'placement_position': placement_position,
+                    'method': method,
+                    'escalated': bool(escalated),
+                    'mother_fallback': bool(mother_fallback)
+                },
+                status='processed',
+                processed_at=datetime.utcnow()
+            ).save()
+        except Exception:
+            pass
     
     def _find_bfs_placement_position(self, matrix_tree: MatrixTree) -> Optional[Dict[str, int]]:
         """Find first available position using BFS algorithm"""
@@ -301,7 +434,7 @@ class MatrixService:
         except Exception as e:
             print(f"Error initializing matrix auto upgrade: {str(e)}")
     
-    def _process_matrix_commissions(self, user_id: str, referrer_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
+    def _process_matrix_commissions(self, user_id: str, referrer_id: str, amount: Decimal, currency: str, placement_context: Optional[Dict[str, Any]] = None, slot_no: int = 1) -> Dict[str, Any]:
         """Process all matrix commission distributions (100% total)"""
         try:
             results = {}
@@ -325,8 +458,8 @@ class MatrixService:
             )
             results['partner_incentive'] = partner_result
             
-            # 3. Level Distribution (40% distributed across matrix levels)
-            level_result = self._calculate_level_distribution(user_id, amount, currency)
+            # 3. Level Distribution (20/20/60 within the 40% pool)
+            level_result = self._calculate_level_distribution(user_id, amount, currency, placement_context=placement_context, slot_no=slot_no)
             results['level_distribution'] = level_result
             
             # 4. Spark Bonus (8% contribution to Spark fund)
@@ -441,23 +574,146 @@ class MatrixService:
         except Exception as e:
             print(f"Error recording blockchain event: {str(e)}")
     
-    def _calculate_level_distribution(self, user_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
-        """Calculate level distribution (40% of total)"""
+    def _calculate_level_distribution(self, user_id: str, amount: Decimal, currency: str, placement_context: Optional[Dict[str, Any]] = None, slot_no: int = 1) -> Dict[str, Any]:
+        """Calculate and record level income distribution using 20/20/60 split of the 40% pool.
+
+        placement_context should include: {
+          'placed_under_user_id': str,  # tree owner where placement happened
+          'level': int,                  # placement level (1..3)
+          'position': int                # placement position (0-based)
+        }
+        """
         try:
-            # 40% of amount distributed across matrix levels
             level_amount = amount * Decimal('0.40')
-            
-            # TODO: Implement actual level distribution logic
-            # This would involve finding upline chain and distributing to each level
-            
+
+            # Determine recipients (tree-based L1/L2/L3) from placement context
+            l1_id, l2_id, l3_id = None, None, None
+            if placement_context and placement_context.get('placed_under_user_id') is not None:
+                l1_id, l2_id, l3_id = self._resolve_three_tree_uplines(
+                    placed_under_user_id=placement_context.get('placed_under_user_id'),
+                    placement_level=placement_context.get('level'),
+                    placement_position=placement_context.get('position')
+                )
+
+            splits = [Decimal('0.20'), Decimal('0.20'), Decimal('0.60')]
+            recipients = [l1_id, l2_id, l3_id]
+            paid = []
+
+            for idx, recipient_id in enumerate(recipients, start=1):
+                if not recipient_id:
+                    continue
+                share = (level_amount * splits[idx - 1]).quantize(Decimal('0.00000001'))
+                try:
+                    MatrixCommission(
+                        from_user_id=ObjectId(user_id),
+                        to_user_id=ObjectId(recipient_id),
+                        program='matrix',
+                        slot_no=slot_no,
+                        slot_name=self.MATRIX_SLOTS.get(slot_no, {}).get('name', ''),
+                        commission_type='level_income',
+                        commission_level=idx,
+                        amount=share,
+                        currency=currency,
+                        percentage=float(splits[idx - 1] * Decimal('40'))  # percentage of total amount (0.2 of 40%)
+                    ).save()
+                    paid.append({
+                        "level": idx,
+                        "to_user_id": str(recipient_id),
+                        "amount": float(share)
+                    })
+                except Exception:
+                    continue
+
             return {
                 "success": True,
                 "total_level_amount": float(level_amount),
                 "currency": currency,
-                "message": "Level distribution calculated"
+                "paid": paid
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _resolve_three_tree_uplines(self, placed_under_user_id: str, placement_level: Optional[int], placement_position: Optional[int]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        """Resolve the three tree-upline user ids for a placement within a given tree owner.
+
+        Rules:
+        - If placement_level == 1: L1 = tree owner; L2 = owner.refered_by; L3 = L2.refered_by
+        - If placement_level == 2: L1 = L1-node user at pos = position//3; L2 = tree owner; L3 = owner.refered_by
+        - If placement_level == 3: L1 = L2-node user at pos2 = position//3; L2 = L1-node user at pos1 = pos2//3; L3 = tree owner
+        """
+        try:
+            if not placed_under_user_id or placement_level is None or placement_position is None:
+                return (None, None, None)
+
+            tree_owner_id = ObjectId(placed_under_user_id)
+            tree = MatrixTree.objects(user_id=tree_owner_id).first()
+            if not tree:
+                return (None, None, None)
+
+            def find_node_user(level: int, position: int) -> Optional[str]:
+                for n in tree.nodes:
+                    if getattr(n, 'level', None) == level and getattr(n, 'position', None) == position:
+                        return str(n.user_id)
+                return None
+
+            if placement_level == 1:
+                l1 = str(tree_owner_id)
+                owner = User.objects(id=tree_owner_id).first()
+                l2 = str(owner.refered_by) if owner and getattr(owner, 'refered_by', None) else None
+                l2_user = User.objects(id=ObjectId(l2)).first() if l2 else None
+                l3 = str(l2_user.refered_by) if l2_user and getattr(l2_user, 'refered_by', None) else None
+                return (l1, l2, l3)
+
+            if placement_level == 2:
+                parent_l1_pos = int(placement_position) // 3
+                l1 = find_node_user(1, parent_l1_pos)
+                l2 = str(tree_owner_id)
+                owner = User.objects(id=tree_owner_id).first()
+                l3 = str(owner.refered_by) if owner and getattr(owner, 'refered_by', None) else None
+                return (l1, l2, l3)
+
+            if placement_level == 3:
+                parent_l2_pos = int(placement_position) // 3
+                l1 = find_node_user(2, parent_l2_pos)
+                parent_l1_pos = parent_l2_pos // 3
+                l2 = find_node_user(1, parent_l1_pos)
+                l3 = str(tree_owner_id)
+                return (l1, l2, l3)
+
+            return (None, None, None)
+        except Exception:
+            return (None, None, None)
+
+    def get_placement_metrics(self, start_iso: Optional[str] = None, end_iso: Optional[str] = None) -> Dict[str, Any]:
+        """Return counts for matrix placement events, including escalations and mother fallbacks."""
+        try:
+            query = {'event_type': 'matrix_placement'}
+            events_qs = BlockchainEvent.objects(**query)
+            if start_iso:
+                from datetime import datetime
+                start_dt = datetime.fromisoformat(start_iso)
+                events_qs = events_qs.filter(created_at__gte=start_dt)
+            if end_iso:
+                from datetime import datetime
+                end_dt = datetime.fromisoformat(end_iso)
+                events_qs = events_qs.filter(created_at__lte=end_dt)
+            total = events_qs.count()
+            escalated = 0
+            mother = 0
+            for ev in events_qs:
+                data = getattr(ev, 'event_data', {}) or {}
+                if data.get('escalated'):
+                    escalated += 1
+                if data.get('mother_fallback'):
+                    mother += 1
+            return {
+                'success': True,
+                'total_placements': total,
+                'escalated': escalated,
+                'mother_fallback': mother
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
     
     def _contribute_to_royal_captain_fund(self, user_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
         """Contribute 4% to Royal Captain fund"""
@@ -492,6 +748,11 @@ class MatrixService:
             
             matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
             matrix_auto_upgrade = MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+            # Last placement audit
+            last_place_event = BlockchainEvent.objects(
+                event_type='matrix_placement',
+                event_data__user_id=user_id
+            ).order_by('-processed_at', '-created_at').first()
             
             return {
                 "success": True,
@@ -508,7 +769,15 @@ class MatrixService:
                     "middle_three_available": matrix_auto_upgrade.middle_three_available if matrix_auto_upgrade else 0,
                     "is_eligible": matrix_auto_upgrade.is_eligible if matrix_auto_upgrade else False,
                     "can_upgrade": matrix_auto_upgrade.can_upgrade if matrix_auto_upgrade else False
-                } if matrix_auto_upgrade else None
+                } if matrix_auto_upgrade else None,
+                "last_placement": {
+                    "slot_no": last_place_event.event_data.get('slot_no') if last_place_event else None,
+                    "placed_under_user_id": last_place_event.event_data.get('placed_under_user_id') if last_place_event else None,
+                    "placement_level": last_place_event.event_data.get('placement_level') if last_place_event else None,
+                    "placement_position": last_place_event.event_data.get('placement_position') if last_place_event else None,
+                    "method": last_place_event.event_data.get('method') if last_place_event else None,
+                    "at": (last_place_event.processed_at or last_place_event.created_at).isoformat() if last_place_event else None
+                }
             }
             
         except Exception as e:
@@ -534,77 +803,67 @@ class MatrixService:
             return False
     
     def create_recycle_snapshot(self, user_id: str, slot_no: int):
-        """Create immutable snapshot of 39-member tree when recycle occurs."""
+        """Create immutable snapshot of the user's current 39-member tree when recycle occurs."""
         try:
             matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
             if not matrix_tree:
                 return None
-            
-            # Get current recycle number for this user+slot
-            existing_recycles = MatrixRecycleInstance.objects(
-                user_id=ObjectId(user_id),
-                slot_number=slot_no
+
+            # Count members per level (1..3 only)
+            level_counts = {1: 0, 2: 0, 3: 0}
+            snapshot_nodes = []
+            for node in matrix_tree.nodes:
+                if getattr(node, 'level', 0) in (1, 2, 3):
+                    level_counts[node.level] += 1
+                    snapshot_nodes.append(node)
+
+            # Determine next recycle no for this user+slot
+            existing_latest = MatrixRecycleInstance.objects(
+                user_id=ObjectId(user_id), slot_number=slot_no
             ).order_by('-recycle_no').first()
-            
-            next_recycle_no = (existing_recycles.recycle_no + 1) if existing_recycles else 1
-            
-            # Create recycle instance
+            next_recycle_no = (existing_latest.recycle_no + 1) if existing_latest else 1
+
+            # Create recycle instance record
             recycle_instance = MatrixRecycleInstance(
                 user_id=ObjectId(user_id),
                 slot_number=slot_no,
                 recycle_no=next_recycle_no,
                 is_complete=True,
+                total_members=sum(level_counts.values()),
+                level_1_members=level_counts[1],
+                level_2_members=level_counts[2],
+                level_3_members=level_counts[3],
                 created_at=datetime.utcnow(),
                 completed_at=datetime.utcnow()
             )
             recycle_instance.save()
-            
-            # Create immutable snapshot of all 39 nodes
-            for node in matrix_tree.nodes:
-                if node.level <= 3:  # Only include the 39 members (3+9+27)
-                    recycle_node = MatrixRecycleNode(
-                        instance_id=recycle_instance.id,
-                        occupant_user_id=node.user_id,
-                        level_index=node.level,
-                        position_index=node.position,
-                        placed_at=node.placed_at
-                    )
-                    recycle_node.save()
-            
+
+            # Persist immutable nodes snapshot
+            for node in snapshot_nodes:
+                MatrixRecycleNode(
+                    instance_id=recycle_instance.id,
+                    user_id=ObjectId(user_id),
+                    slot_number=slot_no,
+                    recycle_no=next_recycle_no,
+                    level=node.level,
+                    position=node.position,
+                    occupant_user_id=node.user_id,
+                    placed_at=node.placed_at
+                ).save()
+
             return recycle_instance
         except Exception as e:
             print(f"Error creating recycle snapshot: {e}")
             return None
     
-    def place_recycled_user(self, user_id: str, slot_no: int, upline_user_id: str):
-        """Place recycled user in upline's corresponding slot using BFS algorithm."""
+    def place_recycled_user(self, user_id: str, slot_no: int, referrer_id: str) -> Optional[Dict[str, Any]]:
+        """Place recycled user using sweepover-aware placement starting from direct referrer."""
         try:
-            # Get upline's matrix tree
-            upline_tree = MatrixTree.objects(user_id=ObjectId(upline_user_id)).first()
-            if not upline_tree:
+            user_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if not user_tree:
                 return None
-            
-            # Find next available position using BFS
-            next_position = self._get_next_available_position(upline_tree, slot_no)
-            if not next_position:
-                return None
-            
-            # Create new node for recycled user
-            new_node = MatrixNode(
-                user_id=ObjectId(user_id),
-                level=next_position["level"],
-                position=next_position["position"],
-                parent_id=ObjectId(upline_user_id),
-                placed_at=datetime.utcnow()
-            )
-            
-            # Add to upline's tree
-            upline_tree.nodes.append(new_node)
-            upline_tree.total_members += 1
-            upline_tree.last_updated = datetime.utcnow()
-            upline_tree.save()
-            
-            return new_node
+            result = self._place_user_in_matrix_tree(user_id, referrer_id, user_tree, slot_no=slot_no)
+            return result if result and result.get("success") else None
         except Exception as e:
             print(f"Error placing recycled user: {e}")
             return None
@@ -649,24 +908,14 @@ class MatrixService:
             if not recycle_instance:
                 return {"success": False, "error": "Failed to create recycle snapshot"}
             
-            # 3. Get upline for re-entry
-            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-            if not matrix_tree:
-                return {"success": False, "error": "Matrix tree not found"}
-            
-            # Find upline (parent in matrix tree)
-            upline_user_id = None
-            for node in matrix_tree.nodes:
-                if node.user_id == ObjectId(user_id):
-                    upline_user_id = node.parent_id
-                    break
-            
-            if not upline_user_id:
-                return {"success": False, "error": "Upline not found"}
-            
-            # 4. Place recycled user in upline's tree
-            new_node = self.place_recycled_user(user_id, slot_no, str(upline_user_id))
-            if not new_node:
+            # 3. Place recycled user starting from direct referrer (sweepover-aware)
+            referrer = User.objects(id=ObjectId(user_id)).first()
+            referrer_id = str(getattr(referrer, 'refered_by', None)) if referrer else None
+            if not referrer_id:
+                return {"success": False, "error": "Referrer not found for recycled placement"}
+
+            placement = self.place_recycled_user(user_id, slot_no, referrer_id)
+            if not placement:
                 return {"success": False, "error": "Failed to place recycled user"}
             
             # 5. Clear current tree for new cycle
@@ -676,15 +925,28 @@ class MatrixService:
             matrix_tree.last_updated = datetime.utcnow()
             matrix_tree.save()
             
+            # Audit recycle placement
+            try:
+                self._log_matrix_placement(
+                    user_id=user_id,
+                    slot_no=slot_no,
+                    placed_under_user_id=placement.get("placed_under_user_id"),
+                    placement_level=placement.get("level"),
+                    placement_position=placement.get("position"),
+                    method='recycle'
+                )
+            except Exception:
+                pass
+
             return {
                 "success": True,
                 "recycle_instance_id": str(recycle_instance.id),
                 "recycle_no": recycle_instance.recycle_no,
                 "new_position": {
-                    "level": new_node.level,
-                    "position": new_node.position
+                    "level": placement.get("level"),
+                    "position": placement.get("position")
                 },
-                "upline_user_id": str(upline_user_id)
+                "placed_under_user_id": placement.get("placed_under_user_id")
             }
         except Exception as e:
             print(f"Error processing recycle completion: {e}")

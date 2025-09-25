@@ -16,7 +16,7 @@ import os
 # Add the backend directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from modules.matrix.service import MatrixService
+from backend.modules.matrix.service import MatrixService
 from modules.matrix.model import *
 from modules.user.model import User
 

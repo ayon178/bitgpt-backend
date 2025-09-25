@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Optional
 from bson import ObjectId
 
-from auth.service import authentication_service
+from backend.auth.service import authentication_service
 from ..user.model import User
 from .service import BinaryService
 from utils.response import success_response, error_response

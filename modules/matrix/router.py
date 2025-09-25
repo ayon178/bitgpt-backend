@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Optional
 from bson import ObjectId
 
-from auth.service import authentication_service
+from backend.auth.service import authentication_service
 from ..user.model import User
 from .service import MatrixService
 from utils.response import success_response, error_response
@@ -1281,5 +1281,25 @@ async def get_mentorship_bonus_info_endpoint(
         }
         
         return success_response(mentorship_bonus_info, "Mentorship Bonus information fetched successfully")
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/metrics/placements")
+async def get_matrix_placement_metrics_endpoint(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get matrix placement metrics counts (total, escalated, mother_fallback)."""
+    try:
+        if current_user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Only admin can view placement metrics")
+        service = MatrixService()
+        result = service.get_placement_metrics(start_iso=start, end_iso=end)
+        if result.get("success"):
+            return success_response(result, "Placement metrics fetched successfully")
+        return error_response(result.get("error", "Failed to fetch placement metrics"))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         return error_response(str(e))
