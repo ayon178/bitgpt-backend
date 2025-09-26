@@ -1026,6 +1026,24 @@ class MatrixService:
                 if not matrix_tree:
                     return None
 
+                # Build node dicts and enrich with occupant_name from users
+                current_nodes = [node.to_mongo().to_dict() for node in matrix_tree.nodes]
+                try:
+                    occupant_ids = {nd.get("user_id") for nd in current_nodes if nd.get("user_id")}
+                    id_to_name: Dict[str, str] = {}
+                    if occupant_ids:
+                        users = User.objects(id__in=list(occupant_ids)).only('id', 'name')
+                        for u in users:
+                            id_to_name[str(u.id)] = getattr(u, 'name', None) or ''
+                    # Add occupant_name alongside existing fields
+                    for nd in current_nodes:
+                        oid = nd.get("user_id")
+                        if oid is not None:
+                            nd["occupant_name"] = id_to_name.get(str(oid), "")
+                except Exception:
+                    # Best-effort enrichment; keep nodes if lookup fails
+                    pass
+
                 return {
                     "user_id": str(matrix_tree.user_id),
                     "slot_number": slot_no,
@@ -1036,7 +1054,7 @@ class MatrixService:
                         user_id=ObjectId(user_id),
                         slot_number=slot_no
                     ).count(),
-                    "nodes": [node.to_mongo().to_dict() for node in matrix_tree.nodes]
+                    "nodes": current_nodes
                 }
             else:
                 # Return specific recycle snapshot
@@ -1051,6 +1069,21 @@ class MatrixService:
                 
                 # Get all nodes for this recycle instance
                 recycle_nodes = MatrixRecycleNode.objects(instance_id=recycle_instance.id).all()
+                node_dicts = [node.to_mongo().to_dict() for node in recycle_nodes]
+                # Enrich with occupant_name from users using occupant_user_id
+                try:
+                    occupant_ids = {nd.get("occupant_user_id") for nd in node_dicts if nd.get("occupant_user_id")}
+                    id_to_name: Dict[str, str] = {}
+                    if occupant_ids:
+                        users = User.objects(id__in=list(occupant_ids)).only('id', 'name')
+                        for u in users:
+                            id_to_name[str(u.id)] = getattr(u, 'name', None) or ''
+                    for nd in node_dicts:
+                        oid = nd.get("occupant_user_id")
+                        if oid is not None:
+                            nd["occupant_name"] = id_to_name.get(str(oid), "")
+                except Exception:
+                    pass
                 
                 return {
                     "user_id": str(recycle_instance.user_id),
@@ -1062,7 +1095,7 @@ class MatrixService:
                         user_id=ObjectId(user_id),
                         slot_number=slot_no
                     ).count(),
-                    "nodes": [node.to_mongo().to_dict() for node in recycle_nodes]
+                    "nodes": node_dicts
                 }
         except Exception as e:
             print(f"Error getting recycle tree: {e}")

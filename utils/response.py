@@ -1,6 +1,13 @@
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from typing import Optional, Dict, Any
+from decimal import Decimal
+try:
+    # bson is available in this project; used across modules
+    from bson import ObjectId  # type: ignore
+except Exception:  # pragma: no cover - fallback if bson missing in some envs
+    class ObjectId(str):  # minimal fallback to avoid runtime import error
+        pass
 
 class ResponseModel:
     def __init__(self, success: bool, message: str, data: Any = None):
@@ -41,11 +48,23 @@ def create_response(
     if meta:
         response_content["meta"] = meta
 
-    # Use jsonable_encoder to handle datetime, ObjectId, etc.
-    return JSONResponse(
-        content=jsonable_encoder(response_content),
-        status_code=status_code
+    # Use jsonable_encoder with custom encoders to handle bson.ObjectId, Decimal, etc.
+    # - ObjectId → str
+    # - Decimal → float (fallback to str if not finite)
+    def _encode_decimal(value: Decimal) -> float | str:
+        try:
+            return float(value)
+        except Exception:
+            return str(value)
+
+    encoded = jsonable_encoder(
+        response_content,
+        custom_encoder={
+            ObjectId: str,
+            Decimal: _encode_decimal,
+        },
     )
+    return JSONResponse(content=encoded, status_code=status_code)
 
 
 # Convenience wrappers so routers can call success_response / error_response
