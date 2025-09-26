@@ -56,3 +56,20 @@ async def get_currency_balances(user_id: str, wallet_type: str = 'main', current
         return error_response(str(e))
 
 
+@router.post("/reconcile")
+async def reconcile_wallet(user_id: str, current_user: dict = Depends(_auth_dependency)):
+    try:
+        requester_id = _extract_requester_id(current_user)
+        requester_role = current_user.get("role") if isinstance(current_user, dict) else None
+        if requester_id and requester_id != user_id and requester_role != "admin":
+            raise HTTPException(status_code=403, detail="Unauthorized to reconcile this user's wallet")
+
+        service = WalletService()
+        data = service.reconcile_main_from_ledger(user_id=user_id)
+        return success_response(data, "Wallet reconciled from ledger successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+

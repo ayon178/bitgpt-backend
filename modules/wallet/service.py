@@ -2,6 +2,7 @@ from decimal import Decimal
 from datetime import datetime
 from bson import ObjectId
 from .model import UserWallet, WalletLedger
+import re
 
 
 class WalletService:
@@ -45,7 +46,69 @@ class WalletService:
             currency = (str(getattr(w, 'currency', '')).upper() or 'USDT')
             if currency in result:
                 result[currency] = float(w.balance or Decimal('0'))
-        return {"success": True, "wallet_type": wallet_type, "balances": result}
+
+        # Today's income totals and distinct source counts per currency from WalletLedger
+        start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_entries = WalletLedger.objects(
+            user_id=ObjectId(user_id),
+            created_at__gte=start_of_day,
+            type='credit'
+        ).only('amount', 'currency', 'tx_hash')
+
+        today_income = {"USDT": 0.0, "BNB": 0.0}
+        today_sources_sets = {"USDT": set(), "BNB": set()}
+
+        # Heuristic: extract a 24-hex substring from tx_hash to infer source user id if present
+        hex24 = re.compile(r"[0-9a-fA-F]{24}")
+        for entry in today_entries:
+            curr = (str(getattr(entry, 'currency', '')).upper() or 'USDT')
+            if curr not in today_income:
+                continue
+            amt = float(getattr(entry, 'amount', 0) or 0)
+            today_income[curr] += amt
+            txh = str(getattr(entry, 'tx_hash', '') or '')
+            m = hex24.search(txh)
+            if m:
+                today_sources_sets[curr].add(m.group(0))
+
+        today_sources = {k: len(v) for k, v in today_sources_sets.items()}
+
+        return {
+            "success": True,
+            "wallet_type": wallet_type,
+            "balances": result,
+            "today_income": today_income,
+            "today_sources": today_sources,
+        }
+
+    def reconcile_main_from_ledger(self, user_id: str) -> dict:
+        """Rebuild main wallet balances per currency from wallet ledger (credits - debits)."""
+        entries = WalletLedger.objects(user_id=ObjectId(user_id)).only('amount', 'currency', 'type')
+        totals = {"USDT": Decimal('0'), "BNB": Decimal('0')}
+        for e in entries:
+            curr = (str(getattr(e, 'currency', '')).upper() or 'USDT')
+            if curr not in totals:
+                continue
+            amt = Decimal(str(getattr(e, 'amount', 0) or 0))
+            if getattr(e, 'type', '') == 'credit':
+                totals[curr] += amt
+            elif getattr(e, 'type', '') == 'debit':
+                totals[curr] -= amt
+
+        # Upsert UserWallet for each currency under wallet_type 'main'
+        for curr, total in totals.items():
+            wallet = UserWallet.objects(user_id=ObjectId(user_id), wallet_type='main', currency=curr).first()
+            if not wallet:
+                wallet = UserWallet(user_id=ObjectId(user_id), wallet_type='main', currency=curr)
+            wallet.balance = total
+            wallet.last_updated = datetime.utcnow()
+            wallet.save()
+
+        return {
+            "success": True,
+            "wallet_type": 'main',
+            "balances": {k: float(v) for k, v in totals.items()}
+        }
 
     def debit_main_wallet(self, user_id: str, amount: Decimal, currency: str, reason: str, tx_hash: str) -> dict:
         wallet = self._get_or_create_wallet(user_id, 'main', currency)
