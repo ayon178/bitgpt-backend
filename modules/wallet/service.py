@@ -56,29 +56,28 @@ class WalletService:
         ).only('amount', 'currency', 'tx_hash')
 
         today_income = {"USDT": 0.0, "BNB": 0.0}
-        today_sources_sets = {"USDT": set(), "BNB": set()}
+        # Track unique sources across all currencies (deduplicated)
+        today_sources_set = set()
 
         # Heuristic: extract a 24-hex substring from tx_hash to infer source user id if present
         hex24 = re.compile(r"[0-9a-fA-F]{24}")
         for entry in today_entries:
             curr = (str(getattr(entry, 'currency', '')).upper() or 'USDT')
-            if curr not in today_income:
-                continue
-            amt = float(getattr(entry, 'amount', 0) or 0)
-            today_income[curr] += amt
+            if curr in today_income:
+                amt = float(getattr(entry, 'amount', 0) or 0)
+                today_income[curr] += amt
             txh = str(getattr(entry, 'tx_hash', '') or '')
             m = hex24.search(txh)
             if m:
-                today_sources_sets[curr].add(m.group(0))
-
-        today_sources = {k: len(v) for k, v in today_sources_sets.items()}
+                today_sources_set.add(m.group(0))
 
         return {
             "success": True,
             "wallet_type": wallet_type,
             "balances": result,
             "today_income": today_income,
-            "today_sources": today_sources,
+            # Single deduplicated count across currencies
+            "today_sources": len(today_sources_set),
         }
 
     def reconcile_main_from_ledger(self, user_id: str) -> dict:
