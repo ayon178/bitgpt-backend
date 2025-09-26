@@ -97,6 +97,8 @@ app.include_router(spark_router)
 app.include_router(binary_router)
 app.include_router(matrix_router)
 app.include_router(global_router)
+from modules.wallet.router import router as wallet_router
+app.include_router(wallet_router)
 
 @app.on_event("startup")
 async def startup_initializer():

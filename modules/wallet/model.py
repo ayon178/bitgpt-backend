@@ -12,7 +12,8 @@ class UserWallet(Document):
     
     meta = {
         'collection': 'user_wallets',
-        'indexes': [('user_id', 'wallet_type')]
+        # Add currency to index to uniquely identify a balance doc per currency
+        'indexes': [('user_id', 'wallet_type', 'currency')]
     }
 
 class ReserveLedger(Document):
