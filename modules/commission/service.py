@@ -583,6 +583,7 @@ class CommissionService:
         """Update commission accumulation for user.
         - Avoid storing Decimals inside DictField (use floats)
         - Initialize missing keys gracefully
+        - Normalize all existing keys to floats on every save
         """
         accumulation = CommissionAccumulation.objects(
             user_id=ObjectId(user_id),
@@ -598,19 +599,31 @@ class CommissionService:
         # Update Decimal fields safely
         accumulation.total_earned = (accumulation.total_earned or Decimal('0')) + amount
         
-        # Normalize currency_totals as floats
-        currency_totals = dict(accumulation.currency_totals or {})
-        if currency not in currency_totals:
-            currency_totals[currency] = 0.0
-        currency_totals[currency] = float(currency_totals[currency]) + float(amount)
-        accumulation.currency_totals = currency_totals
+        # Normalize currency_totals as floats (normalize all keys)
+        raw_currency_totals = dict(accumulation.currency_totals or {})
+        normalized_currency_totals: Dict[str, float] = {}
+        for k, v in raw_currency_totals.items():
+            try:
+                normalized_currency_totals[k] = float(v)
+            except Exception:
+                normalized_currency_totals[k] = 0.0
+        if currency not in normalized_currency_totals:
+            normalized_currency_totals[currency] = 0.0
+        normalized_currency_totals[currency] = float(normalized_currency_totals[currency]) + float(amount)
+        accumulation.currency_totals = normalized_currency_totals
         
-        # Normalize commission_type_totals as floats
-        type_totals = dict(accumulation.commission_type_totals or {})
-        if commission_type not in type_totals:
-            type_totals[commission_type] = 0.0
-        type_totals[commission_type] = float(type_totals[commission_type]) + float(amount)
-        accumulation.commission_type_totals = type_totals
+        # Normalize commission_type_totals as floats (normalize all keys)
+        raw_type_totals = dict(accumulation.commission_type_totals or {})
+        normalized_type_totals: Dict[str, float] = {}
+        for k, v in raw_type_totals.items():
+            try:
+                normalized_type_totals[k] = float(v)
+            except Exception:
+                normalized_type_totals[k] = 0.0
+        if commission_type not in normalized_type_totals:
+            normalized_type_totals[commission_type] = 0.0
+        normalized_type_totals[commission_type] = float(normalized_type_totals[commission_type]) + float(amount)
+        accumulation.commission_type_totals = normalized_type_totals
         
         accumulation.last_commission_at = datetime.utcnow()
         accumulation.updated_at = datetime.utcnow()
