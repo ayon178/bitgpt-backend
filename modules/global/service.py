@@ -153,6 +153,11 @@ class GlobalService:
                 return {"success": False, "error": f"Join amount must be {expected_amount}"}
 
             currency = ensure_currency_for_program('global', 'USD')
+            
+            # Generate unique tx_hash to avoid duplicate key errors
+            import random, string
+            unique_suffix = datetime.utcnow().strftime('%Y%m%d%H%M%S%f') + '_' + ''.join(random.choices(string.ascii_lowercase+string.digits, k=6))
+            unique_tx_hash = f"{tx_hash}_{unique_suffix}"
 
             # Record activation
             activation = SlotActivation(
@@ -164,7 +169,7 @@ class GlobalService:
                 upgrade_source='wallet',
                 amount_paid=expected_amount,
                 currency=currency,
-                tx_hash=tx_hash,
+                tx_hash=unique_tx_hash,
                 is_auto_upgrade=False,
                 status='completed'
             )
@@ -215,9 +220,10 @@ class GlobalService:
             # Global distribution (40/30/15/15/5/5)
             self.process_distribution(user_id=str(user.id), amount=expected_amount, currency=currency)
 
-            # If user has all three joins, compute triple-entry eligibles for today
+            # Triple Entry Eligibility Check (Section 1.1.7)
+            # If user has Binary + Matrix + Global: Compute triple-entry eligibles
             try:
-                if getattr(user, 'binary_joined', False) and getattr(user, 'matrix_joined', False):
+                if getattr(user, 'binary_joined', False) and getattr(user, 'matrix_joined', False) and getattr(user, 'global_joined', False):
                     SparkService.compute_triple_entry_eligibles(datetime.utcnow())
             except Exception:
                 pass
@@ -253,6 +259,11 @@ class GlobalService:
                 return {"success": False, "error": f"Upgrade amount must be {expected_amount}"}
 
             currency = ensure_currency_for_program('global', 'USD')
+            
+            # Generate unique tx_hash to avoid duplicate key errors
+            import random, string
+            unique_suffix = datetime.utcnow().strftime('%Y%m%d%H%M%S%f') + '_' + ''.join(random.choices(string.ascii_lowercase+string.digits, k=6))
+            unique_tx_hash = f"{tx_hash}_{unique_suffix}"
 
             activation = SlotActivation(
                 user_id=ObjectId(user.id),
@@ -263,7 +274,7 @@ class GlobalService:
                 upgrade_source='wallet',
                 amount_paid=expected_amount,
                 currency=currency,
-                tx_hash=tx_hash,
+                tx_hash=unique_tx_hash,
                 is_auto_upgrade=False,
                 status='completed'
             )
@@ -465,23 +476,24 @@ class GlobalService:
             return {"success": False, "error": str(e)}
 
     def process_distribution(self, user_id: str, amount: Decimal, currency: str) -> Dict[str, Any]:
-        """Global distribution per PROJECT_DOCUMENTATION.md.
+        """Global distribution per GLOBAL_PROGRAM_AUTO_ACTIONS.md Section 1.1.6.
         Breakdown:
-        - Level (40%): 10% partner incentive (already handled) + 30% reserved for upgrade (tracked)
-        - Profit (30%): Add to BonusFund('net_profit','global')
-        - Royal Captain (15%): Add to RoyalCaptainFund
-        - President Reward (15%): Add to PresidentRewardFund
-        - Triple Entry Reward (5%): Spark fund contribution
-        - Shareholders (5%): Add to BonusFund('shareholders','global')
+        - Level (30%): Reserve for Phase-2 slot upgrade
+        - Partner Incentive (10%): Direct upline commission (already handled)
+        - Profit (30%): Net profit portion
+        - Royal Captain Bonus (10%): Add to RC fund
+        - President Reward (10%): Add to PR fund
+        - Triple Entry Reward (5%): Add to TER fund (part of 25% total TER)
+        - Shareholders (5%): Add to shareholders fund
         """
         try:
             total = Decimal(str(amount))
-            reserved_upgrade = total * Decimal('0.30')
-            profit_portion = total * Decimal('0.30')
-            royal_captain_portion = total * Decimal('0.15')
-            president_reward_portion = total * Decimal('0.15')
-            triple_entry_portion = total * Decimal('0.05')
-            shareholders_portion = total * Decimal('0.05')
+            reserved_upgrade = total * Decimal('0.30')  # Level 30%
+            profit_portion = total * Decimal('0.30')    # Profit 30%
+            royal_captain_portion = total * Decimal('0.10')  # RC 10%
+            president_reward_portion = total * Decimal('0.10')  # PR 10%
+            triple_entry_portion = total * Decimal('0.05')  # TER 5%
+            shareholders_portion = total * Decimal('0.05')  # Shareholders 5%
 
             # Update reserved for upgrade on status
             try:
@@ -537,15 +549,14 @@ class GlobalService:
             except Exception:
                 pass
 
-            # Triple Entry Reward (Spark)
+            # Triple Entry Reward (Spark) - Section 1.1.6
             try:
                 self.spark_service.contribute_to_fund(
+                    amount=float(triple_entry_portion),
                     program='global',
-                    amount=triple_entry_portion,
-                    currency=currency,
                     source_user_id=str(user_id),
-                    source_type='global_distribution',
-                    source_slot_no=None
+                    source_type='global_join',
+                    currency=currency
                 )
             except Exception:
                 pass
@@ -580,12 +591,13 @@ class GlobalService:
             return {
                 "success": True,
                 "distribution_breakdown": {
-                    "reserved_upgrade": float(reserved_upgrade),
-                    "profit": float(profit_portion),
-                    "royal_captain": float(royal_captain_portion),
-                    "president_reward": float(president_reward_portion),
-                    "triple_entry": float(triple_entry_portion),
-                    "shareholders": float(shareholders_portion)
+                    "level_reserved": float(reserved_upgrade),  # 30%
+                    "partner_incentive": float(total * Decimal('0.10')),  # 10% (already handled)
+                    "profit": float(profit_portion),  # 30%
+                    "royal_captain": float(royal_captain_portion),  # 10%
+                    "president_reward": float(president_reward_portion),  # 10%
+                    "triple_entry": float(triple_entry_portion),  # 5%
+                    "shareholders": float(shareholders_portion)  # 5%
                 },
                 "auto_upgrade": auto_result
             }
@@ -613,13 +625,13 @@ class GlobalService:
             return {
                 "success": True,
                 "distribution_breakdown": {
-                    "partner_incentive": float(total * Decimal('0.10')),
-                    "reserved_upgrade": float(total * Decimal('0.30')),
-                    "profit": float(total * Decimal('0.30')),
-                    "royal_captain": float(total * Decimal('0.15')),
-                    "president_reward": float(total * Decimal('0.15')),
-                    "triple_entry": float(total * Decimal('0.05')),
-                    "shareholders": float(total * Decimal('0.05'))
+                    "level_reserved": float(total * Decimal('0.30')),  # 30%
+                    "partner_incentive": float(total * Decimal('0.10')),  # 10%
+                    "profit": float(total * Decimal('0.30')),  # 30%
+                    "royal_captain": float(total * Decimal('0.10')),  # 10%
+                    "president_reward": float(total * Decimal('0.10')),  # 10%
+                    "triple_entry": float(total * Decimal('0.05')),  # 5%
+                    "shareholders": float(total * Decimal('0.05'))  # 5%
                 }
             }
         except Exception as e:

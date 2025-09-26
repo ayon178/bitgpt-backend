@@ -88,7 +88,7 @@ def seed_global_slots():
     """Seed global matrix slots (1-10) with progressive pricing"""
     
     global_slots = []
-    base_price = Decimal("50.00")  # Global matrix base price
+    base_price = Decimal("33.00")  # Global matrix base price (FOUNDATION slot)
     
     for i in range(1, 11):
         # Global slots have progressive pricing

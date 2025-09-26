@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from decimal import Decimal
 from .service import GlobalService
+from auth.service import authentication_service
+from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/global", tags=["Global Program"])
 
@@ -24,13 +26,68 @@ class GlobalUpgradeRequest(BaseModel):
     tx_hash: str
     amount: float
 
+async def _auth_dependency(request: Request):
+    """Authentication dependency for Global program endpoints."""
+    try:
+        # Use the existing authentication service method
+        from fastapi.security import OAuth2PasswordBearer
+        from typing import Annotated
+        
+        oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+        
+        # Extract token from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split(" ")[1]
+        
+        # Use the existing verify_authentication method
+        current_user_data = await authentication_service.verify_authentication(request, token)
+        
+        # More robust user_id extraction
+        user_id_keys = ["user_id", "id", "_id", "uid"]
+        authenticated_user_id = None
+        for key in user_id_keys:
+            if current_user_data and current_user_data.get(key):
+                authenticated_user_id = str(current_user_data[key])
+                break
+        
+        if not authenticated_user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in token")
+        
+        return current_user_data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+
 @router.post("/join")
-async def join_global(request: GlobalJoinRequest):
+async def join_global(
+    request: GlobalJoinRequest,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Join Global program with $33 (Phase-1 Slot-1) - Section 1.1 User Join Process"""
+    # Authorization check
+    user_id_keys = ["user_id", "id", "_id", "uid"]
+    authenticated_user_id = None
+    for key in user_id_keys:
+        if current_user and current_user.get(key):
+            authenticated_user_id = str(current_user[key])
+            break
+    
+    if not authenticated_user_id:
+        return error_response("User ID not found in token", status_code=401)
+    
+    # Verify user can only join for themselves
+    if request.user_id != authenticated_user_id:
+        return error_response("Unauthorized to join Global program for this user", status_code=403)
+    
     service = GlobalService()
     result = service.join_global(user_id=request.user_id, tx_hash=request.tx_hash, amount=Decimal(str(request.amount)))
     if result.get("success"):
-        return {"status": "Ok", "data": result}
-    raise HTTPException(status_code=400, detail=result.get("error", "Failed to join Global program"))
+        return success_response(result, "Successfully joined Global program")
+    return error_response(result.get("error", "Failed to join Global program"), status_code=400)
 
 @router.post("/upgrade")
 async def upgrade_global(request: GlobalUpgradeRequest):

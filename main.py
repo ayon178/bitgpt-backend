@@ -170,7 +170,7 @@ async def startup_initializer():
 
         # Global slots 1..16 with alternating phases and names per docs
         global_slots = [
-            (1,  'FOUNDATION', '30',    1, 'PHASE-1'),
+            (1,  'FOUNDATION', '33',    1, 'PHASE-1'),
             (2,  'APEX',       '36',    2, 'PHASE-2'),
             (3,  'SUMMIT',     '86',    3, 'PHASE-1'),
             (4,  'RADIANCE',   '103',   4, 'PHASE-2'),

@@ -50,7 +50,7 @@ This document outlines all automatic actions and business logic for the Global P
    - **Profit (30%)**: Net profit portion
    - **Royal Captain Bonus (10%)**: Add to RC fund
    - **President Reward (10%)**: Add to PR fund
-   - **Triple Entry Reward (5%)**: Add to TER fund
+   - **Triple Entry Reward (5%)**: Add to TER fund (part of 25% total TER)
    - **Shareholders (5%)**: Add to shareholders fund
 
 7. **Triple Entry Eligibility Check**
@@ -98,7 +98,7 @@ This document outlines all automatic actions and business logic for the Global P
    - **Profit (30%)**: Net profit portion
    - **Royal Captain Bonus (10%)**: Add to RC fund
    - **President Reward (10%)**: Add to PR fund
-   - **Triple Entry Reward (5%)**: Add to TER fund
+   - **Triple Entry Reward (5%)**: Add to TER fund (part of 25% total TER)
    - **Shareholders (5%)**: Add to shareholders fund
 
 5. **Earning History Record**
@@ -308,9 +308,82 @@ This document outlines all automatic actions and business logic for the Global P
 
 ---
 
-## 8. SHAREHOLDERS FUND AUTO ACTIONS
+## 8. SPARK BONUS INTEGRATION
 
-### 8.1 Shareholders Fund Distribution
+### 8.1 Triple Entry Reward Fund Composition
+**Trigger**: User joins all three programs (Binary + Matrix + Global)
+**Auto Action**: `compute_triple_entry_eligibles()`
+
+#### Fund Sources:
+- **Spark Bonus Fund (20%)**: 
+  - 8% from Binary program
+  - 8% from Matrix program
+  - 4% from other sources
+- **Global Program (5%)**: Direct contribution to Triple Entry Reward
+- **Total Triple Entry Reward**: 25% (20% + 5%)
+
+#### Auto Actions Sequence:
+1. **Eligibility Check**
+   - Verify user has all three programs (Binary, Matrix, Global)
+   - Check if user is not already in triple-entry list
+   - Validate program activation dates
+
+2. **Triple Entry Registration**
+   - Add user to triple-entry eligibles list
+   - Create `TripleEntryReward` record
+   - Set user_id: user_id
+   - Set programs: ['binary', 'matrix', 'global']
+   - Set eligible_date: current_date
+   - Set status: 'eligible'
+
+3. **Reward Calculation**
+   - **Binary Return**: 0.006 BNB (0.002 + 0.004 for first 2 slots)
+   - **Matrix Return**: $11 (first slot)
+   - **Total Return**: 0.006 BNB + $11
+
+4. **Fund Distribution**
+   - Calculate 25% total from all sources
+   - Distribute equally among all Triple Entry users
+   - Create `WalletLedger` entries for recipients
+   - **Frequency**: Every 30 days
+
+### 8.2 Spark Bonus Fund Distribution
+**Trigger**: Matrix slot completion
+**Auto Action**: `distribute_spark_bonus()`
+
+#### Distribution Logic:
+- **Remaining 80%** of Spark Bonus fund treated as 100% baseline
+- **14 Matrix slots** with progressive percentages:
+  - Slot 1: 15%
+  - Slots 2-5: 10% each
+  - Slot 6: 7%
+  - Slots 7-9: 6% each
+  - Slots 10-14: 4% each
+- **Distribution Frequency**: Every 30 days for 60 days (2 distributions per slot completion)
+
+#### Auto Actions Sequence:
+1. **Slot Completion Check**
+   - Verify Matrix slot is completed
+   - Check if 30 days have passed since last distribution
+   - Ensure within 60-day distribution window
+
+2. **Fund Allocation**
+   - Calculate slot-specific percentage from total Spark Bonus fund
+   - Allocate funds based on slot completion order
+   - Distribute equally among all users in that slot
+
+3. **Wallet Credit**
+   - Credit users' main wallets
+   - Create `WalletLedger` entries
+   - Set type: 'credit'
+   - Set reason: 'spark_bonus_distribution'
+   - Set balance_after: new_balance
+
+---
+
+## 9. SHAREHOLDERS FUND AUTO ACTIONS
+
+### 9.1 Shareholders Fund Distribution
 **Trigger**: Any Global program transaction
 **Auto Action**: `distribute_shareholders_fund()`
 
@@ -332,9 +405,9 @@ This document outlines all automatic actions and business logic for the Global P
 
 ---
 
-## 9. AUTO UPGRADE SYSTEM
+## 10. AUTO UPGRADE SYSTEM
 
-### 9.1 Reserved Funds Auto Upgrade
+### 10.1 Reserved Funds Auto Upgrade
 **Trigger**: Sufficient reserved funds for next slot
 **Auto Action**: `process_auto_upgrade()`
 
@@ -357,16 +430,16 @@ This document outlines all automatic actions and business logic for the Global P
 
 ---
 
-## 10. ERROR HANDLING AND FALLBACKS
+## 11. ERROR HANDLING AND FALLBACKS
 
-### 10.1 Common Error Scenarios
+### 11.1 Common Error Scenarios
 1. **Insufficient Funds**: Return error, don't process transaction
 2. **Invalid User**: Return 404 error
 3. **Already Activated**: Return conflict error
 4. **Catalog Missing**: Return server error
 5. **Upline Not Found**: Fallback to Mother ID
 
-### 10.2 Fallback Mechanisms
+### 11.2 Fallback Mechanisms
 1. **Mother ID Placement**: When no eligible upline found
 2. **Default Currency**: USD for Global program
 3. **Minimum Amounts**: Enforce minimum transaction amounts
@@ -374,9 +447,9 @@ This document outlines all automatic actions and business logic for the Global P
 
 ---
 
-## 11. DATABASE MODELS REQUIRED
+## 12. DATABASE MODELS REQUIRED
 
-### 11.1 Core Models
+### 12.1 Core Models
 - `GlobalPhaseProgression`: Track user's phase progression
 - `GlobalTeamMember`: Track team members
 - `GlobalDistribution`: Track fund distributions
@@ -385,7 +458,7 @@ This document outlines all automatic actions and business logic for the Global P
 - `TripleEntryReward`: Track TER eligibility
 - `ShareholdersDistribution`: Track shareholders payments
 
-### 11.2 Integration Models
+### 12.2 Integration Models
 - `SlotActivation`: Global slot activations
 - `Commission`: Global commissions
 - `WalletLedger`: Global wallet transactions
@@ -393,9 +466,9 @@ This document outlines all automatic actions and business logic for the Global P
 
 ---
 
-## 12. API ENDPOINTS REQUIRED
+## 13. API ENDPOINTS REQUIRED
 
-### 12.1 Core Endpoints
+### 13.1 Core Endpoints
 - `POST /global/join`: Join Global program
 - `POST /global/upgrade`: Upgrade Global slot
 - `GET /global/status/{user_id}`: Get user status
@@ -403,7 +476,7 @@ This document outlines all automatic actions and business logic for the Global P
 - `GET /global/team/{user_id}`: Get team members
 - `POST /global/team/add`: Add team member
 
-### 12.2 Distribution Endpoints
+### 13.2 Distribution Endpoints
 - `POST /global/distribute`: Process distribution
 - `GET /global/preview-distribution/{amount}`: Preview distribution
 - `GET /global/seats/{user_id}/{phase}`: Get phase seats
@@ -411,21 +484,21 @@ This document outlines all automatic actions and business logic for the Global P
 
 ---
 
-## 13. IMPLEMENTATION PRIORITY
+## 14. IMPLEMENTATION PRIORITY
 
-### 13.1 Phase 1 (Core)
+### 14.1 Phase 1 (Core)
 1. Global program join functionality
 2. Basic phase progression
 3. Partner incentive distribution
 4. Slot activation system
 
-### 13.2 Phase 2 (Advanced)
+### 14.2 Phase 2 (Advanced)
 1. Royal Captain Bonus system
 2. President Reward system
 3. Triple Entry Reward system
 4. Auto upgrade system
 
-### 13.3 Phase 3 (Optimization)
+### 14.3 Phase 3 (Optimization)
 1. Shareholders fund distribution
 2. Advanced error handling
 3. Performance optimization

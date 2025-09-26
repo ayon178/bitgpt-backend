@@ -41,7 +41,7 @@ def main():
     upsert_slot('matrix', 1, 'STARTER', Decimal('11'), level=1)
 
     # Global slot 1 (Phase-1 Foundation minimal)
-    upsert_slot('global', 1, 'FOUNDATION', Decimal('30'), level=1, phase='PHASE-1')
+    upsert_slot('global', 1, 'FOUNDATION', Decimal('33'), level=1, phase='PHASE-1')
 
     print('SlotCatalog seeded/updated for binary(1,2), matrix(1), global(1).')
 
