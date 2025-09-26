@@ -98,7 +98,12 @@ async def calculate_commission(request: CommissionCalculateRequest):
             )
         
         accumulation.total_earned += commission_amount
-        accumulation.currency_totals[request.currency] += commission_amount
+        # Update accumulation currency totals safely
+        totals = dict(accumulation.currency_totals or {})
+        if request.currency not in totals:
+            totals[request.currency] = 0.0
+        totals[request.currency] = float(totals[request.currency]) + float(commission_amount)
+        accumulation.currency_totals = totals
         accumulation.commission_type_totals[request.commission_type] += commission_amount
         accumulation.last_commission_at = datetime.utcnow()
         accumulation.save()

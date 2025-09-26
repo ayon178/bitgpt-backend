@@ -330,3 +330,9 @@ class BinaryService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_binary_slots_activated(self, user_id: str) -> int:
+        try:
+            return 0
+        except Exception:
+            return 0

@@ -740,13 +740,17 @@ class TestMatrixIntegration(unittest.TestCase):
         
         # Mock referrer's Matrix tree
         mock_referrer_tree = Mock()
+        mock_referrer_tree.id = ObjectId()  # Add id attribute
         mock_referrer_tree.user_id = ObjectId(self.test_referrer_id)
         mock_referrer_tree.current_slot = 1
         mock_referrer_tree.total_members = 0
         mock_referrer_tree.is_complete = False
         mock_referrer_tree.nodes = []
         
-        mock_matrix_tree_objects.return_value.first.return_value = mock_referrer_tree
+        # Mock MatrixTree queries:
+        # - First call checks if user already has a tree (should return None)
+        # - Second call gets referrer's tree for placement (should return mock_referrer_tree)
+        mock_matrix_tree_objects.return_value.first.side_effect = [None, mock_referrer_tree]
         
         # Mock all integration methods
         with patch.object(self.service, '_place_user_in_matrix_tree') as mock_place, \
@@ -758,12 +762,18 @@ class TestMatrixIntegration(unittest.TestCase):
              patch.object(self.service, 'trigger_mentorship_bonus_integration_automatic') as mock_mentorship:
             
             mock_place.return_value = {"success": True, "level": 1, "position": 0}
-            mock_activate.return_value = {"success": True}
+            
+            # Mock activation with id attribute
+            mock_activation = Mock()
+            mock_activation.id = ObjectId()
+            mock_activate.return_value = mock_activation
             
             # Execute join
             result = self.service.join_matrix(self.test_user_id, self.test_referrer_id, tx_hash="tx", amount=Decimal('11'))
             
             # Assertions
+            if not result.get("success"):
+                print(f"Join failed with error: {result}")
             self.assertTrue(result["success"])
             
             # Verify all integrations were triggered

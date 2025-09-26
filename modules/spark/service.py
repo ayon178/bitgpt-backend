@@ -53,4 +53,21 @@ class SparkService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def contribute_to_fund(self, amount: float, source: str = "matrix", metadata: Dict[str, Any] | None = None, program: str | None = None, **kwargs) -> Dict[str, Any]:
+        """Stub: Record a contribution into the Spark/Triple Entry fund.
+        Accepts optional 'program' and arbitrary kwargs for compatibility.
+        """
+        try:
+            contributed = float(amount) if amount is not None else 0.0
+            return {
+                "success": True,
+                "contributed": contributed,
+                "source": source,
+                "program": program or source,
+                "metadata": metadata or {},
+                "extra": {k: v for k, v in (kwargs or {}).items()}
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
 

@@ -71,6 +71,15 @@ class DreamMatrixService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
+    def initialize_dream_matrix(self, user_id: str, referrer_id: str | None = None, **kwargs) -> Dict[str, Any]:
+        """Compatibility wrapper: initialize/join Dream Matrix for a user.
+        Accepts optional referrer_id and arbitrary kwargs for compatibility.
+        """
+        try:
+            return self.join_dream_matrix_program(user_id)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def check_eligibility(self, user_id: str, force_check: bool = False) -> Dict[str, Any]:
         """Check Dream Matrix eligibility for user"""
         try:

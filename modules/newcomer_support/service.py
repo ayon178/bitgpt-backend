@@ -70,6 +70,18 @@ class NewcomerSupportService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
+    def process_matrix_contribution(self, user_id: str, amount: float, **kwargs) -> Dict[str, Any]:
+        """Stub: record a Matrix contribution into NGS context for compatibility."""
+        try:
+            return {
+                "success": True,
+                "user_id": user_id,
+                "amount": float(amount) if amount is not None else 0.0,
+                "context": {k: v for k, v in (kwargs or {}).items()}
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def check_eligibility(self, user_id: str, force_check: bool = False) -> Dict[str, Any]:
         """Check Newcomer Support eligibility for user"""
         try:

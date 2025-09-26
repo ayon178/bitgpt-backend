@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from typing import Annotated
 from mongoengine.queryset.visitor import Q
-from ..modules.user.model import User
+from modules.user.model import User
 
 load_dotenv()
 

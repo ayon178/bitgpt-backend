@@ -580,7 +580,10 @@ class CommissionService:
     
     def _update_commission_accumulation(self, user_id: str, program: str, amount: Decimal, 
                                      currency: str, commission_type: str):
-        """Update commission accumulation for user"""
+        """Update commission accumulation for user.
+        - Avoid storing Decimals inside DictField (use floats)
+        - Initialize missing keys gracefully
+        """
         accumulation = CommissionAccumulation.objects(
             user_id=ObjectId(user_id),
             program=program
@@ -592,10 +595,25 @@ class CommissionService:
                 program=program
             )
         
-        accumulation.total_earned += amount
-        accumulation.currency_totals[currency] += amount
-        accumulation.commission_type_totals[commission_type] += amount
+        # Update Decimal fields safely
+        accumulation.total_earned = (accumulation.total_earned or Decimal('0')) + amount
+        
+        # Normalize currency_totals as floats
+        currency_totals = dict(accumulation.currency_totals or {})
+        if currency not in currency_totals:
+            currency_totals[currency] = 0.0
+        currency_totals[currency] = float(currency_totals[currency]) + float(amount)
+        accumulation.currency_totals = currency_totals
+        
+        # Normalize commission_type_totals as floats
+        type_totals = dict(accumulation.commission_type_totals or {})
+        if commission_type not in type_totals:
+            type_totals[commission_type] = 0.0
+        type_totals[commission_type] = float(type_totals[commission_type]) + float(amount)
+        accumulation.commission_type_totals = type_totals
+        
         accumulation.last_commission_at = datetime.utcnow()
+        accumulation.updated_at = datetime.utcnow()
         accumulation.save()
     
     def _get_user_current_level(self, user_id: str, program: str) -> int:
