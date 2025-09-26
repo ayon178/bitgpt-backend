@@ -406,6 +406,20 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                     )
                 except Exception:
                     pass
+                
+                # Spark Bonus: contribute 8% from Binary program to Spark Bonus fund
+                try:
+                    spark_contribution = total_join_amount * Decimal('0.08')
+                    spark_service = SparkService()
+                    spark_service.contribute_to_fund(
+                        amount=float(spark_contribution),
+                        program='binary',
+                        source_user_id=str(user.id),
+                        source_type='binary_join',
+                        currency=currency
+                    )
+                except Exception:
+                    pass
                 # Earning history for joining commission seed (from user perspective)
                 try:
                     EarningHistory(
@@ -500,6 +514,20 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                         )
                     except Exception:
                         pass
+                    
+                    # Spark Bonus: contribute 8% from Matrix program to Spark Bonus fund
+                    try:
+                        spark_contribution = matrix_amount * Decimal('0.08')
+                        spark_service = SparkService()
+                        spark_service.contribute_to_fund(
+                            amount=float(spark_contribution),
+                            program='matrix',
+                            source_user_id=str(user.id),
+                            source_type='matrix_join',
+                            currency=matrix_currency
+                        )
+                    except Exception:
+                        pass
 
                     # Update user rank based on new matrix activation
                     try:
@@ -517,7 +545,7 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
 
                     # Spark: compute triple-entry eligibility for today when user has all three
                     try:
-                        if user.binary_joined and user.global_joined:
+                        if user.binary_joined and user.matrix_joined and user.global_joined:
                             SparkService.compute_triple_entry_eligibles(datetime.utcnow())
                     except Exception:
                         pass
@@ -607,6 +635,20 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                             from_user_id=str(user.id),
                             program='global',
                             amount=global_amount,
+                            currency=global_currency
+                        )
+                    except Exception:
+                        pass
+                    
+                    # Spark Bonus: contribute 5% from Global program to Triple Entry Reward fund
+                    try:
+                        triple_entry_contribution = global_amount * Decimal('0.05')
+                        spark_service = SparkService()
+                        spark_service.contribute_to_fund(
+                            amount=float(triple_entry_contribution),
+                            program='global',
+                            source_user_id=str(user.id),
+                            source_type='global_join',
                             currency=global_currency
                         )
                     except Exception:

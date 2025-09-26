@@ -203,10 +203,11 @@ The Global Program is organized into two phases:
 - **WALLET**: Calculated as TOTAL INCOME minus UPGRADE COST
 
 ### Global Distribution
-- **Level (40%)**: 10% Partner Incentive to direct upline + 30% reserved to upgrade corresponding Phase/slot
+- **Level (30%)**: 30% reserved to upgrade corresponding Phase/slot
+- **Partner Incentive (10%)**: 10% to direct upline
 - **Profit (30%)**: Net profit portion
-- **Royal Captain Bonus (15%)**
-- **President Reward (15%)**
+- **Royal Captain Bonus (10%)**
+- **President Reward (10%)**
 - **Triple Entry Reward (5%)**
 - **Shareholders (5%)**
 
@@ -590,10 +591,10 @@ The Royal Captain Bonus is a special reward program for members who refer others
 | :----------------------- | :---------- | :--------------- |
 | 5                        | 0           | $200             |
 | = (Maintaining 5)        | 10          | $200             |
-| = (Maintaining 5)        | 20          | $200             |
-| = (Maintaining 5)        | 30          | $200             |
-| = (Maintaining 5)        | 40          | $250             |
-| = (Maintaining 5)        | 50          | $250             |
+| = (Maintaining 5)        | 50          | $200             |
+| = (Maintaining 5)        | 100         | $200             |
+| = (Maintaining 5)        | 200         | $250             |
+| = (Maintaining 5)        | 300         | $250             |
 
 ### Royal Captain Logic
 - Requires both Matrix and Global package participation
@@ -616,20 +617,21 @@ Qualify initially with 10 direct partners and a global team of 80. Rewards then 
 | Directly Invited Partner | Global Team | Amount Of Dollar |
 | :----------------------- | :---------- | :--------------- |
 | 10                       | 80          | $500             |
-| =                        | 150         | $700             |
-| =                        | 200         | $700             |
-| =                        | 250         | $700             |
-| =                        | 300         | $700             |
-| 15                       | 400         | $800             |
-| =                        | 500         | $800             |
-| =                        | 600         | $800             |
-| =                        | 700         | $800             |
-| 20                       | 1000        | $1500            |
-| =                        | 1500        | $1500            |
-| =                        | 2000        | $2000            |
-| =                        | 2500        | $2500            |
-| =                        | 3000        | $2500            |
-| 30                       | 4000        | $5000            |
+| =                        | 400         | $500             |
+| =                        | 600         | $700             |
+| =                        | 800         | $700             |
+| =                        | 1000        | $700             |
+| =                        | 1200        | $700             |
+| 15                       | 1500        | $800             |
+| =                        | 1800        | $800             |
+| =                        | 2100        | $800             |
+| =                        | 2400        | $800             |
+| 20                       | 2700        | $1500            |
+| =                        | 3000        | $1500            |
+| =                        | 3500        | $2000            |
+| =                        | 4000        | $2500            |
+| =                        | 5000        | $2500            |
+| 30                       | 6000        | $5000            |
 
 ### President Reward Logic
 - Requires 30 direct invitations in both Global and Matrix
@@ -1002,10 +1004,39 @@ The Spark Bonus is a special fund distribution system that provides rewards acro
 | **Total** | **= 100%**     |
 
 ### Spark Bonus Logic
-- Fund composed of 8% from Binary and Matrix programs
-- 20% allocated to Triple Entry Reward
-- Remaining 100% distributed across Matrix levels 1-14
-- Progressive distribution with higher percentages for lower levels
+- **Fund Sources**: 8% from Binary + 8% from Matrix + 5% from Global = 21% total
+- **Triple Entry Reward**: 20% of Spark Bonus + 5% from Global = 25% total
+- **Remaining Distribution**: 80% of Spark Bonus treated as 100% baseline
+- **Matrix Slot Distribution**: 14 slots with progressive percentages
+- **Distribution Frequency**: Every 30 days for 60 days (2 distributions per slot completion)
+
+### Triple Entry Reward Details
+- **Eligibility**: Users who join all three programs (Binary + Matrix + Global) in first step
+- **Return Amounts**:
+  - Binary: 0.006 BNB (2 slots: 0.002 + 0.004)
+  - Matrix: $11 (first slot)
+- **Distribution**: Equal distribution among all Triple Entry users
+- **Frequency**: Every 30 days
+
+### Spark Bonus Distribution Example
+**Example Scenario**: 1000 users in Matrix Slot 1 today
+- **Fund Allocation**: 15% of total Spark fund for Slot 1
+- **Distribution**: Equal among all 1000 users
+- **Calculation**: If total Spark fund = $1000, then Slot 1 gets $150 (15%)
+- **Per User**: $150 ÷ 1000 = $0.15 per user
+
+**Slot-wise Distribution**:
+- Slot 1 (100 users): 15% of fund
+- Slot 2 (80 users): 10% of fund  
+- Slot 3 (60 users): 10% of fund
+- Slot 4 (40 users): 10% of fund
+- Slot 5 (20 users): 10% of fund
+- And so on for all 14 slots
+
+### Matrix Slot Completion Bonus
+- **Trigger**: When a Matrix slot is completed
+- **Bonus Frequency**: Every 30 days for 60 days (2 distributions)
+- **Distribution**: Based on slot completion order and fund allocation percentages
 
 ---
 
@@ -1081,9 +1112,12 @@ The Global Partner Incentive provides commission structure for Global program pa
 
 ### Global System Features
 - $33 joining fee
-- 10% commission structure
+- 10% commission structure (Partner Incentive)
 - Tree-based progression system
 - Multiple slot levels
+- **Global Incentive**: 10% income from each direct partner's slot activities
+- **24-hour Royal Captain Bonus**: $200 for 5 direct partners, progressive amounts
+- **24-hour President Reward**: $500 for 10 direct partners + 80 global team, progressive amounts
 
 ---
 
@@ -1118,8 +1152,13 @@ PHASE-2, SLOT-2 (8 people) → UPGRADE
 ```
 
 ### Phase System Logic
-- Phase 1: Requires 4 people globally under user
-- Phase 2: Requires 8 people globally under user
+- **PHASE-1**: Requires 4 people globally under user (4 slots per person)
+- **PHASE-2**: Requires 8 people globally under user (8 slots per person)
+- **Distribution from each slot**: 40% total (10% Partner Incentive + 30% for Phase upgrade)
+- **Global Matrix Distribution**: 30% total (15% Royal Captain Bonus + 15% President Reward)
+- **Profit**: 30%
+- **Triple Entry Reward**: 5%
+- **Shareholders**: 5%
 - Automatic progression between phases
 - Re-entry system for continuous advancement
 - Continues up to Slot 16
