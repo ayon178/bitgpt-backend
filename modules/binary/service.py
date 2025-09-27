@@ -700,10 +700,11 @@ class BinaryService:
     def get_binary_tree_structure(self, user_id: str) -> Dict[str, Any]:
         """
         Get binary tree structure data for dashboard panels
-        Returns data for 6 panels with tree structures
+        Returns data matching frontend yourRank structure
         """
         try:
             from ..tree.model import TreePlacement
+            from ..slot.model import SlotActivation
             
             print(f"Getting binary tree structure for user: {user_id}")
             
@@ -713,64 +714,63 @@ class BinaryService:
             except:
                 user_oid = user_id
             
-            # Get user's binary tree placements
-            user_placements = TreePlacement.objects(
+            # Get user's activated binary slots
+            activated_slots = SlotActivation.objects(
+                user_id=user_oid,
                 program='binary',
-                user_id=user_oid
+                status='completed'
             ).order_by('slot_no')
             
             panels = []
             
-            # Create 6 panels (based on screenshot)
+            # Create panels for slots 1-6 (matching frontend yourRank)
             for slot_no in range(1, 7):
-                # Get slot placement
-                slot_placement = user_placements.filter(slot_no=slot_no).first()
+                # Check if slot is activated
+                slot_activation = activated_slots.filter(slot_no=slot_no).first()
                 
-                if slot_placement:
-                    # Calculate earnings for this slot
-                    slot_earnings = self._calculate_slot_earnings(user_oid, slot_no)
-                    
-                    # Get team structure for this slot
-                    team_structure = self._get_slot_team_structure(user_oid, slot_no)
-                    
-                    # Get slot-specific earnings with currency breakdown
-                    slot_earnings_breakdown = self._get_slot_specific_earnings(user_oid, slot_no)
-                    total_slot_earnings = slot_earnings_breakdown.get('USDT', 0) + slot_earnings_breakdown.get('BNB', 0)
-                    
-                    panel = {
-                        "id": slot_no,
-                        "slot_number": slot_no,
-                        "amount": f"{total_slot_earnings:.0f} USDT",
-                        "level": slot_placement.level if slot_placement else slot_no,
-                        "progress": min(100, (total_slot_earnings / 1000) * 100),  # Progress percentage
-                        "status": "Completed" if total_slot_earnings >= 1000 else "In Progress",
-                        "team_structure": team_structure,
-                        "actions": {
-                            "auto_update": slot_no <= 3,
-                            "manual_upgrade": slot_no > 3,
-                            "completed": total_slot_earnings >= 1000
-                        }
-                    }
+                # Get slot-specific earnings
+                slot_earnings_breakdown = self._get_slot_specific_earnings(user_oid, slot_no)
+                total_usdt = slot_earnings_breakdown.get('USDT', 0)
+                total_bnb = slot_earnings_breakdown.get('BNB', 0)
+                
+                # Calculate progress (based on actual earnings vs expected)
+                # For binary, assume 1 BNB = 100% progress for each slot
+                expected_amount = 1.0  # 1 BNB per slot
+                progress = min(100, (total_bnb / expected_amount) * 100) if expected_amount > 0 else 0
+                
+                # Determine status based on earnings
+                if total_bnb >= expected_amount:
+                    status = "Completed"
+                elif total_bnb > 0:
+                    status = "In Progress"
                 else:
-                    # Empty slot
-                    panel = {
-                        "id": slot_no,
-                        "slot_number": slot_no,
-                        "amount": "0 USDT",
-                        "level": slot_no,
-                        "progress": 0,
-                        "status": "Not Started",
-                        "team_structure": {
-                            "total_users": 0,
-                            "direct_users": 0,
-                            "tree_levels": 0
-                        },
-                        "actions": {
-                            "auto_update": False,
-                            "manual_upgrade": True,
-                            "completed": False
-                        }
+                    status = "Not Started"
+                
+                # Get team structure for this slot
+                team_structure = self._get_slot_team_structure(user_oid, slot_no)
+                
+                # Format amount display
+                if total_bnb > 0:
+                    amount_display = f"{total_bnb:.6f} BNB"
+                elif total_usdt > 0:
+                    amount_display = f"{total_usdt:.6f} USDT"
+                else:
+                    amount_display = "0.000000 BNB"
+                
+                panel = {
+                    "id": slot_no,
+                    "slot_number": slot_no,
+                    "amount": amount_display,
+                    "level": slot_no,  # Use slot_no as level
+                    "progress": progress,
+                    "status": status,
+                    "team_structure": team_structure,
+                    "actions": {
+                        "auto_update": slot_no <= 3,  # Slots 1-3 can auto-update
+                        "manual_upgrade": slot_no > 3,  # Slots 4+ require manual upgrade
+                        "completed": total_bnb >= expected_amount
                     }
+                }
                 
                 panels.append(panel)
             
@@ -901,18 +901,36 @@ class BinaryService:
         try:
             from ..tree.model import TreePlacement
             
-            # Get team members under this user
-            team_members = TreePlacement.objects(
+            # Get direct team members under this user
+            direct_members = TreePlacement.objects(
                 program='binary',
                 parent_id=user_oid
             ).count()
             
+            # Get total team members (recursive count)
+            def count_total_team(parent_id):
+                total = 0
+                children = TreePlacement.objects(
+                    program='binary',
+                    parent_id=parent_id
+                )
+                for child in children:
+                    total += 1
+                    total += count_total_team(child.user_id)
+                return total
+            
+            total_members = count_total_team(user_oid)
+            
+            # Calculate tree levels based on team size
+            tree_levels = min(6, max(1, direct_members + 1))
+            
             return {
-                "total_users": team_members,
-                "direct_users": team_members,  # Simplified for now
-                "tree_levels": min(6, team_members + 1)
+                "total_users": total_members,
+                "direct_users": direct_members,
+                "tree_levels": tree_levels
             }
-        except:
+        except Exception as e:
+            print(f"Error getting team structure for slot {slot_no}: {e}")
             return {
                 "total_users": 0,
                 "direct_users": 0,
@@ -926,28 +944,28 @@ class BinaryService:
             
             earnings = {"USDT": 0.0, "BNB": 0.0}
             
-            # Try multiple reason patterns for slot earnings
-            slot_patterns = [
-                f'slot_{slot_no}',
-                f'binary_slot_{slot_no}',
-                f'binary_joining_commission',
-                f'binary_upgrade_commission',
-                f'binary_partner_incentive',
-                f'binary_level_commission',
-                f'binary_dual_tree_earning'
+            # Get ALL binary earnings for this user (not slot-specific for now)
+            binary_reasons = [
+                'binary_joining_commission', 'binary_upgrade_commission', 'binary_partner_incentive',
+                'binary_level_commission', 'binary_dual_tree_earning', 'binary_leadership_stipend',
+                'binary_royal_captain', 'binary_president_reward', 'binary_jackpot_bonus',
+                'binary_upgrade_level_1', 'binary_dual_tree_L1_S1', 'binary_dual_tree_L1_S2'
             ]
             
-            for pattern in slot_patterns:
-                slot_entries = WalletLedger.objects(
-                    user_id=user_oid,
-                    reason__contains=pattern,
-                    type='credit'
-                ).only('amount', 'currency')
+            binary_entries = WalletLedger.objects(
+                user_id=user_oid,
+                reason__in=binary_reasons,
+                type='credit'
+            ).only('amount', 'currency')
+            
+            for entry in binary_entries:
+                currency = str(entry.currency).upper() if entry.currency else 'BNB'
+                # Handle USD → USDT mapping
+                if currency == 'USD':
+                    currency = 'USDT'
                 
-                for entry in slot_entries:
-                    currency = str(entry.currency).upper() if entry.currency else 'BNB'
-                    if currency in earnings:
-                        earnings[currency] += float(entry.amount or 0)
+                if currency in earnings:
+                    earnings[currency] += float(entry.amount or 0)
             
             return earnings
         except Exception as e:
