@@ -115,6 +115,77 @@ class User(Document):
         ]
     }
 
+class Shareholder(Document):
+    """Shareholder information for users with shareholder role"""
+    user_id = ObjectIdField(required=True, unique=True)
+    share_percentage = FloatField(required=True)  # Percentage of total shares
+    total_shares = FloatField(required=True)  # Total number of shares owned
+    status = StringField(choices=['active', 'inactive', 'suspended'], default='active')
+    
+    # Shareholder details
+    joined_at = DateTimeField(default=datetime.utcnow)
+    last_distribution_at = DateTimeField()
+    total_distributions_received = FloatField(default=0.0)
+    
+    # Timestamps
+    created_at = DateTimeField(default=datetime.utcnow)
+    updated_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'shareholders',
+        'indexes': [
+            'user_id',
+            'status',
+            'share_percentage'
+        ]
+    }
+
+class ShareholdersFund(Document):
+    """Track shareholders fund pool"""
+    total_contributed = FloatField(default=0.0)
+    total_distributed = FloatField(default=0.0)
+    available_amount = FloatField(default=0.0)
+    
+    # Fund details
+    last_updated = DateTimeField(default=datetime.utcnow)
+    created_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'shareholders_fund',
+        'indexes': [
+            'last_updated'
+        ]
+    }
+
+class ShareholdersDistribution(Document):
+    """Track individual shareholder distributions"""
+    shareholder_id = ObjectIdField(required=True)
+    user_id = ObjectIdField(required=True)
+    transaction_amount = FloatField(required=True)
+    shareholders_contribution = FloatField(required=True)
+    share_percentage = FloatField(required=True)
+    distribution_amount = FloatField(required=True)
+    currency = StringField(choices=['USD', 'USDT', 'BNB'], default='USD')
+    transaction_type = StringField(choices=['global_transaction', 'binary_transaction', 'matrix_transaction'], default='global_transaction')
+    
+    # Status
+    status = StringField(choices=['pending', 'completed', 'failed'], default='pending')
+    completed_at = DateTimeField()
+    failed_at = DateTimeField()
+    
+    # Timestamps
+    created_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'shareholders_distributions',
+        'indexes': [
+            'shareholder_id',
+            'user_id',
+            'status',
+            'created_at'
+        ]
+    }
+
 class PartnerGraph(Document):
     """Track direct partner relationships"""
     user_id = ObjectIdField(required=True, unique=True)

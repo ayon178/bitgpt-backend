@@ -33,3 +33,42 @@ class TripleEntryReward(Document):
         'collection': 'triple_entry_reward',
         'indexes': ['cycle_no', 'status']
     }
+
+class SparkBonusDistribution(Document):
+    """Track Spark Bonus fund distributions to Matrix slot users"""
+    user_id = ObjectIdField(required=True)
+    slot_number = IntField(required=True)
+    distribution_amount = DecimalField(required=True, precision=8)
+    currency = StringField(choices=['USDT', 'BNB', 'USD'], default='USDT')
+    
+    # Distribution details
+    fund_source = StringField(choices=['spark_bonus', 'triple_entry'], required=True)
+    distribution_percentage = DecimalField(required=True, precision=4)
+    total_fund_amount = DecimalField(required=True, precision=8)
+    
+    # Matrix slot details
+    matrix_slot_name = StringField()
+    matrix_slot_level = IntField()
+    
+    # Status
+    status = StringField(choices=['pending', 'completed', 'failed'], default='pending')
+    distributed_at = DateTimeField()
+    
+    # Transaction details
+    wallet_credit_tx_hash = StringField()
+    wallet_credit_status = StringField(choices=['pending', 'completed', 'failed'], default='pending')
+    
+    # Timestamps
+    created_at = DateTimeField(default=datetime.utcnow)
+    updated_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'spark_bonus_distributions',
+        'indexes': [
+            'user_id',
+            'slot_number',
+            'fund_source',
+            'status',
+            'created_at'
+        ]
+    }

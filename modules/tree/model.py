@@ -5,7 +5,7 @@ class TreePlacement(Document):
     """Binary/Matrix/Global tree structure and positioning"""
     user_id = ObjectIdField(required=True)
     program = StringField(choices=['binary', 'matrix', 'global'], required=True)
-    parent_id = ObjectIdField(required=True)
+    parent_id = ObjectIdField(required=False)  # Allow null for root users
     
     # Position based on program type
     # Binary: left, right
