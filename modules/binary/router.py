@@ -170,3 +170,109 @@ async def get_binary_slot_catalog(
         
     except Exception as e:
         return error_response(str(e))
+
+@router.get("/dashboard/{user_id}")
+async def get_binary_dashboard(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get comprehensive binary dashboard data for a user"""
+    try:
+        binary_service = BinaryService()
+        result = binary_service.get_binary_dashboard_data(user_id)
+        
+        if result["success"]:
+            return success_response(result["data"])
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/earnings/{user_id}")
+async def get_binary_earnings(
+    user_id: str,
+    page: int = 1,
+    limit: int = 10,
+    currency: str = "BNB",
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get binary earnings with pagination and currency filtering - following frontend data structure"""
+    try:
+        binary_service = BinaryService()
+        result = binary_service.get_binary_earnings_frontend_format(user_id, page, limit, currency)
+        
+        if result["success"]:
+            return success_response(result["data"])
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/tree-structure/{user_id}")
+async def get_binary_tree_structure(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get binary tree structure data for dashboard panels"""
+    try:
+        binary_service = BinaryService()
+        result = binary_service.get_binary_tree_structure(user_id)
+        
+        if result["success"]:
+            return success_response(result["data"])
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/panel-data/{user_id}")
+async def get_binary_panel_data(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get individual panel data for each binary slot/level"""
+    try:
+        binary_service = BinaryService()
+        result = binary_service.get_binary_panel_data(user_id)
+        
+        if result["success"]:
+            return success_response(result["data"])
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/partner-incentive/{user_id}")
+async def get_binary_partner_incentive(
+    user_id: str,
+    page: int = 1,
+    limit: int = 10,
+    currency: str = "BNB",
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get binary partner incentive earnings with pagination"""
+    try:
+        binary_service = BinaryService()
+        result = binary_service.get_binary_partner_incentive(user_id, page, limit, currency)
+        
+        if result["success"]:
+            return success_response(result["data"])
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
