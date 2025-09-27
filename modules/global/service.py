@@ -4088,3 +4088,164 @@ class GlobalService:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_team_statistics(self, user_id: str):
+        """
+        Get comprehensive team statistics for a user
+        Returns:
+        - Total global team members (all levels under user)
+        - Today joined members (all levels under user)
+        - Today joined direct members (only direct children)
+        - Today joined global team (globally across all users)
+        """
+        try:
+            from datetime import datetime, timedelta
+            from bson import ObjectId
+            
+            print(f"Getting team statistics for user: {user_id}")
+            
+            # Convert user_id to ObjectId if it's a string
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
+            
+            # Get today's date range (start and end of today)
+            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_end = datetime.utcnow().replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            # 1. Total global team members (all levels under user)
+            total_team_members = 0
+            try:
+                # Count all descendants recursively
+                def count_all_descendants(parent_user_id):
+                    count = 0
+                    children = TreePlacement.objects(
+                        program='global',
+                        parent_id=parent_user_id
+                    )
+                    for child in children:
+                        count += 1  # Count the child
+                        count += count_all_descendants(child.user_id)  # Count their descendants
+                    return count
+                
+                total_team_members = count_all_descendants(user_oid)
+                print(f"Total team members under {user_id}: {total_team_members}")
+                
+            except Exception as e:
+                print(f"Error calculating total team members: {e}")
+                total_team_members = 0
+            
+            # 2. Today joined members (all levels under user)
+            today_joined_members = 0
+            try:
+                def count_today_descendants(parent_user_id):
+                    count = 0
+                    children = TreePlacement.objects(
+                        program='global',
+                        parent_id=parent_user_id,
+                        created_at__gte=today_start,
+                        created_at__lte=today_end
+                    )
+                    for child in children:
+                        count += 1  # Count the child
+                        count += count_today_descendants(child.user_id)  # Count their descendants
+                    return count
+                
+                today_joined_members = count_today_descendants(user_oid)
+                print(f"Today joined members under {user_id}: {today_joined_members}")
+                
+            except Exception as e:
+                print(f"Error calculating today joined members: {e}")
+                today_joined_members = 0
+            
+            # 3. Today joined direct members (only direct children)
+            today_direct_members = 0
+            try:
+                today_direct_members = TreePlacement.objects(
+                    program='global',
+                    parent_id=user_oid,
+                    created_at__gte=today_start,
+                    created_at__lte=today_end
+                ).count()
+                print(f"Today direct members under {user_id}: {today_direct_members}")
+                
+            except Exception as e:
+                print(f"Error calculating today direct members: {e}")
+                today_direct_members = 0
+            
+            # 4. Today joined global team (globally across all users)
+            today_global_joins = 0
+            try:
+                today_global_joins = TreePlacement.objects(
+                    program='global',
+                    created_at__gte=today_start,
+                    created_at__lte=today_end
+                ).count()
+                print(f"Today global joins (all users): {today_global_joins}")
+                
+            except Exception as e:
+                print(f"Error calculating today global joins: {e}")
+                today_global_joins = 0
+            
+            # 5. Additional statistics
+            total_global_users = 0
+            try:
+                total_global_users = TreePlacement.objects(program='global').count()
+                print(f"Total global users: {total_global_users}")
+                
+            except Exception as e:
+                print(f"Error calculating total global users: {e}")
+                total_global_users = 0
+            
+            # 6. User's current phase and slot info
+            user_status = {}
+            try:
+                user_placement = TreePlacement.objects(
+                    program='global',
+                    user_id=user_oid
+                ).first()
+                
+                if user_placement:
+                    user_status = {
+                        "current_phase": user_placement.phase,
+                        "slot_number": user_placement.slot_number,
+                        "position": user_placement.position,
+                        "level": user_placement.level,
+                        "parent_id": str(user_placement.parent_id) if user_placement.parent_id else None,
+                        "is_active": user_placement.is_active,
+                        "joined_at": user_placement.created_at
+                    }
+                
+            except Exception as e:
+                print(f"Error getting user status: {e}")
+                user_status = {}
+            
+            # Compile the statistics
+            statistics = {
+                "user_id": str(user_id),
+                "user_status": user_status,
+                "team_statistics": {
+                    "total_team_members": total_team_members,
+                    "today_joined_members": today_joined_members,
+                    "today_direct_members": today_direct_members,
+                    "today_global_joins": today_global_joins,
+                    "total_global_users": total_global_users
+                },
+                "date_range": {
+                    "today_start": today_start.isoformat(),
+                    "today_end": today_end.isoformat(),
+                    "timezone": "UTC"
+                },
+                "generated_at": datetime.utcnow().isoformat()
+            }
+            
+            print(f"Team statistics generated successfully for user {user_id}")
+            return {
+                "success": True,
+                "statistics": statistics
+            }
+            
+        except Exception as e:
+            print(f"Error in get_team_statistics: {e}")
+            return {"success": False, "error": str(e)}

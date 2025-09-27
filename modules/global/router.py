@@ -160,3 +160,12 @@ async def get_global_tree(user_id: str, phase: str):
     if result.get("success"):
         return {"status": "Ok", "data": result}
     raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch global tree"))
+
+@router.get("/statistics/{user_id}")
+async def get_team_statistics(user_id: str):
+    """Get comprehensive team statistics for a user including total and today counts"""
+    service = GlobalService()
+    result = service.get_team_statistics(user_id)
+    if result.get("success"):
+        return {"status": "Ok", "data": result["statistics"]}
+    raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch team statistics"))

@@ -71,6 +71,30 @@ class WalletService:
             if m:
                 today_sources_set.add(m.group(0))
 
+        # Calculate missing profit for USDT and BNB
+        missing_profit = {"USDT": 0.0, "BNB": 0.0}
+        try:
+            from ..missed_profit.model import MissedProfit
+            
+            # Get all missed profits for this user
+            missed_profits = MissedProfit.objects(
+                user_id=ObjectId(user_id),
+                is_active=True,
+                is_distributed=False  # Only count undistributed missed profits
+            ).only('missed_profit_amount', 'currency')
+            
+            for missed in missed_profits:
+                currency = (str(getattr(missed, 'currency', '')).upper() or 'USDT')
+                if currency in missing_profit:
+                    amount = float(getattr(missed, 'missed_profit_amount', 0) or 0)
+                    missing_profit[currency] += amount
+            
+            print(f"Missing profit for user {user_id}: USDT={missing_profit['USDT']}, BNB={missing_profit['BNB']}")
+            
+        except Exception as e:
+            print(f"Error calculating missing profit for user {user_id}: {e}")
+            # Keep missing_profit as zeros if calculation fails
+
         return {
             "success": True,
             "wallet_type": wallet_type,
@@ -78,6 +102,7 @@ class WalletService:
             "today_income": today_income,
             # Single deduplicated count across currencies
             "today_sources": len(today_sources_set),
+            "missing_profit": missing_profit,
         }
 
     def reconcile_main_from_ledger(self, user_id: str) -> dict:
