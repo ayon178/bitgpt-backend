@@ -538,45 +538,69 @@ class BinaryService:
             except:
                 user_oid = user_id
             
-            # Binary related reasons
+            # Debug: Check all wallet entries for this user first
+            all_entries = WalletLedger.objects(user_id=user_oid).order_by('-created_at')
+            print(f"DEBUG: Total wallet entries for user {user_id}: {all_entries.count()}")
+            
+            # Show sample entries for debugging
+            for entry in all_entries[:5]:
+                print(f"DEBUG: Entry - Reason: {entry.reason}, Amount: {entry.amount}, Currency: {entry.currency}, Type: {entry.type}")
+            
+            # Use ONLY binary-specific reasons for binary earnings API
             binary_reasons = [
                 'binary_joining_commission', 'binary_upgrade_commission', 'binary_partner_incentive',
                 'binary_level_commission', 'binary_dual_tree_earning', 'binary_leadership_stipend',
-                'binary_royal_captain', 'binary_president_reward', 'binary_jackpot_bonus'
+                'binary_royal_captain', 'binary_president_reward', 'binary_jackpot_bonus',
+                'binary_upgrade_level_1', 'binary_dual_tree_L1_S1', 'binary_dual_tree_L1_S2'
             ]
             
-            # Get total count
-            total_count = WalletLedger.objects(
-                user_id=user_oid,
-                reason__in=binary_reasons,
-                type='credit',
-                currency=currency.upper()
-            ).count()
+            print(f"DEBUG: Looking for binary-specific entries with reasons: {binary_reasons}")
             
-            # Calculate pagination
-            skip = (page - 1) * limit
-            total_pages = (total_count + limit - 1) // limit
-            
-            # Get paginated earnings
+            # Get binary-specific entries only
             earnings = WalletLedger.objects(
                 user_id=user_oid,
                 reason__in=binary_reasons,
-                type='credit',
-                currency=currency.upper()
-            ).order_by('-created_at').skip(skip).limit(limit)
+                type='credit'
+            ).order_by('-created_at').skip((page - 1) * limit).limit(limit)
+            
+            total_count = WalletLedger.objects(
+                user_id=user_oid,
+                reason__in=binary_reasons,
+                type='credit'
+            ).count()
+            
+            print(f"DEBUG: Found {total_count} binary-specific entries")
+            
+            # Calculate pagination
+            total_pages = (total_count + limit - 1) // limit
             
             # Format earnings data in frontend format (similar to incomeTableData)
             earnings_data = []
             for i, earning in enumerate(earnings):
-                # Get user info
+                # Get user info - use FULL UID as requested
                 user_info = User.objects(id=user_oid).first()
-                user_display_id = str(user_info.uid)[:5] if user_info and user_info.uid else "00000"
+                if user_info and user_info.uid:
+                    user_display_id = str(user_info.uid)  # Full UID as requested
+                else:
+                    user_display_id = str(user_oid)  # Fallback to ObjectId
                 
-                # Get upline info from tx_hash or other sources
-                upline_id = "00000"  # Default
-                if earning.tx_hash:
-                    # Try to extract upline from tx_hash or other logic
-                    upline_id = str(earning.tx_hash)[:5]
+                # Get upline info - use FULL UID as requested
+                upline_id = "ROOT"  # Default for root users
+                if user_info and user_info.refered_by:
+                    try:
+                        upline_user = User.objects(id=user_info.refered_by).first()
+                        if upline_user and upline_user.uid:
+                            upline_id = str(upline_user.uid)  # Full UID as requested
+                        else:
+                            upline_id = str(user_info.refered_by)  # Fallback to ObjectId
+                    except:
+                        upline_id = str(user_info.refered_by)  # Fallback to refered_by ObjectId
+                elif earning.tx_hash:
+                    # Try to extract upline from tx_hash
+                    upline_id = str(earning.tx_hash)  # Full tx_hash
+                elif earning.reason:
+                    # Use reason as upline identifier
+                    upline_id = str(earning.reason)  # Full reason
                 
                 # Calculate days since creation
                 days_since = (datetime.utcnow() - earning.created_at).days if earning.created_at else 1
@@ -592,6 +616,10 @@ class BinaryService:
                     level = 2
                 elif 'partner' in earning.reason:
                     level = 3
+                elif 'commission' in earning.reason:
+                    level = 2
+                elif 'earnings' in earning.reason or 'income' in earning.reason:
+                    level = 1
                 
                 # Format date and time
                 created_date = earning.created_at if earning.created_at else datetime.utcnow()
@@ -602,14 +630,48 @@ class BinaryService:
                 partner = 2 if 'partner' in earning.reason else 1
                 rank = level if level <= 6 else 6
                 
+                # Format amount for frontend - show exact amount without rounding
+                amount_value = float(earning.amount or 0)
+                if amount_value > 0:
+                    # Show exact amount as string to preserve precision
+                    formatted_amount = str(amount_value)
+                else:
+                    formatted_amount = "0"
+                
+                # Debug print
+                print(f"DEBUG: Processing earning - Raw Amount: {earning.amount}, Processed Amount: {amount_value}, Currency: {earning.currency}, Reason: {earning.reason}")
+                print(f"DEBUG: User ID: {user_display_id}, Upline: {upline_id}")
+                
+                # Determine which currency field to populate based on actual currency
+                usdt_amount = ""
+                bnb_amount = ""
+                
+                # Handle currency mapping - USD should be treated as USDT
+                currency_upper = str(earning.currency).upper() if earning.currency else 'USD'
+                if currency_upper == 'USD':
+                    currency_upper = 'USDT'  # Map USD to USDT
+                
+                if currency_upper == 'USDT':
+                    usdt_amount = formatted_amount
+                elif currency_upper == 'BNB':
+                    bnb_amount = formatted_amount
+                else:
+                    # If no currency specified, assume based on amount value
+                    if amount_value > 0:
+                        # Large amounts likely USDT, small amounts likely BNB
+                        if amount_value > 10:
+                            usdt_amount = formatted_amount
+                        else:
+                            bnb_amount = formatted_amount
+                
                 earnings_data.append({
-                    "id": i + 1 + skip,  # Sequential ID for frontend
+                    "id": i + 1 + (page - 1) * limit,  # Sequential ID for frontend
                     "days": days_since,
                     "level": level,
                     "upline": upline_id,
                     "userId": user_display_id,
-                    "usdt": str(int(float(earning.amount) * 1000)) if currency.upper() == 'USDT' else "",
-                    "bnb": str(int(float(earning.amount) * 1000)) if currency.upper() == 'BNB' else "",
+                    "usdt": usdt_amount,
+                    "bnb": bnb_amount,
                     "time": time_str,
                     "date": date_str,
                     "partner": partner,
@@ -671,18 +733,22 @@ class BinaryService:
                     # Get team structure for this slot
                     team_structure = self._get_slot_team_structure(user_oid, slot_no)
                     
+                    # Get slot-specific earnings with currency breakdown
+                    slot_earnings_breakdown = self._get_slot_specific_earnings(user_oid, slot_no)
+                    total_slot_earnings = slot_earnings_breakdown.get('USDT', 0) + slot_earnings_breakdown.get('BNB', 0)
+                    
                     panel = {
                         "id": slot_no,
                         "slot_number": slot_no,
-                        "amount": f"{slot_earnings:.0f} USDT",
+                        "amount": f"{total_slot_earnings:.0f} USDT",
                         "level": slot_placement.level if slot_placement else slot_no,
-                        "progress": min(100, (slot_earnings / 1000) * 100),  # Progress percentage
-                        "status": "Completed" if slot_earnings >= 1000 else "In Progress",
+                        "progress": min(100, (total_slot_earnings / 1000) * 100),  # Progress percentage
+                        "status": "Completed" if total_slot_earnings >= 1000 else "In Progress",
                         "team_structure": team_structure,
                         "actions": {
                             "auto_update": slot_no <= 3,
                             "manual_upgrade": slot_no > 3,
-                            "completed": slot_earnings >= 1000
+                            "completed": total_slot_earnings >= 1000
                         }
                     }
                 else:
@@ -805,14 +871,29 @@ class BinaryService:
         try:
             from ..wallet.model import WalletLedger
             
-            slot_earnings = WalletLedger.objects(
-                user_id=user_oid,
-                reason__contains=f'slot_{slot_no}',
-                type='credit'
-            ).sum('amount') or 0
+            # Try multiple reason patterns for slot earnings
+            slot_patterns = [
+                f'slot_{slot_no}',
+                f'binary_slot_{slot_no}',
+                f'binary_joining_commission',
+                f'binary_upgrade_commission',
+                f'binary_partner_incentive',
+                f'binary_level_commission',
+                f'binary_dual_tree_earning'
+            ]
             
-            return float(slot_earnings)
-        except:
+            slot_earnings = 0
+            for pattern in slot_patterns:
+                earnings = WalletLedger.objects(
+                    user_id=user_oid,
+                    reason__contains=pattern,
+                    type='credit'
+                ).sum('amount') or 0
+                slot_earnings += float(earnings)
+            
+            return slot_earnings
+        except Exception as e:
+            print(f"Error calculating slot {slot_no} earnings: {e}")
             return 0.0
 
     def _get_slot_team_structure(self, user_oid, slot_no: int) -> Dict[str, Any]:
@@ -845,19 +926,32 @@ class BinaryService:
             
             earnings = {"USDT": 0.0, "BNB": 0.0}
             
-            slot_entries = WalletLedger.objects(
-                user_id=user_oid,
-                reason__contains=f'slot_{slot_no}',
-                type='credit'
-            ).only('amount', 'currency')
+            # Try multiple reason patterns for slot earnings
+            slot_patterns = [
+                f'slot_{slot_no}',
+                f'binary_slot_{slot_no}',
+                f'binary_joining_commission',
+                f'binary_upgrade_commission',
+                f'binary_partner_incentive',
+                f'binary_level_commission',
+                f'binary_dual_tree_earning'
+            ]
             
-            for entry in slot_entries:
-                currency = str(entry.currency).upper() if entry.currency else 'BNB'
-                if currency in earnings:
-                    earnings[currency] += float(entry.amount or 0)
+            for pattern in slot_patterns:
+                slot_entries = WalletLedger.objects(
+                    user_id=user_oid,
+                    reason__contains=pattern,
+                    type='credit'
+                ).only('amount', 'currency')
+                
+                for entry in slot_entries:
+                    currency = str(entry.currency).upper() if entry.currency else 'BNB'
+                    if currency in earnings:
+                        earnings[currency] += float(entry.amount or 0)
             
             return earnings
-        except:
+        except Exception as e:
+            print(f"Error getting slot {slot_no} specific earnings: {e}")
             return {"USDT": 0.0, "BNB": 0.0}
 
     def _get_slot_team_members(self, user_oid, slot_no: int) -> List[Dict[str, Any]]:
