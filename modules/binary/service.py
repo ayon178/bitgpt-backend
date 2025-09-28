@@ -1599,3 +1599,43 @@ class BinaryService:
         except Exception as e:
             print(f"Error getting total binary earnings: {e}")
             return 0.0
+
+    def get_duel_tree_details(self, user_id: str, tree_id: int) -> Dict[str, Any]:
+        """Get specific duel tree details by tree ID"""
+        try:
+            print(f"Getting duel tree details for user: {user_id}, tree_id: {tree_id}")
+            
+            # Convert user_id to ObjectId
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
+            
+            # Get all duel tree earnings first
+            all_earnings = self.get_duel_tree_earnings(user_id)
+            
+            if not all_earnings["success"]:
+                return {"success": False, "error": all_earnings["error"]}
+            
+            # Find the specific tree by ID
+            duel_tree_data = all_earnings["data"]["duelTreeData"]
+            target_tree = None
+            
+            print(f"Available tree IDs: {[tree['id'] for tree in duel_tree_data]}")
+            
+            for tree in duel_tree_data:
+                if tree["id"] == tree_id:
+                    target_tree = tree
+                    break
+            
+            if not target_tree:
+                return {"success": False, "error": f"Tree with ID {tree_id} not found. Available IDs: {[tree['id'] for tree in duel_tree_data]}"}
+            
+            return {
+                "success": True,
+                "data": target_tree
+            }
+            
+        except Exception as e:
+            print(f"Error getting duel tree details: {e}")
+            return {"success": False, "error": str(e)}

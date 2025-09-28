@@ -5,14 +5,14 @@
         "duelTreeData": [
             {
                 "id": 1,
-                "price": 5,
+                "price": 1.8018,
                 "userId": "USER004",
                 "recycle": 0,
                 "isCompleted": true,
                 "isProcess": false,
                 "isAutoUpgrade": false,
                 "isManualUpgrade": false,
-                "processPercent": 0,
+                "processPercent": 50,
                 "users": [
                     {
                         "id": 0,
@@ -22,15 +22,15 @@
                 ]
             },
             {
-                "id": 1,
-                "price": 0,
+                "id": 2,
+                "price": 51.8018,
                 "userId": "USER004",
                 "recycle": 0,
                 "isCompleted": true,
                 "isProcess": false,
                 "isAutoUpgrade": false,
                 "isManualUpgrade": false,
-                "processPercent": 0,
+                "processPercent": 50,
                 "users": [
                     {
                         "id": 0,
@@ -45,15 +45,15 @@
                 ]
             },
             {
-                "id": 1,
-                "price": 8,
+                "id": 3,
+                "price": 101.8018,
                 "userId": "USER004",
                 "recycle": 0,
                 "isCompleted": true,
                 "isProcess": false,
                 "isAutoUpgrade": false,
                 "isManualUpgrade": false,
-                "processPercent": 0,
+                "processPercent": 37,
                 "users": [
                     {
                         "id": 0,
@@ -73,15 +73,15 @@
                 ]
             },
             {
-                "id": 1,
-                "price": 10,
+                "id": 4,
+                "price": 151.80180000000001,
                 "userId": "USER004",
                 "recycle": 0,
                 "isCompleted": true,
                 "isProcess": false,
                 "isAutoUpgrade": false,
                 "isManualUpgrade": false,
-                "processPercent": 0,
+                "processPercent": 25,
                 "users": [
                     {
                         "id": 0,
@@ -106,7 +106,7 @@
                 ]
             }
         ],
-        "totalSlots": 1,
+        "totalSlots": 4,
         "user_id": "68bee560c1eac053757f5d32"
     },
     "status_code": 200,
