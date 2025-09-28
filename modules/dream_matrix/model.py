@@ -337,3 +337,82 @@ class DreamMatrixLevelProgress(Document):
             'is_completed'
         ]
     }
+
+# Matrix Trees Collection Models
+class MatrixTreeNode(EmbeddedDocument):
+    """Matrix tree node structure"""
+    level = IntField(required=True)
+    position = IntField(required=True)
+    user_id = ObjectIdField(required=True)
+    placed_at = DateTimeField(required=True)
+    is_active = BooleanField(default=True)
+
+class MatrixTree(Document):
+    """Matrix Trees Collection - matches the database structure"""
+    user_id = ObjectIdField(required=True)
+    current_slot = IntField(required=True)
+    current_level = IntField(required=True)
+    total_members = IntField(default=0)
+    level_1_members = IntField(default=0)
+    level_2_members = IntField(default=0)
+    level_3_members = IntField(default=0)
+    is_complete = BooleanField(default=False)
+    nodes = ListField(EmbeddedDocumentField(MatrixTreeNode), default=[])
+    slots = ListField(DictField(), default=[])
+    created_at = DateTimeField(default=datetime.utcnow)
+    updated_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'matrix_trees',
+        'indexes': [
+            ('user_id', 'current_slot'),
+            'current_level',
+            'is_complete'
+        ]
+    }
+
+class MatrixRecycleNode(Document):
+    """Matrix Recycle Nodes Collection"""
+    instance_id = ObjectIdField(required=True)
+    user_id = ObjectIdField(required=True)
+    slot_number = IntField(required=True)
+    recycle_no = IntField(required=True)
+    level = IntField(required=True)
+    position = IntField(required=True)
+    occupant_user_id = ObjectIdField(required=True)
+    placed_at = DateTimeField(required=True)
+    
+    meta = {
+        'collection': 'matrix_recycle_nodes',
+        'indexes': [
+            'instance_id',
+            'user_id',
+            'slot_number',
+            'recycle_no',
+            'level',
+            'position'
+        ]
+    }
+
+class MatrixRecycleInstance(Document):
+    """Matrix Recycle Instances Collection"""
+    user_id = ObjectIdField(required=True)
+    slot_number = IntField(required=True)
+    recycle_no = IntField(required=True)
+    is_complete = BooleanField(default=False)
+    total_members = IntField(default=0)
+    level_1_members = IntField(default=0)
+    level_2_members = IntField(default=0)
+    level_3_members = IntField(default=0)
+    created_at = DateTimeField(default=datetime.utcnow)
+    completed_at = DateTimeField()
+    
+    meta = {
+        'collection': 'matrix_recycle_instances',
+        'indexes': [
+            'user_id',
+            'slot_number',
+            'recycle_no',
+            'is_complete'
+        ]
+    }
