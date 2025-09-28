@@ -1,0 +1,114 @@
+{
+    "status": "Ok",
+    "message": "Ok",
+    "data": {
+        "duelTreeData": [
+            {
+                "id": 1,
+                "price": 5,
+                "userId": "USER004",
+                "recycle": 0,
+                "isCompleted": true,
+                "isProcess": false,
+                "isAutoUpgrade": false,
+                "isManualUpgrade": false,
+                "processPercent": 0,
+                "users": [
+                    {
+                        "id": 0,
+                        "type": "self",
+                        "userId": "USER004"
+                    }
+                ]
+            },
+            {
+                "id": 1,
+                "price": 0,
+                "userId": "USER004",
+                "recycle": 0,
+                "isCompleted": true,
+                "isProcess": false,
+                "isAutoUpgrade": false,
+                "isManualUpgrade": false,
+                "processPercent": 0,
+                "users": [
+                    {
+                        "id": 0,
+                        "type": "self",
+                        "userId": "USER004"
+                    },
+                    {
+                        "id": 1,
+                        "type": "downLine",
+                        "userId": "cb6b9c96fbe7"
+                    }
+                ]
+            },
+            {
+                "id": 1,
+                "price": 8,
+                "userId": "USER004",
+                "recycle": 0,
+                "isCompleted": true,
+                "isProcess": false,
+                "isAutoUpgrade": false,
+                "isManualUpgrade": false,
+                "processPercent": 0,
+                "users": [
+                    {
+                        "id": 0,
+                        "type": "self",
+                        "userId": "USER004"
+                    },
+                    {
+                        "id": 1,
+                        "type": "downLine",
+                        "userId": "cb6b9c96fbe7"
+                    },
+                    {
+                        "id": 2,
+                        "type": "upLine",
+                        "userId": "cb6b9c96fb42"
+                    }
+                ]
+            },
+            {
+                "id": 1,
+                "price": 10,
+                "userId": "USER004",
+                "recycle": 0,
+                "isCompleted": true,
+                "isProcess": false,
+                "isAutoUpgrade": false,
+                "isManualUpgrade": false,
+                "processPercent": 0,
+                "users": [
+                    {
+                        "id": 0,
+                        "type": "self",
+                        "userId": "USER004"
+                    },
+                    {
+                        "id": 1,
+                        "type": "downLine",
+                        "userId": "cb6b9c96fbe7"
+                    },
+                    {
+                        "id": 2,
+                        "type": "upLine",
+                        "userId": "cb6b9c96fb42"
+                    },
+                    {
+                        "id": 3,
+                        "type": "upLine",
+                        "userId": "USER001"
+                    }
+                ]
+            }
+        ],
+        "totalSlots": 1,
+        "user_id": "68bee560c1eac053757f5d32"
+    },
+    "status_code": 200,
+    "success": true
+}

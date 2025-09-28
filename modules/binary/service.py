@@ -1179,3 +1179,423 @@ class BinaryService:
         except Exception as e:
             print(f"Error in get_binary_partner_incentive: {e}")
             return {"success": False, "error": str(e)}
+
+    def get_duel_tree_earnings(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get duel tree earnings data matching frontend matrixData.js structure
+        Returns data in the format expected by DualTree and DuelTreeDetails components
+        """
+        try:
+            from ..tree.model import TreePlacement
+            from ..slot.model import SlotActivation, SlotCatalog
+            from ..wallet.model import WalletLedger
+            from ..user.model import User
+            
+            print(f"Getting duel tree earnings for user: {user_id}")
+            
+            # Convert user_id to ObjectId
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
+            
+            # Get user info
+            user_info = User.objects(id=user_oid).first()
+            if not user_info:
+                return {"success": False, "error": "User not found"}
+            
+            duel_tree_data = []
+            
+            # Get all binary slots for this user from tree_placement
+            user_slots = TreePlacement.objects(
+                user_id=user_oid,
+                program='binary'
+            ).order_by('slot_no')
+            
+            # Get unique slot numbers for this user
+            slot_numbers = set()
+            for slot_placement in user_slots:
+                slot_numbers.add(slot_placement.slot_no)
+            
+            # If no slots found, create default empty slots
+            if not slot_numbers:
+                slot_numbers = set(range(1, 7))  # Default slots 1-6
+            
+            for slot_no in sorted(slot_numbers):
+                # Get the user's placement for this slot
+                slot_placement = user_slots.filter(slot_no=slot_no).first()
+                
+                # Get slot catalog info for price
+                slot_catalog = SlotCatalog.objects(
+                    program='binary',
+                    slot_no=slot_no,
+                    is_active=True
+                ).first()
+                
+                # Get total binary earnings for this user from wallet_ledger
+                total_binary_earnings = self._get_total_binary_earnings(user_oid)
+                # Convert BNB to USDT (assuming 1 BNB = 300 USDT for display) - keep exact amount
+                price = total_binary_earnings * 300 if total_binary_earnings > 0 else (float(slot_catalog.price) if slot_catalog and slot_catalog.price else 0.0)
+                
+                print(f"Slot {slot_no}: Total binary earnings = {total_binary_earnings} BNB, Price = {price} USDT")
+                
+                # If price is still 0, use progressive pricing based on slot level
+                if price == 0:
+                    # Progressive pricing: 100, 200, 300, 400, etc.
+                    price = 100 + (slot_no - 1) * 100
+                
+                # Get slot activation status
+                slot_activation = SlotActivation.objects(
+                    user_id=user_oid,
+                    program='binary',
+                    slot_no=slot_no
+                ).first()
+                
+                # Determine status flags based on tree_placement data
+                is_completed = slot_activation and slot_activation.status == 'completed'
+                is_process = slot_placement and slot_placement.auto_upgrade_eligible
+                is_auto_upgrade = slot_placement and slot_placement.auto_upgrade_eligible
+                is_manual_upgrade = not is_auto_upgrade and not is_completed
+                
+                # Calculate process percentage based on children_count
+                process_percent = 0
+                if slot_placement:
+                    # Binary tree needs 2 children (left and right)
+                    required_children = 2
+                    current_children = slot_placement.children_count or 0
+                    process_percent = min(100, (current_children / required_children) * 100)
+                
+                # Get team members for this slot - create progressive tree structure
+                team_members_progressive = self._get_progressive_team_members(user_oid, slot_no)
+                
+                # Create multiple duel tree items for progressive display
+                for i, team_members in enumerate(team_members_progressive):
+                    # Use progressive pricing for each level
+                    progressive_price = price + (i * 50)  # Each level adds 50
+                    
+                    # Calculate dynamic process percent based on current level
+                    current_level_members = len(team_members)
+                    max_possible_members = 2 ** (i + 1)  # Binary tree: 2, 4, 8, 16, etc.
+                    dynamic_process_percent = min(100, (current_level_members / max_possible_members) * 100)
+                    
+                    # Create duel tree data object matching matrixData.js structure
+                    duel_tree_item = {
+                        "id": i + 1,  # Different ID for each progressive level
+                        "price": progressive_price,
+                        "userId": str(user_info.uid) if user_info.uid else str(user_oid),
+                        "recycle": slot_placement.children_count if slot_placement else 0,
+                        "isCompleted": is_completed,
+                        "isProcess": is_process,
+                        "isAutoUpgrade": is_auto_upgrade,
+                        "isManualUpgrade": is_manual_upgrade,
+                        "processPercent": int(dynamic_process_percent),
+                        "users": team_members
+                    }
+                    
+                    duel_tree_data.append(duel_tree_item)
+            
+            
+            result = {
+                "duelTreeData": duel_tree_data,
+                "totalSlots": len(duel_tree_data),
+                "user_id": str(user_id)
+            }
+            
+            print(f"Duel tree earnings generated: {len(duel_tree_data)} slots")
+            return {"success": True, "data": result}
+            
+        except Exception as e:
+            print(f"Error in get_duel_tree_earnings: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _get_duel_tree_team_members(self, user_oid, slot_no: int) -> List[Dict[str, Any]]:
+        """Get team members for duel tree display based on tree_placement structure"""
+        try:
+            from ..tree.model import TreePlacement
+            from ..user.model import User
+            
+            # Get the user's own placement record for this slot
+            user_placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no=slot_no
+            ).first()
+            
+            if not user_placement:
+                # If no placement found, return just the user
+                user_info = User.objects(id=user_oid).first()
+                if user_info:
+                    user_display_id = str(user_info.uid) if user_info.uid else str(user_oid)
+                    return [{
+                        "id": 0,
+                        "type": "self",
+                        "userId": user_display_id
+                    }]
+                return []
+            
+            # Get direct children (left and right) under this user
+            children = TreePlacement.objects(
+                program='binary',
+                parent_id=user_oid,
+                slot_no=slot_no
+            ).order_by('position')
+            
+            team_members = []
+            member_id = 1
+            
+            # Add the user themselves first
+            user_info = User.objects(id=user_oid).first()
+            if user_info:
+                user_display_id = str(user_info.uid) if user_info.uid else str(user_oid)
+                team_members.append({
+                    "id": 0,
+                    "type": "self",
+                    "userId": user_display_id
+                })
+            
+            # Add children based on their position
+            for child in children:
+                # Get child user info
+                child_user = User.objects(id=child.user_id).first()
+                user_display_id = str(child_user.uid) if child_user and child_user.uid else str(child.user_id)
+                
+                # Determine user type based on position and status
+                user_type = "self"  # Default
+                if child.position == "left":
+                    user_type = "downLine"
+                elif child.position == "right":
+                    user_type = "upLine"
+                
+                # Check if it's a spillover (overtaker)
+                if child.is_spillover:
+                    user_type = "overTaker"
+                
+                team_members.append({
+                    "id": member_id,
+                    "type": user_type,
+                    "userId": user_display_id
+                })
+                member_id += 1
+            
+            # If user has a parent, add parent as upline
+            if user_placement.parent_id:
+                parent_user = User.objects(id=user_placement.parent_id).first()
+                if parent_user:
+                    parent_display_id = str(parent_user.uid) if parent_user.uid else str(user_placement.parent_id)
+                    team_members.append({
+                        "id": member_id,
+                        "type": "upLine",
+                        "userId": parent_display_id
+                    })
+                    member_id += 1
+            
+            return team_members
+            
+        except Exception as e:
+            print(f"Error getting duel tree team members: {e}")
+            return []
+
+    def _get_user_slot_earnings(self, user_oid, slot_no: int) -> Dict[str, float]:
+        """Get user's earnings for a specific slot"""
+        try:
+            from ..wallet.model import WalletLedger
+            
+            # Binary related reasons for earnings
+            binary_reasons = [
+                'binary_joining_commission', 'binary_upgrade_commission', 'binary_partner_incentive',
+                'binary_level_commission', 'binary_dual_tree_earning', 'binary_leadership_stipend',
+                'binary_royal_captain', 'binary_president_reward', 'binary_jackpot_bonus',
+                'binary_upgrade_level_1', 'binary_dual_tree_L1_S1', 'binary_dual_tree_L1_S2'
+            ]
+            
+            # Get earnings for this user
+            earnings = WalletLedger.objects(
+                user_id=user_oid,
+                reason__in=binary_reasons,
+                type='credit'
+            ).only('amount', 'currency')
+            
+            total_earnings = {"USDT": 0.0, "BNB": 0.0}
+            
+            for earning in earnings:
+                currency = str(earning.currency).upper() if earning.currency else 'BNB'
+                # Handle USD → USDT mapping
+                if currency == 'USD':
+                    currency = 'USDT'
+                
+                if currency in total_earnings:
+                    total_earnings[currency] += float(earning.amount or 0)
+            
+            return total_earnings
+            
+        except Exception as e:
+            print(f"Error getting user slot earnings: {e}")
+            return {"USDT": 0.0, "BNB": 0.0}
+
+    def _get_progressive_team_members(self, user_oid, slot_no: int) -> List[List[Dict[str, Any]]]:
+        """Get progressive team members for duel tree display - creates multiple levels"""
+        try:
+            from ..tree.model import TreePlacement
+            from ..user.model import User
+            
+            # Get the user's own placement record for this slot
+            user_placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no=slot_no
+            ).first()
+            
+            if not user_placement:
+                # If no placement found, return just the user
+                user_info = User.objects(id=user_oid).first()
+                if user_info:
+                    user_display_id = str(user_info.uid) if user_info.uid else str(user_oid)
+                    return [[{
+                        "id": 0,
+                        "type": "self",
+                        "userId": user_display_id
+                    }]]
+                return [[]]
+            
+            # Get all team members
+            all_team_members = self._get_duel_tree_team_members(user_oid, slot_no)
+            
+            # Create progressive levels - unlimited levels
+            progressive_levels = []
+            
+            # Create progressive levels for all available team members
+            for i in range(len(all_team_members)):
+                level_members = all_team_members[:i+1]  # Include members up to current level
+                progressive_levels.append(level_members)
+            
+            # If no progressive levels created, return at least the user
+            if not progressive_levels:
+                user_info = User.objects(id=user_oid).first()
+                if user_info:
+                    user_display_id = str(user_info.uid) if user_info.uid else str(user_oid)
+                    progressive_levels = [[{
+                        "id": 0,
+                        "type": "self",
+                        "userId": user_display_id
+                    }]]
+            
+            return progressive_levels
+            
+        except Exception as e:
+            print(f"Error getting progressive team members: {e}")
+            return [[]]
+
+    def _get_tree_income(self, user_oid, slot_no: int) -> float:
+        """Get real income from this tree structure"""
+        try:
+            from ..wallet.model import WalletLedger
+            from ..tree.model import TreePlacement
+            
+            # Get all team members in this tree
+            all_team_members = self._get_duel_tree_team_members(user_oid, slot_no)
+            
+            total_income = 0.0
+            
+            # Calculate income from each team member
+            for member in all_team_members:
+                # Get user ID from member
+                member_user_id = member.get('userId')
+                if not member_user_id:
+                    continue
+                
+                # Find user by UID or ObjectId
+                from ..user.model import User
+                user = User.objects(uid=member_user_id).first()
+                if not user:
+                    try:
+                        user = User.objects(id=ObjectId(member_user_id)).first()
+                    except:
+                        continue
+                
+                if not user:
+                    continue
+                
+                # Get binary earnings for this user - focus on dual tree earnings
+                dual_tree_reasons = [
+                    'binary_dual_tree_earning',
+                    'binary_dual_tree_L1_S1', 
+                    'binary_dual_tree_L1_S2',
+                    'binary_dual_tree_L2_S1',
+                    'binary_dual_tree_L2_S2',
+                    'binary_dual_tree_L3_S1',
+                    'binary_dual_tree_L3_S2'
+                ]
+                
+                # Get dual tree earnings for this user
+                user_earnings = WalletLedger.objects(
+                    user_id=user.id,
+                    reason__in=dual_tree_reasons,
+                    type='credit'
+                ).sum('amount') or 0
+                
+                total_income += float(user_earnings)
+            
+            # If no dual tree earnings, get all binary earnings
+            if total_income == 0.0:
+                binary_reasons = [
+                    'binary_joining_commission', 'binary_upgrade_commission', 'binary_partner_incentive',
+                    'binary_level_commission', 'binary_dual_tree_earning', 'binary_leadership_stipend',
+                    'binary_royal_captain', 'binary_president_reward', 'binary_jackpot_bonus',
+                    'binary_upgrade_level_1', 'binary_dual_tree_L1_S1', 'binary_dual_tree_L1_S2'
+                ]
+                
+                for member in all_team_members:
+                    member_user_id = member.get('userId')
+                    if not member_user_id:
+                        continue
+                    
+                    user = User.objects(uid=member_user_id).first()
+                    if not user:
+                        try:
+                            user = User.objects(id=ObjectId(member_user_id)).first()
+                        except:
+                            continue
+                    
+                    if not user:
+                        continue
+                    
+                    user_earnings = WalletLedger.objects(
+                        user_id=user.id,
+                        reason__in=binary_reasons,
+                        type='credit'
+                    ).sum('amount') or 0
+                    
+                    total_income += float(user_earnings)
+            
+            return total_income
+            
+        except Exception as e:
+            print(f"Error getting tree income: {e}")
+            return 0.0
+
+    def _get_total_binary_earnings(self, user_oid) -> float:
+        """Get total binary earnings for a user from wallet_ledger"""
+        try:
+            from ..wallet.model import WalletLedger
+            
+            # All binary earning reasons
+            binary_reasons = [
+                'binary_joining_commission', 'binary_upgrade_commission', 'binary_partner_incentive',
+                'binary_level_commission', 'binary_dual_tree_earning', 'binary_leadership_stipend',
+                'binary_royal_captain', 'binary_president_reward', 'binary_jackpot_bonus',
+                'binary_upgrade_level_1', 'binary_dual_tree_L1_S1', 'binary_dual_tree_L1_S2'
+            ]
+            
+            # Get total binary earnings in BNB
+            total_earnings = WalletLedger.objects(
+                user_id=user_oid,
+                reason__in=binary_reasons,
+                type='credit',
+                currency='BNB'
+            ).sum('amount') or 0
+            
+            return float(total_earnings)
+            
+        except Exception as e:
+            print(f"Error getting total binary earnings: {e}")
+            return 0.0
