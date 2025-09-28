@@ -213,11 +213,6 @@ class GlobalService:
             total_phase1_users = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
             next_position = total_phase1_users + 1
             
-            # Ensure position doesn't exceed phase limit (4 for PHASE-1)
-            if next_position > 4:
-                print(f"Phase-1 is full (4 positions), cannot place user {user_id}")
-                return {"success": False, "error": "Phase-1 is full, cannot accept more users"}
-            
             position_label = f'position_{next_position}'
             
             if parent_id:
@@ -422,7 +417,7 @@ class GlobalService:
         """
         try:
             user_oid = ObjectId(user_id)
-            parent_id = self._find_phase2_parent_bfs()
+            parent_id = self._find_phase2_parent_bfs(user_id)
             
             # Determine position index for UI (1..8) - Global sequential positions
             # Count total existing users in PHASE-2 to get next sequential position
@@ -605,7 +600,12 @@ class GlobalService:
                     'validation_passed': True
                 }
             )
-            activation.save()
+            try:
+                activation.save()
+                print(f"✅ Successfully created SlotActivation record for user {user.id}: program=global, slot_no=1, amount={expected_amount}")
+            except Exception as e:
+                print(f"❌ Failed to save SlotActivation record for user {user.id}: {str(e)}")
+                return {"success": False, "error": f"Failed to create slot activation: {str(e)}"}
 
             # 1.1.3 Global Phase Progression Setup - Section 1.1.3 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
             # Create GlobalPhaseProgression record if not exists
@@ -639,18 +639,45 @@ class GlobalService:
                 # Log phase progression setup
                 print(f"Global Phase Progression setup for user {user.id}: PHASE-1, Slot-1")
 
-            # 1.1.4 Phase-1 BFS Placement - Section 1.1.4 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
-            # Place user in Phase-1 tree using BFS algorithm
-            placement_result = self._place_in_phase1(user_id)
-            if not placement_result.get("success"):
-                return {"success": False, "error": f"Phase-1 placement failed: {placement_result.get('error')}"}
+            # 1.1.4 Phase Placement - Section 1.1.4 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
+            # Check if Phase-1 is full (4 users), if so, place in Phase-2
+            total_phase1_users = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
+            
+            if total_phase1_users >= 4:
+                print(f"Phase-1 is full ({total_phase1_users}/4), placing user {user_id} in Phase-2")
+                # Place user in Phase-2
+                placement_result = self._place_in_phase2(user_id)
+                if not placement_result.get("success"):
+                    return {"success": False, "error": f"Phase-2 placement failed: {placement_result.get('error')}"}
+            else:
+                # Place user in Phase-1 tree using BFS algorithm
+                placement_result = self._place_in_phase1(user_id)
+                if not placement_result.get("success"):
+                    return {"success": False, "error": f"Phase-1 placement failed: {placement_result.get('error')}"}
+                
+                # Check if Phase-1 is now full (4 users) and trigger automatic progression
+                total_phase1_users_after = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
+                if total_phase1_users_after == 4:
+                    print(f"Phase-1 is now full ({total_phase1_users_after}/4), triggering automatic progression for first user")
+                    # Find the first user in Phase-1 (oldest by creation date)
+                    first_user_placement = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).order_by('created_at').first()
+                    if first_user_placement:
+                        first_user_id = str(first_user_placement.user_id)
+                        print(f"Triggering Phase-1 to Phase-2 progression for first user: {first_user_id}")
+                        # Process automatic progression for the first user
+                        progression_result = self.process_phase_progression(first_user_id)
+                        if progression_result.get("success"):
+                            print(f"Successfully progressed first user {first_user_id} from Phase-1 to Phase-2")
+                        else:
+                            print(f"Failed to progress first user {first_user_id}: {progression_result.get('error')}")
             
             # Log placement result
             parent_id = placement_result.get("parent_id")
+            phase = placement_result.get("phase", "PHASE-1")
             if parent_id:
-                print(f"User {user_id} placed in Phase-1 under parent {parent_id}")
+                print(f"User {user_id} placed in {phase} under parent {parent_id}")
             else:
-                print(f"User {user_id} placed as root in Phase-1")
+                print(f"User {user_id} placed as root in {phase}")
 
             # 1.1.5 Commission Calculations - Section 1.1.5 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
             # Joining Commission (10%): Calculate and distribute to upline
@@ -1662,14 +1689,20 @@ class GlobalService:
                 program='global',
                 phase='PHASE-2',
                 slot_no=1,
-                parent_id=ObjectId(parent.id),
-                placement_type='phase_progression',
-                placed_at=datetime.utcnow()
+                parent_id=parent,  # parent is already an ObjectId from _find_phase2_parent_bfs
+                position='position_1',  # Default position for Phase-2
+                level=1,  # Default level
+                phase_position=1,  # Default phase position
+                is_active=True,
+                is_activated=True,
+                activation_date=datetime.utcnow(),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
             )
             placement.save()
 
             # Update parent's Phase-2 member count
-            parent_progression = GlobalPhaseProgression.objects(user_id=ObjectId(parent.id)).first()
+            parent_progression = GlobalPhaseProgression.objects(user_id=parent).first()
             if parent_progression:
                 parent_progression.phase_2_members_current += 1
                 parent_progression.updated_at = datetime.utcnow()
@@ -1680,11 +1713,19 @@ class GlobalService:
                     parent_progression.is_phase_complete = True
                     parent_progression.next_phase_ready = True
                     parent_progression.save()
-                    print(f"Parent {parent.id} Phase-2 completed: {parent_progression.phase_2_members_current}/{parent_progression.phase_2_members_required} members")
+                    print(f"Parent {parent} Phase-2 completed: {parent_progression.phase_2_members_current}/{parent_progression.phase_2_members_required} members")
+                    
+                    # Trigger Phase-2 to Phase-1 re-entry with slot upgrade
+                    print(f"Triggering Phase-2 to Phase-1 re-entry with slot upgrade for user {parent}")
+                    reentry_result = self.process_phase2_to_phase1_reentry(str(parent))
+                    if reentry_result.get("success"):
+                        print(f"Successfully processed Phase-2 to Phase-1 re-entry for user {parent}")
+                    else:
+                        print(f"Failed to process Phase-2 to Phase-1 re-entry for user {parent}: {reentry_result.get('error')}")
 
             return {
                 "success": True,
-                "parent_id": str(parent.id),
+                "parent_id": str(parent),
                 "placement_id": str(placement.id),
                 "phase": "PHASE-2",
                 "slot_no": 1
@@ -1693,7 +1734,7 @@ class GlobalService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def _find_phase2_parent_bfs(self) -> ObjectId | None:
+    def _find_phase2_parent_bfs(self, user_id: str) -> ObjectId | None:
         """
         Find eligible upline with available Phase-2 positions using proper BFS algorithm
         """
