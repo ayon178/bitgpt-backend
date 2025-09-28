@@ -33,24 +33,24 @@ class DreamMatrixService:
                 # If no slots found, create default empty slots
                 if not slot_numbers:
                     slot_numbers = set(range(1, 11))  # Default slots 1-10
-            
-            # Filter by recycle if provided
-            if recycle_no:
-                # Get recycle instances for the user
-                recycle_instances = MatrixRecycleInstance.objects(
-                    user_id=user_oid,
-                    slot_number=slot_no if slot_no else 1,
-                    recycle_no=recycle_no
-                )
-                if not recycle_instances:
-                    return {"success": False, "error": f"No recycle instance found for slot {slot_no}, recycle {recycle_no}"}
-            
-            matrix_tree_data = []
-            
-            for slot_no in sorted(slot_numbers):
-                # Get the user's tree for this slot
-                tree = matrix_trees.filter(current_slot=slot_no).first()
                 
+                # Filter by recycle if provided
+                if recycle_no:
+                    # Get recycle instances for the user
+                    recycle_instances = MatrixRecycleInstance.objects(
+                        user_id=user_oid,
+                        slot_number=slot_no if slot_no else 1,
+                        recycle_no=recycle_no
+                    )
+                    if not recycle_instances:
+                        return {"success": False, "error": f"No recycle instance found for slot {slot_no}, recycle {recycle_no}"}
+                
+                matrix_tree_data = []
+                
+                for slot_no in sorted(slot_numbers):
+                    # Get the user's tree for this slot
+                    tree = matrix_trees.filter(current_slot=slot_no).first()
+                    
                     # Get total matrix earnings for this user (like binary service)
                     total_matrix_earnings = self._get_total_matrix_earnings(user_oid)
                     # Convert BNB to USDT (assuming 1 BNB = 300 USDT for display) - keep exact amount
@@ -60,136 +60,136 @@ class DreamMatrixService:
                     if price == 0:
                         # Progressive pricing: 100, 200, 300, 400, etc.
                         price = 100 + (slot_no - 1) * 100
-                
-                # Calculate status flags
-                is_completed = tree.is_complete if tree else False
-                is_process = tree and not tree.is_complete and tree.total_members > 0
-                is_auto_upgrade = False  # Matrix doesn't have auto upgrade
-                is_manual_upgrade = tree and not tree.is_complete and tree.total_members >= 3
-                
-                # Calculate process percent
-                max_members = 39  # Matrix tree max members
-                process_percent = min(100, (tree.total_members / max_members) * 100) if tree else 0
-                
-                # Get team members for this slot
-                team_members = self._get_matrix_team_members(tree) if tree else []
-                
-                # Create matrix tree data object matching matrixData.js structure
-                # Use actual user ID instead of "ROOT"
-                user_display_id = str(user_info.uid) if user_info and user_info.uid and user_info.uid != "ROOT" else str(user_oid)
-                
-                matrix_tree_item = {
-                    "id": slot_no,
-                    "price": price,
-                    "userId": user_display_id,
-                    "recycle": self._get_recycle_count(user_oid, slot_no),
-                    "isCompleted": is_completed,
-                    "isProcess": is_process,
-                    "isAutoUpgrade": is_auto_upgrade,
-                    "isManualUpgrade": is_manual_upgrade,
-                    "processPercent": int(process_percent),
-                    "users": team_members
-                }
-                
-                matrix_tree_data.append(matrix_tree_item)
-            
-            # Always create multiple matrix items like frontend matrixData.js
-            
-            # If we have real data, create progressive matrices with incremental user counts
-            if len(matrix_tree_data) > 0:
-                # Get all real users from the first matrix
-                real_matrix = matrix_tree_data[0]  # Keep the first real matrix
-                all_real_users = real_matrix["users"]  # Get all real users
-                matrix_tree_data = []  # Clear and rebuild
-                
-                # Create multiple matrices with progressive user counts
-                matrix_ids = [11, 12, 13, 14, 15, 16, 17, 18, 19, 39]
-                for matrix_index, matrix_id in enumerate(matrix_ids):
-                    # Calculate how many users this matrix should have (progressive: 1, 2, 3, 4...)
-                    user_count = matrix_index + 1
                     
-                    # Take only the first N users from real data
-                    users = all_real_users[:user_count] if user_count <= len(all_real_users) else all_real_users
+                    # Calculate status flags
+                    is_completed = tree.is_complete if tree else False
+                    is_process = tree and not tree.is_complete and tree.total_members > 0
+                    is_auto_upgrade = False  # Matrix doesn't have auto upgrade
+                    is_manual_upgrade = tree and not tree.is_complete and tree.total_members >= 3
                     
-                    # Calculate price based on user count
-                    total_matrix_earnings = self._get_total_matrix_earnings(user_oid)
-                    price = total_matrix_earnings * 300 if total_matrix_earnings > 0 else (100 + matrix_id * 10)
+                    # Calculate process percent
+                    max_members = 39  # Matrix tree max members
+                    process_percent = min(100, (tree.total_members / max_members) * 100) if tree else 0
                     
-                    # Determine status based on matrix index
-                    is_completed = matrix_index == 0  # First one completed
-                    is_process = matrix_index == 2    # Third one in process
-                    is_auto_upgrade = matrix_index == 1  # Second one auto upgrade
-                    is_manual_upgrade = matrix_index == 2  # Third one manual upgrade
-                    process_percent = 50 if matrix_index == 2 else (100 if matrix_index == 0 else 0)
+                    # Get team members for this slot
+                    team_members = self._get_matrix_team_members(tree) if tree else []
+                    
+                    # Create matrix tree data object matching matrixData.js structure
+                    # Use actual user ID instead of "ROOT"
+                    user_display_id = str(user_info.uid) if user_info and user_info.uid and user_info.uid != "ROOT" else str(user_oid)
                     
                     matrix_tree_item = {
-                        "id": matrix_id,
+                        "id": slot_no,
                         "price": price,
-                        "userId": real_matrix["userId"],
-                        "recycle": real_matrix["recycle"],
+                        "userId": user_display_id,
+                        "recycle": self._get_recycle_count(user_oid, slot_no),
                         "isCompleted": is_completed,
                         "isProcess": is_process,
                         "isAutoUpgrade": is_auto_upgrade,
                         "isManualUpgrade": is_manual_upgrade,
-                        "processPercent": process_percent,
-                        "users": users
+                        "processPercent": int(process_percent),
+                        "users": team_members
                     }
                     
                     matrix_tree_data.append(matrix_tree_item)
-            else:
-                # No real data found, create mock data for all slots
-                # Create multiple matrix items like in mock data
-                mock_ids = [11, 12, 13, 14, 15, 16, 17, 18, 19, 39]
-                for slot_id in mock_ids:
-                    total_matrix_earnings = self._get_total_matrix_earnings(user_oid)
-                    price = total_matrix_earnings * 300 if total_matrix_earnings > 0 else (100 + slot_id * 10)
+                
+                # Always create multiple matrix items like frontend matrixData.js
+                
+                # If we have real data, create progressive matrices with incremental user counts
+                if len(matrix_tree_data) > 0:
+                    # Get all real users from the first matrix
+                    real_matrix = matrix_tree_data[0]  # Keep the first real matrix
+                    all_real_users = real_matrix["users"]  # Get all real users
+                    matrix_tree_data = []  # Clear and rebuild
                     
-                    # Generate users like frontend matrixData.js (11-19 users)
-                    users = []
-                    user_types = ["self", "downLine", "upLine", "overTaker"]
-                    
-                    # Add self user first
-                    user_display_id = str(user_info.uid) if user_info and user_info.uid and user_info.uid != "ROOT" else str(user_oid)
-                    users.append({
-                        "id": 0,
-                        "type": "self",
-                        "userId": user_display_id
-                    })
-                    
-                    # Add users like frontend (11-19 users per matrix)
-                    max_users = 11 + (slot_id % 9)  # 11-19 users
-                    for i in range(1, max_users):
-                        mock_user_id = f"USER{10000 + slot_id * 100 + i}"
-                        user_type = user_types[i % len(user_types)]
+                    # Create multiple matrices with progressive user counts
+                    matrix_ids = [11, 12, 13, 14, 15, 16, 17, 18, 19, 39]
+                    for matrix_index, matrix_id in enumerate(matrix_ids):
+                        # Calculate how many users this matrix should have (progressive: 1, 2, 3, 4...)
+                        user_count = matrix_index + 1
+                        
+                        # Take only the first N users from real data
+                        users = all_real_users[:user_count] if user_count <= len(all_real_users) else all_real_users
+                        
+                        # Calculate price based on user count
+                        total_matrix_earnings = self._get_total_matrix_earnings(user_oid)
+                        price = total_matrix_earnings * 300 if total_matrix_earnings > 0 else (100 + matrix_id * 10)
+                        
+                        # Determine status based on matrix index
+                        is_completed = matrix_index == 0  # First one completed
+                        is_process = matrix_index == 2    # Third one in process
+                        is_auto_upgrade = matrix_index == 1  # Second one auto upgrade
+                        is_manual_upgrade = matrix_index == 2  # Third one manual upgrade
+                        process_percent = 50 if matrix_index == 2 else (100 if matrix_index == 0 else 0)
+                        
+                        matrix_tree_item = {
+                            "id": matrix_id,
+                            "price": price,
+                            "userId": real_matrix["userId"],
+                            "recycle": real_matrix["recycle"],
+                            "isCompleted": is_completed,
+                            "isProcess": is_process,
+                            "isAutoUpgrade": is_auto_upgrade,
+                            "isManualUpgrade": is_manual_upgrade,
+                            "processPercent": process_percent,
+                            "users": users
+                        }
+                        
+                        matrix_tree_data.append(matrix_tree_item)
+                else:
+                    # No real data found, create mock data for all slots
+                    # Create multiple matrix items like in mock data
+                    mock_ids = [11, 12, 13, 14, 15, 16, 17, 18, 19, 39]
+                    for slot_id in mock_ids:
+                        total_matrix_earnings = self._get_total_matrix_earnings(user_oid)
+                        price = total_matrix_earnings * 300 if total_matrix_earnings > 0 else (100 + slot_id * 10)
+                        
+                        # Generate users like frontend matrixData.js (11-19 users)
+                        users = []
+                        user_types = ["self", "downLine", "upLine", "overTaker"]
+                        
+                        # Add self user first
+                        user_display_id = str(user_info.uid) if user_info and user_info.uid and user_info.uid != "ROOT" else str(user_oid)
                         users.append({
-                            "id": i,
-                            "type": user_type,
-                            "userId": mock_user_id
+                            "id": 0,
+                            "type": "self",
+                            "userId": user_display_id
                         })
-                    
-                    matrix_tree_item = {
-                        "id": slot_id,
-                        "price": price,
-                        "userId": user_display_id,
-                        "recycle": 0,
-                        "isCompleted": slot_id == 11,  # First one completed
-                        "isProcess": slot_id == 13,    # Third one in process
-                        "isAutoUpgrade": slot_id == 12, # Second one auto upgrade
-                        "isManualUpgrade": slot_id == 13, # Third one manual upgrade
-                        "processPercent": 50 if slot_id == 13 else (100 if slot_id == 11 else 0),
-                        "users": users
-                    }
-                    
-                    matrix_tree_data.append(matrix_tree_item)
-            
-            result = {
-                "matrixTreeData": matrix_tree_data,
-                "totalSlots": len(matrix_tree_data),
-                "user_id": str(user_id)
-            }
-            
-            return {"success": True, "data": result}
-            
+                        
+                        # Add users like frontend (11-19 users per matrix)
+                        max_users = 11 + (slot_id % 9)  # 11-19 users
+                        for i in range(1, max_users):
+                            mock_user_id = f"USER{10000 + slot_id * 100 + i}"
+                            user_type = user_types[i % len(user_types)]
+                            users.append({
+                                "id": i,
+                                "type": user_type,
+                                "userId": mock_user_id
+                            })
+                        
+                        matrix_tree_item = {
+                            "id": slot_id,
+                            "price": price,
+                            "userId": user_display_id,
+                            "recycle": 0,
+                            "isCompleted": slot_id == 11,  # First one completed
+                            "isProcess": slot_id == 13,    # Third one in process
+                            "isAutoUpgrade": slot_id == 12, # Second one auto upgrade
+                            "isManualUpgrade": slot_id == 13, # Third one manual upgrade
+                            "processPercent": 50 if slot_id == 13 else (100 if slot_id == 11 else 0),
+                            "users": users
+                        }
+                        
+                        matrix_tree_data.append(matrix_tree_item)
+                
+                result = {
+                    "matrixTreeData": matrix_tree_data,
+                    "totalSlots": len(matrix_tree_data),
+                    "user_id": str(user_id)
+                }
+                
+                return {"success": True, "data": result}
+                
         except Exception as e:
             return {"success": False, "error": str(e)}
 
