@@ -4381,16 +4381,61 @@ class GlobalService:
                 
                 for batch_idx, batch in enumerate(placement_batches):
                     print(f"[DEBUG] Processing batch {batch_idx + 1} with {len(batch)} members")
-                    # Get slot catalog info for pricing
-                    slot_catalog = SlotCatalog.objects(
-                        program='global',
-                        slot_no=batch[0].slot_no,
-                        is_active=True
-                    ).first()
+                    # Calculate total global earnings from all users by currency
+                    batch_users = batch
+                    usd_earnings = 0.0
+                    usdt_earnings = 0.0
+                    bnb_earnings = 0.0
                     
-                    price = 100  # Default price
-                    if slot_catalog:
-                        price = float(slot_catalog.price or 100)
+                    for user_placement in batch_users:
+                        user_id = user_placement.user_id
+                        
+                        # Get global earnings by currency for this user
+                        from ..wallet.model import WalletLedger
+                        
+                        # USD earnings
+                        user_usd = WalletLedger.objects(
+                            user_id=user_id,
+                            reason__regex=r'global_.*',
+                            type='credit',
+                            currency='USD'
+                        ).sum('amount')
+                        
+                        # USDT earnings
+                        user_usdt = WalletLedger.objects(
+                            user_id=user_id,
+                            reason__regex=r'global_.*',
+                            type='credit',
+                            currency='USDT'
+                        ).sum('amount')
+                        
+                        # BNB earnings
+                        user_bnb = WalletLedger.objects(
+                            user_id=user_id,
+                            reason__regex=r'global_.*',
+                            type='credit',
+                            currency='BNB'
+                        ).sum('amount')
+                        
+                        usd_amount = float(user_usd) if user_usd else 0.0
+                        usdt_amount = float(user_usdt) if user_usdt else 0.0
+                        bnb_amount = float(user_bnb) if user_bnb else 0.0
+                        
+                        usd_earnings += usd_amount
+                        usdt_earnings += usdt_amount
+                        bnb_earnings += bnb_amount
+                        
+                        print(f"[DEBUG] User {user_id}: USD=${usd_amount}, USDT=${usdt_amount}, BNB={bnb_amount}")
+                    
+                    # Return price object with multiple currencies
+                    price = {
+                        "USD": usd_earnings,
+                        "USDT": usdt_earnings, 
+                        "BNB": bnb_earnings,
+                        "total": usd_earnings + usdt_earnings + bnb_earnings
+                    }
+                    
+                    print(f"[DEBUG] Batch {batch_idx + 1}: Total earnings - USD:${usd_earnings}, USDT:${usdt_earnings}, BNB:{bnb_earnings}")
                     
                     # Calculate status flags
                     is_completed = len(batch) >= 4  # Phase-1 needs 4 spots, Phase-2 needs 8
@@ -4523,16 +4568,61 @@ class GlobalService:
                     if batch_id == item_id:
                         print(f"[DEBUG] Found matching item_id {item_id} in {phase_name}")
                         
-                        # Get slot catalog info for pricing
-                        slot_catalog = SlotCatalog.objects(
-                            program='global',
-                            slot_no=batch[0].slot_no,
-                            is_active=True
-                        ).first()
+                        # Calculate total global earnings from all users by currency
+                        batch_users = batch
+                        usd_earnings = 0.0
+                        usdt_earnings = 0.0
+                        bnb_earnings = 0.0
                         
-                        price = 100  # Default price
-                        if slot_catalog:
-                            price = float(slot_catalog.price or 100)
+                        for user_placement in batch_users:
+                            user_id = user_placement.user_id
+                            
+                            # Get global earnings by currency for this user
+                            from ..wallet.model import WalletLedger
+                            
+                            # USD earnings
+                            user_usd = WalletLedger.objects(
+                                user_id=user_id,
+                                reason__regex=r'global_.*',
+                                type='credit',
+                                currency='USD'
+                            ).sum('amount')
+                            
+                            # USDT earnings
+                            user_usdt = WalletLedger.objects(
+                                user_id=user_id,
+                                reason__regex=r'global_.*',
+                                type='credit',
+                                currency='USDT'
+                            ).sum('amount')
+                            
+                            # BNB earnings
+                            user_bnb = WalletLedger.objects(
+                                user_id=user_id,
+                                reason__regex=r'global_.*',
+                                type='credit',
+                                currency='BNB'
+                            ).sum('amount')
+                            
+                            usd_amount = float(user_usd) if user_usd else 0.0
+                            usdt_amount = float(user_usdt) if user_usdt else 0.0
+                            bnb_amount = float(user_bnb) if user_bnb else 0.0
+                            
+                            usd_earnings += usd_amount
+                            usdt_earnings += usdt_amount
+                            bnb_earnings += bnb_amount
+                            
+                            print(f"[DEBUG] Details User {user_id}: USD=${usd_amount}, USDT=${usdt_amount}, BNB={bnb_amount}")
+                        
+                        # Return price object with multiple currencies
+                        price = {
+                            "USD": usd_earnings,
+                            "USDT": usdt_earnings,
+                            "BNB": bnb_earnings,
+                            "total": usd_earnings + usdt_earnings + bnb_earnings
+                        }
+                        
+                        print(f"[DEBUG] Details: Total earnings - USD:${usd_earnings}, USDT:${usdt_earnings}, BNB:{bnb_earnings}")
                         
                         # Calculate status flags
                         is_completed = len(batch) >= 4  # Phase-1 needs 4 spots, Phase-2 needs 8
