@@ -563,7 +563,7 @@ class GlobalService:
             if amount != expected_amount:
                 return {"success": False, "error": f"Join amount must be {expected_amount} (Phase-1 Slot-1 price)"}
 
-            currency = ensure_currency_for_program('global', 'USD')
+            currency = ensure_currency_for_program('global', 'USDT')
 
             # Generate unique tx_hash to avoid duplicate key errors
             import random, string
@@ -859,7 +859,7 @@ class GlobalService:
 
             print(f"Upgrade validation passed for user {user_id}: slot {to_slot_no}, amount {expected_amount}")
 
-            currency = ensure_currency_for_program('global', 'USD')
+            currency = ensure_currency_for_program('global', 'USDT')
 
             # Generate unique tx_hash to avoid duplicate key errors
             import random, string

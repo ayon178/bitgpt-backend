@@ -19,7 +19,7 @@ def upsert_slot(program: str, slot_no: int, name: str, price: Decimal, level: in
         slot = SlotCatalog(**q)
     slot.name = name
     slot.price = price
-    slot.currency = 'BNB' if program == 'binary' else ('USDT' if program == 'matrix' else 'USD')
+    slot.currency = 'BNB' if program == 'binary' else ('USDT' if program == 'matrix' else 'USDT')
     slot.level = level
     if program == 'global' and phase:
         slot.phase = phase

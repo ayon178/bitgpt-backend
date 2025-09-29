@@ -578,7 +578,7 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 # Activate Global Slot-1 using provided tx
                 global_catalog = SlotCatalog.objects(program='global', slot_no=1, is_active=True).first()
                 if global_catalog:
-                    global_currency = ensure_currency_for_program('global', 'USD')
+                    global_currency = ensure_currency_for_program('global', 'USDT')
                     global_amount = global_catalog.price or Decimal('0')
                     activation = SlotActivation(
                         user_id=ObjectId(user.id),
