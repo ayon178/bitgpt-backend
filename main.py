@@ -2,6 +2,7 @@ import os
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import routers
 from auth.router import auth_router
@@ -64,6 +65,21 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Initialize the FastAPI app
 app = FastAPI(title="BitGPT MLM Platform", version="1.0.0")
+
+# CORS configuration
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "*",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Mount static files
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
