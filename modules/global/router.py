@@ -169,3 +169,37 @@ async def get_team_statistics(user_id: str):
     if result.get("success"):
         return {"status": "Ok", "data": result["statistics"]}
     raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch team statistics"))
+
+@router.get("/earnings/{user_id}")
+async def get_global_earnings(
+    user_id: str,
+    phase: str = None,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get Global program earnings data matching frontend matrixData.js structure"""
+    try:
+        # Extract user ID from current_user with fallback options
+        authenticated_user_id = None
+        user_id_keys = ["user_id", "_id", "id", "uid"]
+
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                authenticated_user_id = str(current_user[key])
+                break
+        
+        # Authorization check - users can only access their own data
+        if authenticated_user_id and authenticated_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Global earnings")
+
+        service = GlobalService()
+        result = service.get_global_earnings(user_id, phase)
+
+        if result["success"]:
+            return success_response(result["data"])
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
