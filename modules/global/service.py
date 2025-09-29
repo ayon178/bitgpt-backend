@@ -4456,3 +4456,129 @@ class GlobalService:
         except Exception as e:
             print(f"Error in get_global_earnings: {e}")
             return {"success": False, "error": str(e)}
+
+    def get_global_earnings_details(self, user_id: str, item_id: int, phase: str = None) -> Dict[str, Any]:
+        """
+        Get specific Global earnings item details by item_id
+        Finds the item across both phases and returns the specific object
+        """
+        try:
+            # Convert user_id to ObjectId
+            try:
+                user_oid = ObjectId(user_id)
+                print(f"[DEBUG] Looking for item_id {item_id} under user {user_oid}")
+            except Exception as e:
+                user_oid = user_id
+                print(f"[DEBUG] Using string user_id: {user_id}, Error: {e}")
+            
+            # Determine which phases to search
+            phases_to_search = []
+            if phase:
+                if phase.upper() in ['PHASE-1', 'PHASE-2']:
+                    phases_to_search = [phase.upper()]
+                else:
+                    return {"success": False, "error": f"Invalid phase: {phase}. Must be PHASE-1 or PHASE-2"}
+            else:
+                phases_to_search = ['PHASE-1', 'PHASE-2']
+            
+            print(f"[DEBUG] Searching for item_id {item_id} in phas[es]{phases_to_search}")
+            
+            for phase_name in phases_to_search:
+                print(f"[DEBUG] Searching in {phase_name}")
+                
+                # Get all children/downlines under this user for the specified phase
+                try:
+                    all_placements = TreePlacement.objects(
+                        parent_id=user_oid,
+                        program='global',
+                        phase=phase_name,
+                        is_active=True
+                    ).order_by('activation_date')
+                    
+                    placement_count = all_placements.count()
+                    print(f"[DEBUG] Found {placement_count} placements in {phase_name}")
+                    
+                    if placement_count == 0:
+                        continue
+                
+                except Exception as e:
+                    print(f"[ERROR] Database query failed for {phase_name}: {e}")
+                    continue
+                
+                # Create progressive batches: 1st item has 1 user, 2nd has 2 users, etc.
+                placements_list = list(all_placements)
+                placement_batches = []
+                
+                for i in range(len(placements_list)):
+                    # Take i+1 users for each progressive batch
+                    batch_users = placements_list[:i+1]
+                    placement_batches.append(batch_users)
+                
+                # Convert batches to frontend format
+                phase_data = []
+                batch_id = 11  # Starting ID as in mock data
+                
+                for batch_idx, batch in enumerate(placement_batches):
+                    # Check if this is the item we're looking for
+                    if batch_id == item_id:
+                        print(f"[DEBUG] Found matching item_id {item_id} in {phase_name}")
+                        
+                        # Get slot catalog info for pricing
+                        slot_catalog = SlotCatalog.objects(
+                            program='global',
+                            slot_no=batch[0].slot_no,
+                            is_active=True
+                        ).first()
+                        
+                        price = 100  # Default price
+                        if slot_catalog:
+                            price = float(slot_catalog.price or 100)
+                        
+                        # Calculate status flags
+                        is_completed = len(batch) >= 4  # Phase-1 needs 4 spots, Phase-2 needs 8
+                        is_process = len(batch) > 0 and len(batch) < 4
+                        is_auto_upgrade = len(batch) >= 2  # Need at least 2 for auto upgrade
+                        is_manual_upgrade = len(batch) >= 4
+                        
+                        # Calculate process percent
+                        max_spots = 4 if phase_name == 'PHASE-1' else 8
+                        process_percent = min(100, (len(batch) / max_spots) * 100)
+                        
+                        # Convert placements to user array format
+                        users = []
+                        user_counter = 1
+                        
+                        for placement in batch:
+                            users.append({
+                                "id": user_counter,
+                                "type": placement.position,
+                                "userId": str(placement.user_id)
+                            })
+                            user_counter += 1
+                        
+                        # Create and return the specific data item
+                        data_item = {
+                            "id": item_id,
+                            "price": price,
+                            "userId": str(user_oid),
+                            "recycle": len(batch),  # Number of active members
+                            "isCompleted": is_completed,
+                            "isProcess": is_process,
+                            "isAutoUpgrade": is_auto_upgrade,
+                            "isManualUpgrade": is_manual_upgrade,
+                            "processPercent": process_percent,
+                            "users": users,
+                            "phase": phase_name  # Add phase info for frontend
+                        }
+                        
+                        print(f"[DEBUG] Returning item details for id {item_id}")
+                        return {"success": True, "data": data_item}
+                    
+                    batch_id += 1
+            
+            print(f"[DEBUG] Item ID {item_id} not found")
+            return {"success": False, "error": f"Item with ID {item_id} not found"}
+                    
+        except Exception as e:
+            print(f"Error in get_global_earnings_details: {e}")
+            return {"success": False, "error": str(e)}
