@@ -562,3 +562,171 @@ class WalletService:
             return {"success": True, "data": totals}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_duel_tree_earnings(self, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """
+        Return a paginated list of DISTINCT users who received Duel Tree earnings (binary_dual_tree_* credits),
+        one row per user, sorted by latest earning time (desc).
+        Columns: uid, time (latest), upline uid, partner count, rank.
+        """
+        try:
+            from ..user.model import User, PartnerGraph
+
+            # Aggregate distinct users with latest created_at
+            pipeline = [
+                {"$match": {
+                    "type": "credit",
+                    "reason": {"$regex": "^binary_dual_tree_"},
+                    "currency": currency.upper()
+                }},
+                {"$group": {
+                    "_id": "$user_id",
+                    "latest_at": {"$max": "$created_at"},
+                    "count": {"$sum": 1}
+                }},
+                {"$sort": {"latest_at": -1}}
+            ]
+            agg = list(WalletLedger.objects.aggregate(pipeline))
+
+            # Pagination over aggregated distinct users
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 50)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_rows = agg[start:end]
+            total = len(agg)
+
+            user_ids = [r.get("_id") for r in page_rows if r.get("_id")]
+            users = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by', 'current_rank')}
+            graphs = {str(g.user_id): g for g in PartnerGraph.objects(user_id__in=user_ids).only('user_id', 'directs')}
+
+            # Prefetch uplines
+            upline_ids = []
+            for u in users.values():
+                rid = getattr(u, 'refered_by', None)
+                if rid:
+                    upline_ids.append(rid)
+            upline_map = {str(u.id): u for u in User.objects(id__in=upline_ids).only('uid')}
+
+            rows = []
+            for r in page_rows:
+                uid_oid = r.get("_id")
+                latest_at = r.get("latest_at")
+                u = users.get(str(uid_oid))
+                if not u:
+                    continue
+                pg = graphs.get(str(uid_oid))
+                partner_count = len(getattr(pg, 'directs', []) if pg else [])
+                ref = getattr(u, 'refered_by', None)
+                upline_uid = None
+                if ref and str(ref) in upline_map:
+                    upline_uid = getattr(upline_map[str(ref)], 'uid', None)
+                if not upline_uid:
+                    upline_uid = 'ROOT'
+
+                rows.append({
+                    "uid": getattr(u, 'uid', None),
+                    "time": latest_at.isoformat() if latest_at else None,
+                    "upline_uid": upline_uid,
+                    "partner_count": partner_count,
+                    "rank": getattr(u, 'current_rank', None)
+                })
+
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "items": rows
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_binary_partner_incentive(self, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """
+        Return a paginated list of DISTINCT users who received Binary Partner Incentive-type earnings.
+        Columns: uid (receiver), upline_uid (from latest tx), total_amount, time (latest earning).
+        Reasons counted: binary_partner_incentive, binary_joining_commission, binary_upgrade_* (credits only).
+        """
+        try:
+            import re
+            from ..user.model import User
+
+            # Aggregate by user: sum amounts, pick latest created_at and latest tx_hash
+            pipeline = [
+                {"$match": {
+                    "type": "credit",
+                    "currency": currency.upper(),
+                    "$or": [
+                        {"reason": {"$in": ["binary_partner_incentive", "binary_joining_commission"]}},
+                        {"reason": {"$regex": "^binary_upgrade_"}}
+                    ]
+                }},
+                {"$sort": {"created_at": -1}},  # so $first gets latest tx
+                {"$group": {
+                    "_id": "$user_id",
+                    "total_amount": {"$sum": "$amount"},
+                    "latest_at": {"$first": "$created_at"},
+                    "latest_tx": {"$first": "$tx_hash"}
+                }},
+                {"$sort": {"latest_at": -1}}
+            ]
+            agg = list(WalletLedger.objects.aggregate(pipeline))
+
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 50)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_rows = agg[start:end]
+            total = len(agg)
+
+            # Fetch users and uplines
+            user_ids = [r.get("_id") for r in page_rows if r.get("_id")]
+            users_map = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by')}
+            # Collect possible uplines (from referrer fallback)
+            ref_ids = []
+            for u in users_map.values():
+                rid = getattr(u, 'refered_by', None)
+                if rid:
+                    ref_ids.append(rid)
+            ref_map = {str(u.id): u for u in User.objects(id__in=ref_ids).only('uid')}
+
+            # Parse upline from latest tx_hash if present
+            hex24 = re.compile(r"[0-9a-fA-F]{24}")
+            rows = []
+            for r in page_rows:
+                uid_oid = r.get("_id")
+                u = users_map.get(str(uid_oid))
+                if not u:
+                    continue
+                latest_tx = str(r.get("latest_tx") or '')
+                m = hex24.search(latest_tx)
+                upline_uid = None
+                if m and ref_map.get(m.group(0)):
+                    upline_uid = getattr(ref_map[m.group(0)], 'uid', None)
+                if not upline_uid and getattr(u, 'refered_by', None):
+                    rid = str(getattr(u, 'refered_by'))
+                    if rid in ref_map:
+                        upline_uid = getattr(ref_map[rid], 'uid', None)
+
+                rows.append({
+                    "uid": getattr(u, 'uid', None),
+                    "upline_uid": upline_uid or 'ROOT',
+                    "amount": float(r.get("total_amount") or 0),
+                    "time": r.get("latest_at").isoformat() if r.get("latest_at") else None
+                })
+
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "items": rows
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}

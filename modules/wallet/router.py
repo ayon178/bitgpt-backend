@@ -132,3 +132,33 @@ async def get_pools_summary():
         return error_response(str(e))
 
 
+@router.get("/duel-tree-earnings")
+async def get_duel_tree_earnings(currency: str = 'BNB', page: int = 1, limit: int = 50):
+    try:
+        service = WalletService()
+        result = service.get_duel_tree_earnings(currency=currency, page=page, limit=limit)
+        if result.get("success"):
+            return success_response(result["data"], "Duel tree earnings fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch duel tree earnings"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/binary-partner-incentive")
+async def get_binary_partner_incentive(currency: str = 'BNB', page: int = 1, limit: int = 50):
+    try:
+        service = WalletService()
+        result = service.get_binary_partner_incentive(currency=currency, page=page, limit=limit)
+        if result.get("success"):
+            return success_response(result["data"], "Binary partner incentive fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch binary partner incentive"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
