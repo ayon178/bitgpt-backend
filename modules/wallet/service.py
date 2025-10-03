@@ -2,7 +2,9 @@ from decimal import Decimal
 from datetime import datetime
 from bson import ObjectId
 from .model import UserWallet, WalletLedger
+from ..slot.model import SlotActivation
 import re
+from typing import Dict, Any
 
 
 class WalletService:
@@ -153,3 +155,410 @@ class WalletService:
             created_at=datetime.utcnow()
         ).save()
         return {"success": True, "balance": float(new_balance)}
+
+    def get_earning_statistics(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get earning statistics for a user from all programs (binary, matrix, global)
+        Returns total earnings per program and highest activated slot for each
+        OPTIMIZED: Fetch once, calculate in Python
+        """
+        try:
+            import time
+            start_time = time.time()
+            
+            user_oid = ObjectId(user_id)
+            
+            # Initialize earnings counters
+            binary_earnings = {"USDT": Decimal('0'), "BNB": Decimal('0')}
+            matrix_earnings = {"USDT": Decimal('0'), "BNB": Decimal('0')}
+            global_earnings = {"USDT": Decimal('0'), "BNB": Decimal('0')}
+            
+            query_start = time.time()
+            
+            # Fetch ALL credit entries for this user in ONE query (faster than multiple regex queries)
+            all_credits = WalletLedger.objects(
+                user_id=user_oid,
+                type='credit'
+            ).only('amount', 'currency', 'reason')
+            
+            print(f"Fetched {all_credits.count()} credit entries")
+            
+            # Calculate earnings in Python (faster than MongoDB regex)
+            for entry in all_credits:
+                reason = str(entry.reason or '').lower()
+                currency = str(entry.currency or 'USDT').upper()
+                amount = Decimal(str(entry.amount or 0))
+                
+                # Ensure currency key exists
+                if currency not in binary_earnings:
+                    binary_earnings[currency] = Decimal('0')
+                if currency not in matrix_earnings:
+                    matrix_earnings[currency] = Decimal('0')
+                if currency not in global_earnings:
+                    global_earnings[currency] = Decimal('0')
+                
+                # Categorize by program
+                if reason.startswith('binary_'):
+                    binary_earnings[currency] += amount
+                elif reason.startswith('matrix_'):
+                    matrix_earnings[currency] += amount
+                elif reason.startswith('global_'):
+                    global_earnings[currency] += amount
+            
+            query_end = time.time()
+            print(f"Data fetch + calculation time: {query_end - query_start:.3f}s")
+            
+            # Get highest activated slots - optimized with only() to fetch minimal data
+            slot_start = time.time()
+            
+            # Binary slot (from SlotActivation)
+            binary_slot_data = SlotActivation.objects(
+                user_id=user_oid, program='binary', status='completed'
+            ).only('slot_no', 'slot_name', 'activated_at', 'created_at').order_by('-slot_no').first()
+            
+            binary_slot = {}
+            if binary_slot_data:
+                binary_slot = {
+                    "slot_no": binary_slot_data.slot_no,
+                    "slot_name": binary_slot_data.slot_name,
+                    "activated_at": binary_slot_data.activated_at or binary_slot_data.created_at
+                }
+            
+            # Matrix slot (from MatrixActivation)
+            from ..matrix.model import MatrixActivation
+            matrix_slot_data = MatrixActivation.objects(
+                user_id=user_oid, status='completed'
+            ).only('slot_no', 'slot_name', 'activated_at', 'completed_at').order_by('-slot_no').first()
+            
+            matrix_slot = {}
+            if matrix_slot_data:
+                matrix_slot = {
+                    "slot_no": matrix_slot_data.slot_no,
+                    "slot_name": matrix_slot_data.slot_name,
+                    "activated_at": matrix_slot_data.activated_at or matrix_slot_data.completed_at
+                }
+            
+            # Global slot (from SlotActivation)
+            global_slot_data = SlotActivation.objects(
+                user_id=user_oid, program='global', status='completed'
+            ).only('slot_no', 'slot_name', 'activated_at', 'created_at').order_by('-slot_no').first()
+            
+            global_slot = {}
+            if global_slot_data:
+                global_slot = {
+                    "slot_no": global_slot_data.slot_no,
+                    "slot_name": global_slot_data.slot_name,
+                    "activated_at": global_slot_data.activated_at or global_slot_data.created_at
+                }
+            
+            slot_end = time.time()
+            print(f"Slot queries time: {slot_end - slot_start:.3f}s")
+            
+            end_time = time.time()
+            total_time = end_time - start_time
+            print(f"TOTAL TIME: {total_time:.3f}s")
+            
+            return {
+                "success": True,
+                "data": {
+                    "binary": {
+                        "total_earnings": {
+                            "USDT": float(binary_earnings.get("USDT", Decimal('0'))),
+                            "BNB": float(binary_earnings.get("BNB", Decimal('0')))
+                        },
+                        "highest_activated_slot": binary_slot.get("slot_no") if binary_slot else 0,
+                        "highest_activated_slot_name": binary_slot.get("slot_name") if binary_slot else "N/A",
+                        "activated_at": binary_slot.get("activated_at").isoformat() if binary_slot and binary_slot.get("activated_at") else None
+                    },
+                    "matrix": {
+                        "total_earnings": {
+                            "USDT": float(matrix_earnings.get("USDT", Decimal('0'))),
+                            "BNB": float(matrix_earnings.get("BNB", Decimal('0')))
+                        },
+                        "highest_activated_slot": matrix_slot.get("slot_no") if matrix_slot else 0,
+                        "highest_activated_slot_name": matrix_slot.get("slot_name") if matrix_slot else "N/A",
+                        "activated_at": matrix_slot.get("activated_at").isoformat() if matrix_slot and matrix_slot.get("activated_at") else None
+                    },
+                    "global": {
+                        "total_earnings": {
+                            "USDT": float(global_earnings.get("USDT", Decimal('0'))),
+                            "BNB": float(global_earnings.get("BNB", Decimal('0')))
+                        },
+                        "highest_activated_slot": global_slot.get("slot_no") if global_slot else 0,
+                        "highest_activated_slot_name": global_slot.get("slot_name") if global_slot else "N/A",
+                        "activated_at": global_slot.get("activated_at").isoformat() if global_slot and global_slot.get("activated_at") else None
+                    }
+                }
+            }
+            
+        except Exception as e:
+            print(f"Error in get_earning_statistics: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}
+    
+    def _get_highest_activated_slot(self, user_oid: ObjectId, program: str) -> Dict[str, Any]:
+        """Get the highest activated slot for binary/global programs (uses SlotActivation)"""
+        try:
+            slot_activation = SlotActivation.objects(
+                user_id=user_oid,
+                program=program,
+                status='completed'
+            ).order_by('-slot_no').first()
+            
+            if slot_activation:
+                return {
+                    "slot_no": slot_activation.slot_no,
+                    "slot_name": slot_activation.slot_name,
+                    "activated_at": slot_activation.activated_at or slot_activation.created_at
+                }
+            return {}
+        except Exception as e:
+            print(f"Error getting highest slot for {program}: {e}")
+            return {}
+    
+    def _get_highest_matrix_slot(self, user_oid: ObjectId) -> Dict[str, Any]:
+        """Get the highest activated slot for matrix program (uses MatrixActivation)"""
+        try:
+            # Import here to avoid circular dependency
+            from ..matrix.model import MatrixActivation
+            
+            # Matrix uses MatrixActivation collection
+            matrix_activation = MatrixActivation.objects(
+                user_id=user_oid,
+                status='completed'
+            ).order_by('-slot_no').first()
+            
+            if matrix_activation:
+                return {
+                    "slot_no": matrix_activation.slot_no,
+                    "slot_name": matrix_activation.slot_name,
+                    "activated_at": matrix_activation.activated_at or matrix_activation.completed_at
+                }
+            return {}
+        except Exception as e:
+            print(f"Error getting highest matrix slot: {e}")
+            return {}
+
+    def get_pools_summary(self) -> Dict[str, Any]:
+        """
+        Fast global totals for pools. Combines:
+        - WalletLedger credit reasons (BNB/USDT exact)
+        - Program-specific collections (maps USD -> USDT for reporting)
+        """
+        try:
+            from decimal import Decimal as _D
+
+            def _zero():
+                return {"USDT": 0.0, "BNB": 0.0}
+
+            totals: Dict[str, Dict[str, float]] = {
+                "duel_tree": _zero(),
+                "binary_partner_incentive": _zero(),
+                "leadership_stipend": _zero(),
+                "dream_matrix": _zero(),
+                "matrix_partner_incentive": _zero(),
+                "newcomer_growth_support": _zero(),
+                "mentorship_bonus": _zero(),
+                "spark_bonus": _zero(),
+                "triple_entry_reward": _zero(),
+                "global_phase_1": _zero(),
+                "global_phase_2": _zero(),
+                "global_partner_incentive": _zero(),
+                "royal_captain_bonus": _zero(),
+                "president_reward": _zero(),
+                "top_leader_gift": _zero(),
+                "jackpot_programme": _zero(),
+            }
+
+            # 1) Single aggregation over wallet_ledger credits
+            pipeline = [
+                {"$match": {"type": "credit"}},
+                {"$group": {"_id": {"reason": "$reason", "currency": "$currency"}, "total": {"$sum": "$amount"}}}
+            ]
+            results = list(WalletLedger.objects.aggregate(pipeline))
+
+            def map_reason_to_pool(reason: str) -> str | None:
+                r = (reason or "").lower()
+                if r.startswith("binary_dual_tree_"):
+                    return "duel_tree"
+                if r == "binary_partner_incentive":
+                    return "binary_partner_incentive"
+                if r == "matrix_partner_incentive":
+                    return "matrix_partner_incentive"
+                if r == "global_partner_incentive":
+                    return "global_partner_incentive"
+                if r.startswith("global_phase_1"):
+                    return "global_phase_1"
+                if r.startswith("global_phase_2"):
+                    return "global_phase_2"
+                if r.startswith("dream_matrix_") or r == "dream_matrix_commission":
+                    return "dream_matrix"
+                if r == "mentorship_bonus" or r.startswith("mentorship_"):
+                    return "mentorship_bonus"
+                if r == "newcomer_support" or r.startswith("ngs_"):
+                    return "newcomer_growth_support"
+                if r.startswith("spark_bonus_") or r == "spark_bonus":
+                    return "spark_bonus"
+                if r.startswith("triple_entry_"):
+                    return "triple_entry_reward"
+                if r.startswith("royal_captain_"):
+                    return "royal_captain_bonus"
+                if r.startswith("president_reward_"):
+                    return "president_reward"
+                if r.startswith("top_leader_gift_"):
+                    return "top_leader_gift"
+                if r.startswith("jackpot_"):
+                    return "jackpot_programme"
+                if r.startswith("leadership_stipend_"):
+                    return "leadership_stipend"
+                return None
+
+            for row in results:
+                reason = (row.get("_id", {}).get("reason") or "")
+                currency = (row.get("_id", {}).get("currency") or "USDT").upper()
+                total = float(row.get("total") or 0)
+                pool_key = map_reason_to_pool(reason)
+                if pool_key and currency in totals.get(pool_key, {}):
+                    totals[pool_key][currency] += total
+
+            # 2) Program-specific collections (for items not always recorded in wallet_ledger)
+            try:
+                from ..income.model import IncomeEvent
+            except Exception:
+                IncomeEvent = None
+            try:
+                from ..leadership_stipend.model import LeadershipStipendPayment
+            except Exception:
+                LeadershipStipendPayment = None
+            try:
+                from ..spark.model import SparkBonusDistribution, TripleEntryReward
+            except Exception:
+                SparkBonusDistribution = None
+                TripleEntryReward = None
+            try:
+                from ..dream_matrix.model import DreamMatrixCommission
+            except Exception:
+                DreamMatrixCommission = None
+            try:
+                from ..royal_captain.model import RoyalCaptainBonusPayment
+            except Exception:
+                RoyalCaptainBonusPayment = None
+            try:
+                from ..president_reward.model import PresidentRewardPayment
+            except Exception:
+                PresidentRewardPayment = None
+            try:
+                from ..top_leader_gift.model import TopLeaderGiftReward
+            except Exception:
+                TopLeaderGiftReward = None
+            try:
+                from ..jackpot.model import JackpotFund
+            except Exception:
+                JackpotFund = None
+
+            # IncomeEvent-driven pools (report as USDT)
+            if IncomeEvent:
+                try:
+                    def _sum_income(types: list[str]) -> float:
+                        agg = [
+                            {"$match": {"income_type": {"$in": types}, "status": {"$in": ["pending", "completed"]}}},
+                            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+                        ]
+                        res = list(IncomeEvent.objects.aggregate(agg))
+                        return float(res[0]["total"]) if res else 0.0
+                    totals["mentorship_bonus"]["USDT"] += _sum_income(["mentorship"])  # mentorship bonus
+                    totals["newcomer_growth_support"]["USDT"] += _sum_income(["newcomer_support"])  # NGS
+                    # Global phases
+                    totals["global_phase_1"]["USDT"] += _sum_income(["global_phase_1"])  # Phase-1 allocation
+                    totals["global_phase_2"]["USDT"] += _sum_income(["global_phase_2"])  # Phase-2 allocation
+                except Exception:
+                    pass
+
+            # Leadership stipend (BNB)
+            if LeadershipStipendPayment:
+                try:
+                    agg = [
+                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$group": {"_id": None, "total": {"$sum": "$daily_return_amount"}}}
+                    ]
+                    res = list(LeadershipStipendPayment.objects.aggregate(agg))
+                    totals["leadership_stipend"]["BNB"] += float(res[0]["total"]) if res else 0.0
+                except Exception:
+                    pass
+
+            # Spark bonus and Triple Entry (currency stored on document)
+            if SparkBonusDistribution:
+                try:
+                    agg = [
+                        {"$match": {"status": {"$in": ["pending", "completed"]}}},
+                        {"$group": {"_id": "$currency", "total": {"$sum": "$distribution_amount"}}}
+                    ]
+                    for r in SparkBonusDistribution.objects.aggregate(agg):
+                        curr = (r.get('_id') or 'USDT').upper()
+                        totals["spark_bonus"][curr] += float(r.get('total') or 0)
+                except Exception:
+                    pass
+            if TripleEntryReward:
+                try:
+                    agg = [{"$group": {"_id": None, "total": {"$sum": "$distribution_amount"}}}]
+                    res = list(TripleEntryReward.objects.aggregate(agg))
+                    totals["triple_entry_reward"]["USDT"] += float(res[0]["total"]) if res else 0.0
+                except Exception:
+                    pass
+
+            # Dream Matrix commissions (field is commission_amount)
+            if DreamMatrixCommission:
+                try:
+                    agg = [
+                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$group": {"_id": None, "total": {"$sum": "$commission_amount"}}}
+                    ]
+                    res = list(DreamMatrixCommission.objects.aggregate(agg))
+                    totals["dream_matrix"]["USDT"] += float(res[0]["total"]) if res else 0.0
+                except Exception:
+                    pass
+
+            # Royal Captain / President Reward (USD -> USDT)
+            if RoyalCaptainBonusPayment:
+                try:
+                    agg = [
+                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$group": {"_id": None, "total": {"$sum": "$bonus_amount"}}}
+                    ]
+                    res = list(RoyalCaptainBonusPayment.objects.aggregate(agg))
+                    totals["royal_captain_bonus"]["USDT"] += float(res[0]["total"]) if res else 0.0
+                except Exception:
+                    pass
+            if PresidentRewardPayment:
+                try:
+                    agg = [
+                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$group": {"_id": None, "total": {"$sum": "$reward_amount"}}}
+                    ]
+                    res = list(PresidentRewardPayment.objects.aggregate(agg))
+                    totals["president_reward"]["USDT"] += float(res[0]["total"]) if res else 0.0
+                except Exception:
+                    pass
+
+            # Top Leader's Gift (USD -> USDT)
+            if TopLeaderGiftReward:
+                try:
+                    agg = [{"$group": {"_id": None, "total": {"$sum": "$gift_value_usd"}}}]
+                    res = list(TopLeaderGiftReward.objects.aggregate(agg))
+                    totals["top_leader_gift"]["USDT"] += float(res[0]["total"]) if res else 0.0
+                except Exception:
+                    pass
+
+            # Jackpot (assume USDT reporting)
+            if JackpotFund:
+                try:
+                    agg = [{"$group": {"_id": None, "total": {"$sum": "$total_pool"}}}]
+                    res = list(JackpotFund.objects.aggregate(agg))
+                    totals["jackpot_programme"]["USDT"] += float(res[0]["total"]) if res else 0.0
+                except Exception:
+                    pass
+
+            return {"success": True, "data": totals}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

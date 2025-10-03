@@ -46,5 +46,9 @@ class WalletLedger(Document):
     
     meta = {
         'collection': 'wallet_ledger',
-        'indexes': [('user_id', 'created_at'), 'tx_hash']
+        'indexes': [
+            ('user_id', 'created_at'), 
+            ('user_id', 'type'),  # For earning statistics aggregation
+            'tx_hash'
+        ]
     }

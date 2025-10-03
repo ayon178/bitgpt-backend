@@ -11,7 +11,8 @@ class IncomeEvent(Document):
     income_type = StringField(choices=[
         'level_payout', 'partner_incentive', 'spark_bonus', 'royal_captain',
         'president_reward', 'leadership_stipend', 'jackpot', 'mentorship',
-        'newcomer_support', 'triple_entry', 'shareholders'
+        'newcomer_support', 'triple_entry', 'shareholders',
+        'global_phase_1', 'global_phase_2'
     ], required=True)
     amount = DecimalField(required=True, precision=8)
     percentage = DecimalField(required=True, precision=4)
