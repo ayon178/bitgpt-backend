@@ -877,3 +877,127 @@ class WalletService:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+    def get_phase_1_income(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Global Program Phase-1 income data for all users - following dream matrix pattern"""
+        try:
+            from ..user.model import User
+            
+            # Get all Phase-1 income entries from WalletLedger
+            phase_1_entries = WalletLedger.objects(
+                type="credit",
+                currency=currency.upper(),
+                reason__regex="^global_phase_1"
+            ).order_by('-created_at')
+            
+            total_entries = phase_1_entries.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 10)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_entries = phase_1_entries[start:end]
+            
+            # Format income data exactly like the image (User ID, Partner, Rank, USDT, Time & Date)
+            items = []
+            for i, entry in enumerate(page_entries):
+                # Format date exactly like image (DD Mon YYYY (HH:MM))
+                created_date = entry.created_at.strftime("%d %b %Y")
+                created_time = entry.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                # Get user info
+                user = User.objects(id=entry.user_id).first()
+                user_id = user.uid if user and hasattr(user, 'uid') else "Unknown"
+                
+                # Get partner count (direct referrals)
+                partner_count = 0
+                if user and hasattr(user, 'referrals'):
+                    partner_count = len(user.referrals) if user.referrals else 0
+                
+                # Get rank (this would need to be calculated based on business logic)
+                # For now, using a simple calculation based on partner count
+                rank = min(partner_count + 1, 5) if partner_count > 0 else 1
+                
+                items.append({
+                    "user_id": user_id,
+                    "partner": partner_count,
+                    "rank": rank,
+                    "usdt": float(entry.amount),
+                    "time_date": time_date
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_entries,
+                    "items": items
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    def get_phase_2_income(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Global Program Phase-2 income data for all users - following dream matrix pattern"""
+        try:
+            from ..user.model import User
+            
+            # Get all Phase-2 income entries from WalletLedger
+            phase_2_entries = WalletLedger.objects(
+                type="credit",
+                currency=currency.upper(),
+                reason__regex="^global_phase_2"
+            ).order_by('-created_at')
+            
+            total_entries = phase_2_entries.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 10)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_entries = phase_2_entries[start:end]
+            
+            # Format income data exactly like the image (User ID, Partner, Rank, USDT, Time & Date)
+            items = []
+            for i, entry in enumerate(page_entries):
+                # Format date exactly like image (DD Mon YYYY (HH:MM))
+                created_date = entry.created_at.strftime("%d %b %Y")
+                created_time = entry.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                # Get user info
+                user = User.objects(id=entry.user_id).first()
+                user_id = user.uid if user and hasattr(user, 'uid') else "Unknown"
+                
+                # Get partner count (direct referrals)
+                partner_count = 0
+                if user and hasattr(user, 'referrals'):
+                    partner_count = len(user.referrals) if user.referrals else 0
+                
+                # Get rank (this would need to be calculated based on business logic)
+                # For now, using a simple calculation based on partner count
+                rank = min(partner_count + 1, 5) if partner_count > 0 else 1
+                
+                items.append({
+                    "user_id": user_id,
+                    "partner": partner_count,
+                    "rank": rank,
+                    "usdt": float(entry.amount),
+                    "time_date": time_date
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_entries,
+                    "items": items
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
