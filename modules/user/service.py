@@ -789,10 +789,8 @@ class UserService:
     """Service class for user-related operations"""
     
     def get_my_community(self, user_id: str, program_type: str = "binary", slot_number: Optional[int] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get community members (referred users) for a user"""
+        """Get community members (referred users) for a user - SINGLE QUERY VERSION"""
         try:
-            from modules.slot.model import SlotActivation
-            
             # Validate program type
             if program_type not in ["binary", "matrix"]:
                 return {"success": False, "error": "Invalid program type. Must be 'binary' or 'matrix'"}
@@ -802,81 +800,135 @@ class UserService:
             if not user:
                 return {"success": False, "error": "User not found"}
             
-            # If slot number is specified, filter by slot activations first
+            # SINGLE QUERY: Use aggregation pipeline for everything
+            pipeline = []
+            
+            # Match referred users
+            pipeline.append({
+                "$match": {
+                    "refered_by": ObjectId(user_id)
+                }
+            })
+            
+            # If slot filtering is needed
             if slot_number is not None:
-                # Get users who activated specific slot in the program
-                slot_activations = SlotActivation.objects(
-                    program=program_type,
-                    slot_no=slot_number
-                )
-                activated_user_ids = [str(activation.user_id) for activation in slot_activations]
+                # Lookup slot activations
+                pipeline.append({
+                    "$lookup": {
+                        "from": "slot_activation",
+                        "let": {"userId": "$_id"},
+                        "pipeline": [
+                            {
+                                "$match": {
+                                    "$expr": {
+                                        "$and": [
+                                            {"$eq": ["$user_id", "$$userId"]},
+                                            {"$eq": ["$program", program_type]},
+                                            {"$eq": ["$slot_no", slot_number]}
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "as": "slot_activations"
+                    }
+                })
                 
-                # Get referred users who activated the specific slot
-                referred_users_query = User.objects(
-                    refered_by=ObjectId(user_id),
-                    id__in=[ObjectId(uid) for uid in activated_user_ids]
-                )
-            else:
-                # Get all referred users (users who have this user as their referrer)
-                referred_users_query = User.objects(refered_by=ObjectId(user_id))
+                # Filter only users with matching slot activations
+                pipeline.append({
+                    "$match": {
+                        "slot_activations": {"$ne": []}
+                    }
+                })
             
-            # Order by creation date (newest first)
-            referred_users = referred_users_query.order_by('-created_at')
+            # Add direct partner count
+            pipeline.append({
+                "$lookup": {
+                    "from": "user",
+                    "let": {"userId": "$_id"},
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {"$eq": ["$refered_by", "$$userId"]}
+                            }
+                        },
+                        {"$count": "count"}
+                    ],
+                    "as": "direct_partners"
+                }
+            })
             
-            # Pagination
-            total_users = referred_users.count()
+            # Add computed fields
+            pipeline.append({
+                "$addFields": {
+                    "direct_partner_count": {
+                        "$ifNull": [{"$arrayElemAt": ["$direct_partners.count", 0]}, 0]
+                    },
+                    "rank": {
+                        "$add": [
+                            {"$ifNull": [{"$arrayElemAt": ["$direct_partners.count", 0]}, 0]},
+                            1
+                        ]
+                    }
+                }
+            })
+            
+            # Sort by creation date
+            pipeline.append({
+                "$sort": {"created_at": -1}
+            })
+            
+            # Count total
+            count_pipeline = pipeline + [{"$count": "total"}]
+            total_result = list(User.objects.aggregate(count_pipeline))
+            total_users = total_result[0]["total"] if total_result else 0
+            
+            # Add pagination
             page = max(1, int(page or 1))
             limit = max(1, min(100, int(limit or 10)))
-            start = (page - 1) * limit
-            end = start + limit
+            skip = (page - 1) * limit
             
-            # Format data exactly like the image
+            pipeline.extend([
+                {"$skip": skip},
+                {"$limit": limit}
+            ])
+            
+            # Execute aggregation
+            results = list(User.objects.aggregate(pipeline))
+            
+            # Format data
             items = []
-            for i, referred_user in enumerate(referred_users[start:end]):
-                # Format wallet address (show first 4 and last 4 characters)
-                wallet_address = referred_user.wallet_address
+            for i, result in enumerate(results):
+                # Format wallet address
+                wallet_address = result.get("wallet_address", "")
                 if len(wallet_address) > 8:
                     masked_address = f"{wallet_address[:4]}...{wallet_address[-4:]}"
                 else:
                     masked_address = wallet_address
                 
-                # Format activation date (DD MON,YYYY (HH:MM))
-                activation_date = referred_user.created_at.strftime("%d %b,%Y")
-                activation_time = referred_user.created_at.strftime("(%H:%M)")
-                formatted_date = f"{activation_date} {activation_time}"
-                
-                # Get slot information
-                slot_info = "--"
-                if slot_number:
-                    slot_info = str(slot_number)
+                # Format date
+                created_at = result.get("created_at")
+                if created_at:
+                    activation_date = created_at.strftime("%d %b,%Y")
+                    activation_time = created_at.strftime("(%H:%M)")
+                    formatted_date = f"{activation_date} {activation_time}"
                 else:
-                    # Get the first slot for this user in the program
-                    first_slot = SlotActivation.objects(
-                        user_id=ObjectId(referred_user.id),
-                        program=program_type
-                    ).order_by('slot_no').first()
-                    if first_slot:
-                        slot_info = str(first_slot.slot_no)
+                    formatted_date = "Unknown"
                 
-                # Get rank (number of direct referrals)
-                direct_partners = 0
-                if hasattr(referred_user, 'referrals') and referred_user.referrals:
-                    direct_partners = len(referred_user.referrals)
-                
-                # Calculate rank based on direct partners
-                rank = direct_partners + 1 if direct_partners > 0 else 1
+                # Slot info
+                slot_info = str(slot_number) if slot_number is not None else "--"
                 
                 items.append({
-                    "sl_no": start + i + 1,
-                    "id": referred_user.uid,
-                    "_id": str(referred_user.id),  # MongoDB ObjectId
+                    "sl_no": skip + i + 1,
+                    "id": result.get("uid", "Unknown"),
+                    "_id": str(result["_id"]),
                     "address": masked_address,
-                    "inviter_id": user.uid,  # Current user's ID
+                    "inviter_id": user.uid,
                     "activation_date": formatted_date,
                     "slot": slot_info,
-                    "rank": rank,
-                    "direct_partner": direct_partners,
-                    "created_at": referred_user.created_at.isoformat()
+                    "rank": result.get("rank", 1),
+                    "direct_partner": result.get("direct_partner_count", 0),
+                    "created_at": created_at.isoformat() if created_at else None
                 })
             
             return {
