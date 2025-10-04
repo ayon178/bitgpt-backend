@@ -1,12 +1,15 @@
-from fastapi import APIRouter, status, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, status, Request, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 from typing import Optional
-from utils.response import create_response
+from utils.response import create_response, success_response, error_response
 from modules.user.service import create_user_service
 import asyncio
 from modules.tree.service import TreeService
 from modules.rank.service import RankService
 from modules.user.service import create_root_user_service
+from auth.service import authentication_service
+# import Depends
+
 
 
 class CreateUserRequest(BaseModel):
@@ -124,4 +127,35 @@ async def create_root_user(payload: CreateRootUserRequest):
         message="Root user created successfully",
         data=result,
     )
+
+
+@user_router.get("/my-community")
+async def get_my_community(
+    user_id: str = Query(..., description="User ID"),
+    program_type: str = Query("binary", description="Program type: 'binary' or 'matrix'"),
+    slot_number: Optional[int] = Query(None, description="Slot number filter"),
+    page: int = Query(1, description="Page number"),
+    limit: int = Query(10, description="Items per page"),
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get community members (referred users) for a user"""
+    try:
+        from modules.user.service import UserService
+        
+        service = UserService()
+        result = service.get_my_community(
+            user_id=user_id,
+            program_type=program_type,
+            slot_number=slot_number,
+            page=page,
+            limit=limit
+        )
+        
+        if result["success"]:
+            return success_response(result["data"], "Community members fetched successfully")
+        else:
+            return error_response(result["error"])
+        
+    except Exception as e:
+        return error_response(str(e))
 
