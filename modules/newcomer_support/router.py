@@ -11,6 +11,8 @@ from .model import (
     NewcomerSupportStatistics, NewcomerSupportMonthlyOpportunity, NewcomerBonus
 )
 from utils.response import success_response, error_response
+from .service import NewcomerSupportService
+from auth.service import authentication_service
 
 router = APIRouter(prefix="/newcomer-support", tags=["Newcomer Growth Support"])
 
@@ -899,3 +901,4 @@ def _get_eligibility_reasons(eligibility: NewcomerSupportEligibility) -> List[st
         reasons.append("Not within newcomer period (30 days)")
     
     return reasons
+

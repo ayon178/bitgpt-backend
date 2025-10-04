@@ -730,3 +730,150 @@ class WalletService:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_dream_matrix_earnings_list(self, currency: str = "USDT", page: int = 1, limit: int = 50, days: int = 30) -> Dict[str, Any]:
+        """
+        Return a paginated list of Dream Matrix earnings events (not aggregated).
+        Columns: uid (receiver), upline_uid (source_user), time, partner_count, rank.
+        Data source: DreamMatrixCommission (payment_status in pending/processing/paid).
+        """
+        try:
+            from ..dream_matrix.model import DreamMatrixCommission
+            from ..user.model import User, PartnerGraph
+
+            from datetime import datetime, timedelta
+            since = datetime.utcnow() - timedelta(days=max(1, int(days or 30)))
+            qs = DreamMatrixCommission.objects(
+                payment_status__in=['pending', 'processing', 'paid'],
+                created_at__gte=since
+            ).only('user_id', 'source_user_id', 'created_at').order_by('-created_at')
+
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 50)))
+            skip = (page - 1) * limit
+            entries = list(qs.skip(skip).limit(limit))
+            total = qs.count()
+
+            user_ids = [e.user_id for e in entries if getattr(e, 'user_id', None)]
+            src_ids = [e.source_user_id for e in entries if getattr(e, 'source_user_id', None)]
+
+            users = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by', 'current_rank')}
+            sources = {str(u.id): u for u in User.objects(id__in=src_ids).only('uid')}
+            graphs = {str(g.user_id): g for g in PartnerGraph.objects(user_id__in=user_ids).only('user_id', 'directs')}
+
+            rows = []
+            for e in entries:
+                recv = users.get(str(getattr(e, 'user_id', '')))
+                if not recv:
+                    continue
+                src = sources.get(str(getattr(e, 'source_user_id', '')))
+                pg = graphs.get(str(getattr(e, 'user_id', '')))
+                partner_count = len(getattr(pg, 'directs', []) if pg else [])
+                rows.append({
+                    "uid": getattr(recv, 'uid', None),
+                    "upline_uid": getattr(src, 'uid', None) or 'ROOT',
+                    "time": getattr(e, 'created_at', None).isoformat() if getattr(e, 'created_at', None) else None,
+                    "partner_count": partner_count,
+                    "rank": getattr(recv, 'current_rank', None)
+                })
+
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "days": max(1, int(days or 30)),
+                    "total": total,
+                    "items": rows
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_dream_matrix_partner_incentive(self, currency: str = "USDT", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """
+        Return a paginated list of DISTINCT users who received Dream Matrix Partner Incentive-type earnings.
+        Columns: uid (receiver), upline_uid (from latest tx), total_amount, time (latest earning).
+        Reasons counted: matrix_partner_incentive, dream_matrix_partner_incentive, dream_matrix_commission, dream_matrix_*, matrix_partner_* (credits only).
+        """
+        try:
+            import re
+            from ..user.model import User
+
+            # Aggregate by user: sum amounts, pick latest created_at and latest tx_hash
+            pipeline = [
+                {"$match": {
+                    "type": "credit",
+                    "currency": currency.upper(),
+                    "$or": [
+                        {"reason": {"$in": ["matrix_partner_incentive", "dream_matrix_partner_incentive", "dream_matrix_commission"]}},
+                        {"reason": {"$regex": "^dream_matrix_"}},
+                        {"reason": {"$regex": "^matrix_partner_"}}
+                    ]
+                }},
+                {"$sort": {"created_at": -1}},  # so $first gets latest tx
+                {"$group": {
+                    "_id": "$user_id",
+                    "total_amount": {"$sum": "$amount"},
+                    "latest_at": {"$first": "$created_at"},
+                    "latest_tx": {"$first": "$tx_hash"}
+                }},
+                {"$sort": {"latest_at": -1}}
+            ]
+            agg = list(WalletLedger.objects.aggregate(pipeline))
+
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 50)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_rows = agg[start:end]
+            total = len(agg)
+
+            # Fetch users and uplines
+            user_ids = [r.get("_id") for r in page_rows if r.get("_id")]
+            users_map = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by')}
+            # Collect possible uplines (from referrer fallback)
+            ref_ids = []
+            for u in users_map.values():
+                rid = getattr(u, 'refered_by', None)
+                if rid:
+                    ref_ids.append(rid)
+            ref_map = {str(u.id): u for u in User.objects(id__in=ref_ids).only('uid')}
+
+            # Parse upline from latest tx_hash if present
+            hex24 = re.compile(r"[0-9a-fA-F]{24}")
+            rows = []
+            for r in page_rows:
+                uid_oid = r.get("_id")
+                u = users_map.get(str(uid_oid))
+                if not u:
+                    continue
+                latest_tx = str(r.get("latest_tx") or '')
+                m = hex24.search(latest_tx)
+                upline_uid = None
+                if m and ref_map.get(m.group(0)):
+                    upline_uid = getattr(ref_map[m.group(0)], 'uid', None)
+                if not upline_uid and getattr(u, 'refered_by', None):
+                    rid = str(getattr(u, 'refered_by'))
+                    if rid in ref_map:
+                        upline_uid = getattr(ref_map[rid], 'uid', None)
+
+                rows.append({
+                    "uid": getattr(u, 'uid', None),
+                    "upline_uid": upline_uid or 'ROOT',
+                    "amount": float(r.get("total_amount") or 0),
+                    "time": r.get("latest_at").isoformat() if r.get("latest_at") else None
+                })
+
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "items": rows
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}

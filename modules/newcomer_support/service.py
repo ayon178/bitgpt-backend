@@ -690,3 +690,132 @@ class NewcomerSupportService:
             log.save()
         except Exception:
             pass  # Logging failure shouldn't break the main process
+
+    def get_newcomer_support_income(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Newcomer Growth Support income data for user"""
+        try:
+            # Validate user exists
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get Newcomer Support record
+            newcomer_support = NewcomerSupport.objects(user_id=ObjectId(user_id)).first()
+            if not newcomer_support:
+                return {
+                    "success": True,
+                    "data": {
+                        "income_data": [],
+                        "total_count": 0,
+                        "page": page,
+                        "limit": limit,
+                        "total_pages": 0,
+                        "currency": currency,
+                        "total_earned": 0.0,
+                        "total_claimed": 0.0,
+                        "pending_amount": 0.0
+                    }
+                }
+            
+            # Calculate pagination
+            skip = (page - 1) * limit
+            
+            # Get bonus payments for this user
+            bonuses = NewcomerSupportBonus.objects(user_id=ObjectId(user_id)).order_by('-created_at').skip(skip).limit(limit)
+            total_bonuses = NewcomerSupportBonus.objects(user_id=ObjectId(user_id)).count()
+            
+            # Format income data similar to the screenshot format
+            income_data = []
+            for bonus in bonuses:
+                # Format date similar to screenshot (DD Mon YYYY (HH:MM))
+                created_date = bonus.created_at.strftime("%d %b %Y")
+                created_time = bonus.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                income_data.append({
+                    "sl_no": len(income_data) + 1 + skip,  # Sequential number
+                    "usdt": bonus.bonus_amount,
+                    "time_date": time_date,
+                    "bonus_type": bonus.bonus_type,
+                    "bonus_name": bonus.bonus_name,
+                    "payment_status": bonus.payment_status,
+                    "currency": bonus.currency,
+                    "created_at": bonus.created_at.isoformat()
+                })
+            
+            # Calculate totals
+            total_earned = newcomer_support.total_bonuses_earned
+            total_claimed = newcomer_support.total_bonuses_claimed
+            pending_amount = newcomer_support.pending_bonuses
+            
+            # Calculate total pages
+            total_pages = (total_bonuses + limit - 1) // limit
+            
+            return {
+                "success": True,
+                "data": {
+                    "income_data": income_data,
+                    "total_count": total_bonuses,
+                    "page": page,
+                    "limit": limit,
+                    "total_pages": total_pages,
+                    "currency": currency,
+                    "total_earned": total_earned,
+                    "total_claimed": total_claimed,
+                    "pending_amount": pending_amount,
+                    "newcomer_support_status": {
+                        "is_eligible": newcomer_support.is_eligible,
+                        "is_active": newcomer_support.is_active,
+                        "has_matrix_program": newcomer_support.has_matrix_program,
+                        "instant_bonus_eligible": newcomer_support.instant_bonus_eligible,
+                        "monthly_opportunities_eligible": newcomer_support.monthly_opportunities_eligible,
+                        "upline_rank_bonus_eligible": newcomer_support.upline_rank_bonus_eligible,
+                        "joined_at": newcomer_support.joined_at.isoformat() if newcomer_support.joined_at else None,
+                        "qualified_at": newcomer_support.qualified_at.isoformat() if newcomer_support.qualified_at else None
+                    }
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_all_newcomer_support_income(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Newcomer Growth Support income data for all users - following dream matrix pattern"""
+        try:
+            # Get all bonus payments across all users
+            bonuses = NewcomerSupportBonus.objects().order_by('-created_at')
+            total_bonuses = bonuses.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 10)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_bonuses = bonuses[start:end]
+            
+            # Format income data exactly like the image (SL.No, USDT, Time & Date)
+            items = []
+            for i, bonus in enumerate(page_bonuses):
+                # Format date exactly like image (DD Mon YYYY (HH:MM))
+                created_date = bonus.created_at.strftime("%d %b %Y")
+                created_time = bonus.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                items.append({
+                    "sl_no": start + i + 1,  # Sequential number starting from page offset
+                    "usdt": float(bonus.bonus_amount),
+                    "time_date": time_date
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_bonuses,
+                    "items": items
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}

@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel
 from typing import Optional
 
 from auth.service import authentication_service
 from utils.response import success_response, error_response
 from .service import WalletService
+from ..newcomer_support.service import NewcomerSupportService
+from ..mentorship.service import MentorshipService
 
 router = APIRouter(prefix="/wallet", tags=["Wallet"])
 
@@ -156,6 +158,80 @@ async def get_binary_partner_incentive(currency: str = 'BNB', page: int = 1, lim
             return success_response(result["data"], "Binary partner incentive fetched successfully")
         else:
             raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch binary partner incentive"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/dream-matrix-earnings")
+async def get_dream_matrix_earnings_list(page: int = 1, limit: int = 50, days: int = 30):
+    try:
+        service = WalletService()
+        result = service.get_dream_matrix_earnings_list(page=page, limit=limit, days=days)
+        if result.get("success"):
+            return success_response(result["data"], "Dream Matrix earnings fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch Dream Matrix earnings"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/dream-matrix-partner-incentive")
+async def get_dream_matrix_partner_incentive(currency: str = 'USDT', page: int = 1, limit: int = 50):
+    try:
+        service = WalletService()
+        result = service.get_dream_matrix_partner_incentive(currency=currency, page=page, limit=limit)
+        if result.get("success"):
+            return success_response(result["data"], "Dream Matrix partner incentive fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch Dream Matrix partner incentive"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/newcomer-growth-support-income")
+async def get_newcomer_growth_support_income(
+    currency: str = Query("USDT", description="Currency type"),
+    page: int = Query(1, description="Page number"),
+    limit: int = Query(10, description="Items per page")
+):
+    """Get Newcomer Growth Support income data for all users WITHOUT authentication"""
+    try:
+        service = NewcomerSupportService()
+        result = service.get_all_newcomer_support_income(currency, page, limit)
+
+        if result["success"]:
+            return success_response(result["data"], "Newcomer Growth Support income data fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/mentorship-bonus")
+async def get_mentorship_bonus(
+    currency: str = Query("USDT", description="Currency type"),
+    page: int = Query(1, description="Page number"),
+    limit: int = Query(10, description="Items per page")
+):
+    """Get Mentorship Bonus data for all users WITHOUT authentication"""
+    try:
+        service = MentorshipService()
+        result = service.get_mentorship_bonus_income(currency, page, limit)
+
+        if result["success"]:
+            return success_response(result["data"], "Mentorship Bonus data fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+
     except HTTPException:
         raise
     except Exception as e:

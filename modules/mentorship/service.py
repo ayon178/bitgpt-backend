@@ -533,3 +533,57 @@ class MentorshipService:
             log.save()
         except Exception:
             pass  # Logging failure shouldn't break the main process
+
+    def get_mentorship_bonus_income(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Mentorship Bonus income data for all users - following dream matrix pattern"""
+        try:
+            # Get all mentorship commission payments across all users
+            commissions = MentorshipCommission.objects().order_by('-created_at')
+            total_commissions = commissions.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 10)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_commissions = commissions[start:end]
+            
+            # Format income data exactly like the image (SL.No, ID, Upline, USDT, Time & Date)
+            items = []
+            for i, commission in enumerate(page_commissions):
+                # Format date exactly like image (DD Mon YYYY (HH:MM))
+                created_date = commission.created_at.strftime("%d %b %Y")
+                created_time = commission.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                # Get user info
+                user = User.objects(id=commission.user_id).first()
+                source_user = User.objects(id=commission.source_user_id).first()
+                
+                # Get upline info (referrer of the mentor)
+                upline_id = None
+                if user and hasattr(user, 'refered_by') and user.refered_by:
+                    upline = User.objects(id=user.refered_by).first()
+                    if upline and hasattr(upline, 'uid'):
+                        upline_id = upline.uid
+                
+                items.append({
+                    "sl_no": start + i + 1,  # Sequential number starting from page offset
+                    "id": user.uid if user and hasattr(user, 'uid') else "Unknown",
+                    "upline": upline_id or "ROOT",
+                    "usdt": float(commission.commission_amount),
+                    "time_date": time_date
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_commissions,
+                    "items": items
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
