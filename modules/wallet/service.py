@@ -1001,3 +1001,63 @@ class WalletService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+    def get_global_partner_incentive(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Global Partner Incentive data for all users - following dream matrix pattern"""
+        try:
+            from ..user.model import User
+            
+            # Get all Global Partner Incentive entries from WalletLedger
+            incentive_entries = WalletLedger.objects(
+                type="credit",
+                currency=currency.upper(),
+                reason="global_partner_incentive"
+            ).order_by('-created_at')
+            
+            total_entries = incentive_entries.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 10)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_entries = incentive_entries[start:end]
+            
+            # Format income data exactly like the image (SL.No, ID, Upline, USDT, Time & Date)
+            items = []
+            for i, entry in enumerate(page_entries):
+                # Format date exactly like image (DD Mon YYYY (HH:MM))
+                created_date = entry.created_at.strftime("%d %b %Y")
+                created_time = entry.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                # Get user info
+                user = User.objects(id=entry.user_id).first()
+                user_id = user.uid if user and hasattr(user, 'uid') else "Unknown"
+                
+                # Get upline info (referrer of the user)
+                upline_id = None
+                if user and hasattr(user, 'refered_by') and user.refered_by:
+                    upline = User.objects(id=user.refered_by).first()
+                    if upline and hasattr(upline, 'uid'):
+                        upline_id = upline.uid
+                
+                items.append({
+                    "sl_no": start + i + 1,  # Sequential number starting from page offset
+                    "id": user_id,
+                    "upline": upline_id or "ROOT",
+                    "usdt": float(entry.amount),
+                    "time_date": time_date
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_entries,
+                    "items": items
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}

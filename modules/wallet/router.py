@@ -282,3 +282,25 @@ async def get_phase_2_income(
         return error_response(str(e))
 
 
+@router.get("/global-partner-incentive")
+async def get_global_partner_incentive(
+    currency: str = Query("USDT", description="Currency type"),
+    page: int = Query(1, description="Page number"),
+    limit: int = Query(10, description="Items per page")
+):
+    """Get Global Partner Incentive data for all users WITHOUT authentication"""
+    try:
+        service = WalletService()
+        result = service.get_global_partner_incentive(currency, page, limit)
+
+        if result["success"]:
+            return success_response(result["data"], "Global Partner Incentive data fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
