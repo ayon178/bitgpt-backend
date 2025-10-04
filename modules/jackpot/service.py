@@ -172,8 +172,185 @@ class JackpotService:
             JackpotService.create_entry(user_id=user_id, source='free', referrer_user_id=referrer, free_source_slot=slot_no)
 
     @staticmethod
+    def process_reward_claim(user_id: str, pool_type: str, amount: float, currency: str = "USDT") -> Dict[str, Any]:
+        """Process Jackpot reward claim and update user wallet"""
+        try:
+            # Validate user exists
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Validate pool type
+            valid_pools = ["open_pool", "top_direct_promoters", "top_buyers_pool", "new_joiners_pool"]
+            if pool_type not in valid_pools:
+                return {"success": False, "error": f"Invalid pool type. Must be one of: {valid_pools}"}
+            
+            # Add reward to user's wallet
+            wallet_service = WalletService()
+            credit_result = wallet_service.credit_main_wallet(
+                user_id=user_id,
+                amount=Decimal(str(amount)),
+                currency=currency,
+                reason=f"jackpot_{pool_type}_reward",
+                tx_hash=f"jackpot_claim_{user_id}_{pool_type}_{datetime.utcnow().timestamp()}"
+            )
+            
+            if not credit_result["success"]:
+                return {"success": False, "error": f"Wallet credit failed: {credit_result['error']}"}
+            
+            # Log the reward claim (optional - you can create a JackpotRewardClaim model if needed)
+            # For now, we'll just return success
+            
+            return {
+                "success": True,
+                "data": {
+                    "user_id": user_id,
+                    "pool_type": pool_type,
+                    "amount_claimed": amount,
+                    "currency": currency,
+                    "new_wallet_balance": credit_result["balance"],
+                    "transaction_id": f"jackpot_claim_{user_id}_{pool_type}_{datetime.utcnow().timestamp()}",
+                    "claimed_at": datetime.utcnow().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def get_jackpot_history(user_id: str, history_type: str, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Jackpot history (entry or claim) for a user"""
+        try:
+            # Validate history type
+            if history_type not in ["entry", "claim"]:
+                return {"success": False, "error": "Invalid history type. Must be 'entry' or 'claim'"}
+            
+            if history_type == "entry":
+                return JackpotService.get_entry_history(user_id, page, limit)
+            else:
+                return JackpotService.get_claim_history(user_id, page, limit)
+                
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def get_entry_history(user_id: str, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Jackpot entry history for a user"""
+        try:
+            # Get user's Jackpot tickets (entries)
+            tickets = JackpotTicket.objects(user_id=ObjectId(user_id)).order_by('-created_at')
+            total_entries = tickets.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 10)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_tickets = tickets[start:end]
+            
+            # Format entry data exactly like the image
+            items = []
+            for i, ticket in enumerate(page_tickets):
+                # Format date exactly like image (DDMON,YYYY (HH:MM))
+                created_date = ticket.created_at.strftime("%d%b,%Y")
+                created_time = ticket.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                # Determine entry price based on source
+                if ticket.source == "paid":
+                    entry_price = "5 $"  # $5 for paid entries
+                else:
+                    entry_price = "0 $"  # Free entries
+                
+                items.append({
+                    "entry_no": start + i + 1,  # Sequential entry number
+                    "entry_price": entry_price,
+                    "time_date": time_date,
+                    "source": ticket.source,
+                    "week_id": ticket.week_id,
+                    "created_at": ticket.created_at.isoformat()
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "history_type": "entry",
+                    "page": page,
+                    "limit": limit,
+                    "total": total_entries,
+                    "items": items
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def get_claim_history(user_id: str, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Jackpot claim history for a user from WalletLedger"""
+        try:
+            from modules.wallet.model import WalletLedger
+            
+            # Get user's Jackpot reward claims from WalletLedger
+            claims = WalletLedger.objects(
+                user_id=ObjectId(user_id),
+                reason__regex="^jackpot_.*_reward$"
+            ).order_by('-created_at')
+            
+            total_claims = claims.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 10)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_claims = claims[start:end]
+            
+            # Format claim data exactly like the image
+            items = []
+            for i, claim in enumerate(page_claims):
+                # Format date exactly like image (DDMON,YYYY (HH:MM))
+                created_date = claim.created_at.strftime("%d%b,%Y")
+                created_time = claim.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                # Map reason to pool type name
+                pool_type_mapping = {
+                    "jackpot_open_pool_reward": "OPEN POOL",
+                    "jackpot_top_direct_promoters_reward": "TOP DIRECT PROMOTERS",
+                    "jackpot_top_buyers_pool_reward": "TOP BUYERS POOL",
+                    "jackpot_new_joiners_pool_reward": "New Joiners Pool"
+                }
+                
+                pool_type = pool_type_mapping.get(claim.reason, "UNKNOWN POOL")
+                win_price = f"{float(claim.amount)} $"
+                
+                items.append({
+                    "type": pool_type,
+                    "win_price": win_price,
+                    "time_date": time_date,
+                    "amount": float(claim.amount),
+                    "currency": claim.currency,
+                    "tx_hash": claim.tx_hash,
+                    "created_at": claim.created_at.isoformat()
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "history_type": "claim",
+                    "page": page,
+                    "limit": limit,
+                    "total": total_claims,
+                    "items": items
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
     def get_pools_total(currency: str = "USDT") -> Dict[str, Any]:
-        """Get total accumulated amounts for all Jackpot pools"""
         try:
             # Get all JackpotFund records for the given currency
             funds = JackpotFund.objects().order_by('-created_at')

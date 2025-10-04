@@ -25,6 +25,13 @@ class JackpotEntryRequest(BaseModel):
     amount: float = 5.0
 
 
+class JackpotClaimRequest(BaseModel):
+    user_id: str
+    pool_type: str  # "open_pool", "top_direct_promoters", "top_buyers_pool", "new_joiners_pool"
+    currency: str = "USDT"
+    amount: float
+
+
 @router.post("/enter")
 async def enter_jackpot(
     request: JackpotEntryRequest,
@@ -68,6 +75,62 @@ async def enter_jackpot(
             data=result["data"],
             message="Successfully entered Jackpot Program"
         )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.post("/claim-reward")
+async def claim_jackpot_reward(
+    request: JackpotClaimRequest
+):
+    """Claim Jackpot reward and update user wallet"""
+    try:
+        # Validate user exists
+        from ..user.model import User
+        user = User.objects(id=ObjectId(request.user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Process reward claim
+        result = JackpotService.process_reward_claim(
+            user_id=request.user_id,
+            pool_type=request.pool_type,
+            amount=request.amount,
+            currency=request.currency
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return success_response(
+            data=result["data"],
+            message="Jackpot reward claimed successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/history")
+async def get_jackpot_history(
+    user_id: str = Query(..., description="User ID"),
+    history_type: str = Query("entry", description="History type: 'entry' or 'claim'"),
+    page: int = Query(1, description="Page number"),
+    limit: int = Query(10, description="Items per page")
+):
+    """Get Jackpot history (both entry and claim) for a user"""
+    try:
+        result = JackpotService.get_jackpot_history(user_id, history_type, page, limit)
+        
+        if result["success"]:
+            return success_response(result["data"], f"Jackpot {history_type} history fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
         
     except HTTPException:
         raise
