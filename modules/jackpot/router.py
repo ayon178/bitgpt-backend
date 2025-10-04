@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from bson import ObjectId
 from .model import JackpotTicket
 from .service import JackpotService
 from auth.service import authentication_service
+from ..wallet.service import WalletService
+from utils.response import success_response, error_response
 
 
 router = APIRouter(prefix="/jackpot", tags=["Jackpot"])
@@ -15,6 +17,83 @@ class TicketQuery(BaseModel):
     referrer_user_id: Optional[str] = None
     week_id: Optional[str] = None
     status: Optional[str] = None  # active|used|expired
+
+
+class JackpotEntryRequest(BaseModel):
+    user_id: str
+    currency: str = "USDT"
+    amount: float = 5.0
+
+
+@router.post("/enter")
+async def enter_jackpot(
+    request: JackpotEntryRequest,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Enter Jackpot Program with $5 USDT payment"""
+    try:
+        # Validate user exists
+        from ..user.model import User
+        user = User.objects(id=ObjectId(request.user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check wallet balance
+        wallet_service = WalletService()
+        balance_result = wallet_service.get_currency_balances(request.user_id, 'main')
+        
+        # Extract balance from the correct structure
+        if balance_result.get('success', False):
+            current_balance = balance_result.get('balances', {}).get(request.currency.upper(), 0.0)
+        else:
+            current_balance = balance_result.get(request.currency.upper(), 0.0)
+            
+        if current_balance < request.amount:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient balance. Required: {request.amount} {request.currency}, Available: {current_balance} {request.currency}"
+            )
+        
+        # Process Jackpot entry
+        result = JackpotService.process_paid_entry(
+            user_id=request.user_id,
+            amount=request.amount,
+            currency=request.currency
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return success_response(
+            data=result["data"],
+            message="Successfully entered Jackpot Program"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/pools-total")
+async def get_jackpot_pools_total(
+    currency: str = Query("USDT", description="Currency type")
+):
+    """Get total accumulated amounts for all Jackpot pools"""
+    try:
+        result = JackpotService.get_pools_total(currency)
+        
+        if result["success"]:
+            return success_response(result["data"], "Jackpot pools total amounts fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
 
 
 @router.post("/tickets/query")
