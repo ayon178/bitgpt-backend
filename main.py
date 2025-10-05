@@ -141,24 +141,25 @@ async def startup_initializer():
             slot.updated_at = datetime.utcnow()
             slot.save()
 
-        # Binary slots 1..16 (names and prices per docs)
+        # Binary slots 1..17 (names and prices per PROJECT_DOCUMENTATION.md)
         binary_slots = [
-            (1,  'EXPLORER',     '0.0022', 0),
-            (2,  'CONTRIBUTOR',  '0.0044', 1),
-            (3,  'SUBSCRIBER',   '0.0088', 2),
-            (4,  'DREAMER',      '0.0176', 3),
-            (5,  'PLANNER',      '0.0352', 4),
-            (6,  'CHALLENGER',   '0.0704', 5),
-            (7,  'ADVENTURER',   '0.1408', 6),
-            (8,  'GAME-SHIFTER', '0.2816', 7),
-            (9,  'ORGANIGER',    '0.5632', 8),
-            (10, 'LEADER',       '1.1264', 9),
-            (11, 'VANGURD',      '2.2528', 10),
-            (12, 'CENTER',       '4.5056', 11),
-            (13, 'CLIMAX',       '9.0112', 12),
-            (14, 'ENTERNITY',    '18.0224', 13),
-            (15, 'KING',         '36.0448', 14),
-            (16, 'COMMENDER',    '72.0896', 15),
+            (1,  'Explorer',     '0.0022', 0),
+            (2,  'Contributor',  '0.0044', 1),
+            (3,  'Subscriber',   '0.0088', 2),
+            (4,  'Dreamer',      '0.0176', 3),
+            (5,  'Planner',      '0.0352', 4),
+            (6,  'Challenger',   '0.0704', 5),
+            (7,  'Adventurer',   '0.1408', 6),
+            (8,  'Game-Shifter', '0.2816', 7),
+            (9,  'Organizer',    '0.5632', 8),
+            (10, 'Leader',       '1.1264', 9),
+            (11, 'Vanguard',     '2.2528', 10),
+            (12, 'Center',       '4.5056', 11),
+            (13, 'Climax',       '9.0112', 12),
+            (14, 'Eternity',     '18.0224', 13),
+            (15, 'King',         '36.0448', 14),
+            (16, 'Commander',    '72.0896', 15),
+            (17, 'CEO',          '144.1792', 16),
         ]
         for slot_no, name, price, level in binary_slots:
             _ensure_slot('binary', slot_no, name, Decimal(price), level)

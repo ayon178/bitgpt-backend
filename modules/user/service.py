@@ -348,6 +348,35 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 )
                 activation.save()
 
+                # Update user's binary_slots list with auto-activated slot
+                from .model import BinarySlotInfo
+                slot_info = BinarySlotInfo(
+                    slot_name=catalog.name,
+                    slot_value=float(amount or Decimal('0')),
+                    level=catalog.level,
+                    is_active=True,
+                    activated_at=datetime.utcnow(),
+                    upgrade_cost=float(catalog.upgrade_cost or Decimal('0')),
+                    total_income=float(catalog.total_income or Decimal('0')),
+                    wallet_amount=float(catalog.wallet_amount or Decimal('0'))
+                )
+                
+                # Check if slot already exists in user's binary_slots list
+                existing_slot = None
+                for i, existing_slot_info in enumerate(user.binary_slots):
+                    if existing_slot_info.slot_name == catalog.name:
+                        existing_slot = i
+                        break
+                
+                if existing_slot is not None:
+                    # Update existing slot
+                    user.binary_slots[existing_slot] = slot_info
+                else:
+                    # Add new slot
+                    user.binary_slots.append(slot_info)
+                
+                user.save()
+
                 # Blockchain event for slot activation (idempotent via tx_hash in BlockchainEvent)
                 try:
                     BlockchainEvent(

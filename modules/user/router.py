@@ -54,7 +54,9 @@ def _run_async(coro):
 
 
 def _post_create_background(user_id: str, referrer_id: str):
+    """Background task to handle tree placement for both auto-activated Binary slots"""
     try:
+        # Create tree placement for Slot 1 (Explorer)
         _run_async(TreeService.create_tree_placement(
             user_id=user_id,
             referrer_id=referrer_id,
@@ -63,6 +65,18 @@ def _post_create_background(user_id: str, referrer_id: str):
         ))
     except Exception:
         pass
+    
+    try:
+        # Create tree placement for Slot 2 (Contributor)
+        _run_async(TreeService.create_tree_placement(
+            user_id=user_id,
+            referrer_id=referrer_id,
+            program='binary',
+            slot_no=2
+        ))
+    except Exception:
+        pass
+    
     try:
         RankService().update_user_rank(user_id=user_id)
     except Exception:
