@@ -12,12 +12,17 @@ class IncomeEvent(Document):
         'level_payout', 'partner_incentive', 'spark_bonus', 'royal_captain',
         'president_reward', 'leadership_stipend', 'jackpot', 'mentorship',
         'newcomer_support', 'triple_entry', 'shareholders',
-        'global_phase_1', 'global_phase_2'
+        'global_phase_1', 'global_phase_2', 'newcomer_growth_instant',
+        'newcomer_growth_upline_fund', 'newcomer_growth_mother_fund',
+        'newcomer_growth_monthly_distribution'
     ], required=True)
     amount = DecimalField(required=True, precision=8)
     percentage = DecimalField(required=True, precision=4)
     tx_hash = StringField(required=True)
-    status = StringField(choices=['pending', 'completed', 'failed'], default='pending')
+    status = StringField(choices=['pending', 'completed', 'failed', 'pending_distribution'], default='pending')
+    description = StringField(required=False)
+    distribution_date = DateTimeField(required=False)
+    updated_at = DateTimeField(required=False)
     created_at = DateTimeField(default=datetime.utcnow)
     
     meta = {
