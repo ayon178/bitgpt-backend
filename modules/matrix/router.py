@@ -56,6 +56,10 @@ async def join_matrix(
     """
     Join Matrix program with $11 USDT and trigger all auto calculations
     
+    MANDATORY JOIN SEQUENCE ENFORCEMENT:
+    Users must join Binary program first before joining Matrix program.
+    This enforces the required sequence: Binary → Matrix → Global
+    
     This endpoint implements Section 1.1 Joining Requirements from MATRIX_TODO.md:
     - Cost: $11 USDT to join Matrix program
     - Structure: 3x Matrix structure (3, 9, 27 members per level)
@@ -70,6 +74,18 @@ async def join_matrix(
     - Special program integrations
     """
     try:
+        # MANDATORY JOIN SEQUENCE VALIDATION
+        from ..user.sequence_service import ProgramSequenceService
+        sequence_service = ProgramSequenceService()
+        
+        is_valid, error_msg = sequence_service.validate_program_join_sequence(
+            user_id=request.user_id,
+            target_program='matrix'
+        )
+        
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"Join sequence violation: {error_msg}")
+
         # Convert amount to Decimal
         amount = Decimal(str(request.amount))
 

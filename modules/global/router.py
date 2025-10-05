@@ -67,7 +67,12 @@ async def join_global(
     request: GlobalJoinRequest,
     current_user: dict = Depends(_auth_dependency)
 ):
-    """Join Global program with $33 (Phase-1 Slot-1) - Section 1.1 User Join Process"""
+    """Join Global program with $33 (Phase-1 Slot-1) - Section 1.1 User Join Process
+    
+    MANDATORY JOIN SEQUENCE ENFORCEMENT:
+    Users must join Binary and Matrix programs first before joining Global program.
+    This enforces the required sequence: Binary → Matrix → Global
+    """
     # Authorization check
     user_id_keys = ["user_id", "id", "_id", "uid"]
     authenticated_user_id = None
@@ -82,6 +87,18 @@ async def join_global(
     # Verify user can only join for themselves
     if request.user_id != authenticated_user_id:
         return error_response("Unauthorized to join Global program for this user", status_code=403)
+    
+    # MANDATORY JOIN SEQUENCE VALIDATION
+    from ..user.sequence_service import ProgramSequenceService
+    sequence_service = ProgramSequenceService()
+    
+    is_valid, error_msg = sequence_service.validate_program_join_sequence(
+        user_id=request.user_id,
+        target_program='global'
+    )
+    
+    if not is_valid:
+        return error_response(f"Join sequence violation: {error_msg}", status_code=400)
     
     service = GlobalService()
     result = service.join_global(user_id=request.user_id, tx_hash=request.tx_hash, amount=Decimal(str(request.amount)))

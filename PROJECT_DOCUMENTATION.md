@@ -42,24 +42,25 @@ The platform offers 14 different earning programs organized in three rows:
 
 ### Membership Tiers and Costs (BNB)
 
-| Tier Name    | BNB Cost     |
-| :----------- | :----------- |
-| EXPLORER     | 0.0022 BNB   |
-| COTRIBUTOR   | 0.0044 BNB   |
-| SUBSCRIBER   | 0.0088 BNB   |
-| DREAMER      | 0.0176 BNB   |
-| PLANNER      | 0.0352 BNB   |
-| CHALLENGER   | 0.0704 BNB   |
-| ADVENTURER   | 0.1408 BNB   |
-| GAME-SHIFTER | 0.2816 BNB   |
-| ORGANIGER    | 0.5632 BNB   |
-| LEADER       | 1.1264 BNB   |
-| VANGURD      | 2.2528 BNB   |
-| CENTER       | 4.5056 BNB   |
-| CLIMAX       | 9.0112 BNB   |
-| ENTERNITY    | 18.0224 BNB  |
-| KING         | 36.0448 BNB  |
-| COMMENDER    | 72.0896 BNB  |
+| Slot | Name        | BNB Cost     |
+| :--- | :---------- | :----------- |
+| 1    | Explorer    | 0.0022 BNB   |
+| 2    | Contributor | 0.0044 BNB   |
+| 3    | Subscriber  | 0.0088 BNB   |
+| 4    | Dreamer     | 0.0176 BNB   |
+| 5    | Planner     | 0.0352 BNB   |
+| 6    | Challenger  | 0.0704 BNB   |
+| 7    | Adventurer  | 0.1408 BNB   |
+| 8    | Game-Shifter| 0.2816 BNB   |
+| 9    | Organizer   | 0.5632 BNB   |
+| 10   | Leader      | 1.1264 BNB   |
+| 11   | Vanguard    | 2.2528 BNB   |
+| 12   | Center      | 4.5056 BNB   |
+| 13   | Climax      | 9.0112 BNB   |
+| 14   | Eternity    | 18.0224 BNB  |
+| 15   | King        | 36.0448 BNB  |
+| 16   | Commander   | 72.0896 BNB  |
+| 17   | CEO         | 144.1792 BNB |
 
 ### Binary Earning Chart
 **FROM BINARY, A PERSON CAN EARN ACCORDING TO THE CHART BELOW:**
@@ -90,6 +91,26 @@ The platform offers 14 different earning programs organized in three rows:
 - **UPGRADE COST**: Generally equals the SLOT VALUE of the next tier
 - **WALLET**: Calculated as TOTAL INCOME minus UPGRADE COST
 
+### Tree Upline Reserve System
+**CRITICAL FEATURE**: Tree upline reserve fund system for automatic slot activation.
+
+#### Reserve Fund Rules:
+- **30% of slot fee** goes to tree upline's reserve for next slot activation
+- **Automatic slot activation**: When reserve fund reaches next slot cost, automatic activation occurs
+- **Mother account fallback**: If tree upline doesn't activate slot, fund goes to mother account
+
+#### Reserve Fund Logic:
+1. **Level 1 or 2 User Activation**: If tree upline's 1st or 2nd level user activates a slot, entire fund goes to tree upline's reserve
+2. **Automatic Upgrade**: Reserve fund automatically activates tree upline's next slot when sufficient funds accumulated
+3. **Mother Account**: If tree upline doesn't activate target slot, fund goes to mother account
+4. **Normal Distribution**: If target slot already activated, fund follows normal distribution percentages
+
+#### Example Scenario:
+- User C refers User H
+- User H activates Slot 3
+- Entire Slot 3 fee goes to User A's (tree upline) reserve for next slot activation
+- System automatically activates User A's next slot when reserve reaches required amount
+
 ---
 
 ## 3. MATRIX PROGRAM OVERVIEW
@@ -99,26 +120,23 @@ The platform offers 14 different earning programs organized in three rows:
 
 ### Membership Tiers and Costs (USDT)
 
-#### First Row:
-- **STARTER**: 11 USDT
-- **BRONZE**: 33 USDT
-- **SILVER**: 99 USDT
-- **GOLD**: 297 USDT
-- **PLATINUM**: 891 USDT
-
-#### Second Row:
-- **DIAMOND**: 2673 USDT
-- **RUBY**: 8019 USDT
-- **EMERALD**: 24057 USDT
-- **SAPPHIRE**: 72171 USDT
-- **TOPAZ**: 216513 USDT
-
-#### Third Row:
-- **PEARL**: 649539 USDT
-- **AMETHYST**: 1948617 USDT
-- **OBSIDIAN**: 5845851 USDT
-- **TITANIUM**: 17537553 USDT
-- **STAR**: 52612659 USDT
+| Slot | Price (USDT) |
+| :--- | :----------- |
+| 1    | 11           |
+| 2    | 33           |
+| 3    | 99           |
+| 4    | 297          |
+| 5    | 891          |
+| 6    | 2673         |
+| 7    | 8019         |
+| 8    | 24057        |
+| 9    | 72171        |
+| 10   | 216513       |
+| 11   | 649539       |
+| 12   | 1948617      |
+| 13   | 5845851      |
+| 14   | 6537553      |
+| 15   | 52612659     |
 
 ### Matrix Earning Chart
 **FROM MATRIX, A PERSON CAN EARN ACCORDING TO THE CHART BELOW:**
@@ -148,25 +166,29 @@ The platform offers 14 different earning programs organized in three rows:
 ### Program Structure
 The Global Program is organized into two phases:
 
-#### PHASE-1 Levels:
-- **FOUNDATION**: 30
-- **HORIZON**: 247
-- **PINNACLE**: 2047
-- **VERTEX**: 16984
-- **SUMMIT**: 86
-- **CATALYST**: 711
-- **MOMENTUM**: 5897
-- **ASCEND**: 48918
+#### PHASE-1 Slot Prices:
+| Slot | Price (USDT) |
+| :--- | :----------- |
+| 1    | 33           |
+| 2    | 94.60        |
+| 3    | 271.70       |
+| 4    | 782.10       |
+| 5    | 2251.70      |
+| 6    | 6486.70      |
+| 7    | 18682.40     |
+| 8    | 53809.80     |
 
-#### PHASE-2 Levels:
-- **APEX**: 36
-- **PARADIGM**: 296
-- **PRIME**: 2457
-- **LEGACY**: 20381
-- **RADIANCE**: 103
-- **ODYSSEY**: 853
-- **CREST**: 7076
-- **EVEREST**: 58697
+#### PHASE-2 Slot Prices:
+| Slot | Price (USDT) |
+| :--- | :----------- |
+| 1    | 39.6         |
+| 2    | 113.3        |
+| 3    | 325.6        |
+| 4    | 938.3        |
+| 5    | 2702.7       |
+| 6    | 7783.6       |
+| 7    | 22419.1      |
+| 8    | 64566.7      |
 
 ### Global Earning Chart
 **FROM GLOBAL, A PERSON CAN EARN ACCORDING TO THE CHART BELOW:**
@@ -213,7 +235,28 @@ The Global Program is organized into two phases:
 
 ---
 
-## 5. DEVELOPMENT REQUIREMENTS
+## 5. PLATFORM REQUIREMENTS AND DEPLOYMENT
+
+### Smart Contract Deployment Requirements
+- **Mother ID Setup**: The first ID must be set up during smart contract deployment
+- **Mother ID Access**: Mother ID has access to all programs and serves as fallback for fund distribution
+- **Unique Referral ID System**: Each user gets a unique referral ID after joining Binary program
+- **Referral ID Reuse**: Same referral ID used across all programs (Binary, Matrix, Global)
+
+### Mandatory Join Sequence
+**CRITICAL REQUIREMENT**: Users MUST follow this exact sequence:
+1. **Binary Program** (Required first) - Cannot join other programs without Binary
+2. **Matrix Program** (Required second) - Cannot join Global without Matrix  
+3. **Global Program** (Required third) - Final program in sequence
+
+**Enforcement Rules**:
+- No user can join Matrix without first joining Binary
+- No user can join Global without first joining Matrix
+- Referral ID from Binary is used for Matrix and Global programs
+
+---
+
+## 6. DEVELOPMENT REQUIREMENTS
 
 ### Key Business Logic Points
 
@@ -222,8 +265,9 @@ The Global Program is organized into two phases:
    - This triggers the binary tree placement logic
 
 2. **User Join Process**:
-   - When a user joins, the first 2 slots of the binary program should become active
-   - This means activating EXPLORER and CONTRIBUTOR levels
+   - When a user joins Binary, **BOTH Slot 1 AND Slot 2 activate automatically**
+   - Each slot has separate tree structure
+   - User gets unique referral ID for use across all programs
 
 3. **Tree Placement Logic**:
    - Direct referral placement (when referrer has available positions)
@@ -587,14 +631,14 @@ The Royal Captain Bonus is a special reward program for members who refer others
 
 ### Royal Captain Bonus Chart
 
-| Directly Invited Partner | Global Team | Amount Of Dollar |
-| :----------------------- | :---------- | :--------------- |
-| 5                        | 0           | $200             |
-| = (Maintaining 5)        | 10          | $200             |
-| = (Maintaining 5)        | 50          | $200             |
-| = (Maintaining 5)        | 100         | $200             |
-| = (Maintaining 5)        | 200         | $250             |
-| = (Maintaining 5)        | 300         | $250             |
+| Direct partner (Joined in binary, matrix and global) | Global Team (Total team) | Rewards (USDT) |
+| :--------------------------------------------------- | :----------------------- | :------------- |
+| 5                                                   | 0                        | $200           |
+| 5                                                   | 10                       | $200           |
+| 5                                                   | 50                       | $200           |
+| 5                                                   | 100                      | $200           |
+| 5                                                   | 200                      | $250           |
+| 5                                                   | 300                      | $250           |
 
 ### Royal Captain Logic
 - Requires both Matrix and Global package participation
@@ -610,28 +654,27 @@ The Royal Captain Bonus is a special reward program for members who refer others
 The President Reward is a special bonus program for members who achieve specific milestones in direct invitations and global team size.
 
 ### Qualification Criteria
-Qualify initially with 10 direct partners and a global team of 80. Rewards then scale by reaching the following thresholds:
+Qualify initially with 10 direct partners and a global team of 400. Rewards then scale by reaching the following thresholds:
 
 ### President Reward Tiers
 
-| Directly Invited Partner | Global Team | Amount Of Dollar |
-| :----------------------- | :---------- | :--------------- |
-| 10                       | 80          | $500             |
-| =                        | 400         | $500             |
-| =                        | 600         | $700             |
-| =                        | 800         | $700             |
-| =                        | 1000        | $700             |
-| =                        | 1200        | $700             |
-| 15                       | 1500        | $800             |
-| =                        | 1800        | $800             |
-| =                        | 2100        | $800             |
-| =                        | 2400        | $800             |
-| 20                       | 2700        | $1500            |
-| =                        | 3000        | $1500            |
-| =                        | 3500        | $2000            |
-| =                        | 4000        | $2500            |
-| =                        | 5000        | $2500            |
-| 30                       | 6000        | $5000            |
+| Direct partner (Joined in binary, matrix and global) | Global Team (Total team) | Rewards (USDT) |
+| :--------------------------------------------------- | :----------------------- | :------------- |
+| 10                                                  | 400                      | $500           |
+| 10                                                  | 600                      | $700           |
+| 10                                                  | 800                      | $700           |
+| 10                                                  | 1000                     | $700           |
+| 10                                                  | 1200                     | $700           |
+| 15                                                  | 1500                     | $800           |
+| 15                                                  | 1800                     | $800           |
+| 15                                                  | 2100                     | $800           |
+| 15                                                  | 2400                     | $800           |
+| 20                                                  | 2700                     | $1500          |
+| 20                                                  | 3000                     | $1500          |
+| 20                                                  | 3500                     | $2000          |
+| 20                                                  | 4000                     | $2500          |
+| 20                                                  | 5000                     | $2500          |
+| 25                                                  | 6000                     | $5000          |
 
 ### President Reward Logic
 - Requires 30 direct invitations in both Global and Matrix
@@ -668,13 +711,14 @@ The Leadership Stipend provides daily returns for members who upgrade to higher-
 - Progressive daily income system
 
 #### Leadership Stipend Distribution
-- Level 10: 1.5%
-- Level 11: 1%
-- Level 12: 0.5%
-- Level 13: 0.5%
-- Level 14: 0.5%
-- Level 15: 0.5%
-- Level 16: 0.5%
+- Slot 10: 30%
+- Slot 11: 20%
+- Slot 12: 10%
+- Slot 13: 10%
+- Slot 14: 10%
+- Slot 15: 10%
+- Slot 16: 5%
+- Slot 17: 5%
 
 ---
 
@@ -699,11 +743,33 @@ The Matrix Partner Incentive provides commission structure for Matrix program pa
 - **Recycle System**: Special mechanism for matrix completion
 
 ### Matrix Recycle System (Detailed)
-- Each slot (1-15) completes with 39 members across 3 levels (3 + 9 + 27).
-- When all 39 positions fill, that slot RECYCLES to the direct upline's corresponding slot, occupying the next available position per the matrix placement rules.
-- On recycle, no re-joining payment is required by the recycled user. The triggering join/upgrade is credited into the upline tree's marked circles, and level incomes are distributed to First/Second/Third upline according to the user's relative level in the new tree.
-- Placement cases: If recycled into upline's Level-1, the upline is your Level-2 and their upline is your Level-3; if placed into Level-2/3, relationships adjust accordingly for income distribution.
-- This same recycle and income distribution logic applies uniformly to every Matrix slot (1-15).
+**CRITICAL FEATURE**: 39-member completion with automatic recycle mechanism.
+
+#### Recycle System Rules:
+- **39-Member Completion**: Each slot (1-15) completes with 39 members across 3 levels (3 + 9 + 27)
+- **Automatic Recycle**: When all 39 positions fill, that slot RECYCLES to direct upline's corresponding slot
+- **No Re-payment**: Recycled user doesn't pay joining fee again
+- **Fund Distribution**: Triggering join/upgrade fee distributed in upline's tree
+- **Level Income**: Distributed to First/Second/Third upline according to user's relative level in new tree
+
+#### Recycle Process:
+1. **Tree Completion**: Matrix slot reaches 39 members (3 + 9 + 27 structure)
+2. **New Tree Creation**: New empty tree created for same slot
+3. **Recycle Placement**: User moves to direct upline's same slot empty tree
+4. **Fund Distribution**: Recycle user's fee distributed in new tree location
+5. **Level Relationships**: Income distribution adjusts based on new tree placement
+
+#### Recycle Placement Logic:
+- **Level 1 Placement**: If recycled into upline's Level-1, upline becomes Level-2, their upline becomes Level-3
+- **Level 2/3 Placement**: If placed into Level-2/3, relationships adjust accordingly for income distribution
+- **BFS Placement**: Uses Breadth-First Search algorithm for optimal placement
+- **Income Distribution**: Always resolves relative to new tree placement
+
+#### Recycle Data Model:
+- **Multiple Recycles**: User can have multiple recycle instances per slot
+- **Immutable Snapshots**: Each recycle creates separate, immutable snapshot of 3-level tree
+- **Historical Trees**: Previous trees can be fetched reliably even after multiple recycles
+- **Completion Tracking**: System tracks recycle completion and triggers new tree creation
 
 ### Matrix Recycle Data Model
 - A user can have multiple recycle instances per slot. Each recycle creates a separate, immutable snapshot of a 3-level tree (max 39 members).
@@ -795,10 +861,23 @@ The Matrix Auto Upgrade System automatically uses earnings from specific members
 - **Level 3**: 27 members (3 under each Level 2 member)
 
 ### Auto Upgrade Logic
-- 100% earnings from middle 3 members at each level
-- Automatic reinvestment for next slot upgrade
-- Applies from Level 1 to Level 15
-- Upline Reserve position for special handling
+- **100% earnings from middle 3 members** at each level fund next slot upgrade
+- **Automatic reinvestment** for next slot upgrade
+- **Applies from Level 1 to Level 15**: This rule applies across all matrix levels
+- **Upline Reserve position** for special handling
+
+### Middle Position Logic
+1. **Level 1 Structure**: 3 members directly under main user (left, middle/upline-reserve, right)
+2. **Level 2 Structure**: 9 members (3 under each Level 1 member)
+3. **Middle 3 Identification**: One member from each Level 1 branch (positions 4, 5, 6 in Level 2)
+4. **Fund Collection**: 100% of middle 3 users' slot fees go to main user's next slot upgrade
+5. **Manual Activation Option**: Users can manually add funds to activate slots
+6. **Reserve Combination**: 2 reserves + 1 manual fund, or 1 reserve + 2 manual funds
+
+### Super Upline Detection
+- **System Check**: When user joins matrix, system checks upline's upline level and position
+- **Middle Position**: If user is in middle position of their level, fee goes to super upline's slot activation fund
+- **Manual Override**: Users can manually add funds to activate slots even without sufficient reserves
 
 ### Manual Upgrade Options
 - You may upgrade manually using wallet funds.
@@ -806,9 +885,27 @@ The Matrix Auto Upgrade System automatically uses earnings from specific members
 - If the next slot is already upgraded, no further funds from that tree go into reserve.
 
 ### Sweepover Rules (Updated, Authoritative)
-- Sweepover occurs when a junior upgrades a slot before their upline/senior has upgraded the same slot. In that case, the junior “jumps” into the super-upline’s current in-progress tree for that slot (placed by BFS per matrix rules).
-- The skipped upline does not receive any level-income from that slot for that junior’s activities (missed for that slot only). Future slots can restore normal distribution if the senior upgrades first at those later slots.
-- Placement and income references always resolve relative to the new tree where the junior was placed (i.e., first/second/third upline are the three ancestors above the placed position in that tree).
+**CRITICAL FEATURE**: Sweepover mechanism with 60-level search for eligible upline.
+
+#### Sweepover Definition:
+- **Sweepover occurs** when a junior upgrades a slot before their upline/senior has upgraded the same slot
+- **Junior jumps** into the super-upline's current in-progress tree for that slot (placed by BFS per matrix rules)
+- **60-level search**: System searches up to 60 levels for eligible upline with target slot active
+- **Slot activation requirement**: Upline must have target slot active to receive placement
+
+#### Sweepover Logic:
+1. **Eligibility Check**: When user activates slot, system checks if direct upline has that slot active
+2. **Escalation Search**: If direct upline doesn't have slot, system searches up to 60 levels for eligible upline
+3. **Placement**: User is placed in eligible upline's tree for that slot
+4. **Income Distribution**: Placement and income references resolve relative to new tree placement
+5. **Missed Income**: Skipped upline doesn't receive level-income for that slot (missed for that slot only)
+6. **Future Restoration**: Normal distribution restored if senior upgrades first at later slots
+
+#### Example Scenario:
+- User A has Slot 5 active, User B has Slot 4, User C has Slot 3
+- User D activates Slot 3 → placed in User C's tree (normal)
+- User G activates Slot 4 → sweeps over User C (who doesn't have Slot 4) and goes to User B's tree
+- User I activates Slot 4 → goes to User C's tree (since User C now has Slot 5 active)
 
 ### Eligibility Escalation and Fallback
 - When resolving sweepover placement, check eligibility upward to the 60th-level upline for an upgraded holder of the target slot.
@@ -994,13 +1091,22 @@ The Spark Bonus is a special fund distribution system that provides rewards acro
 
 ### Spark Bonus Distribution Chart
 
-| Level   | Percentage (%) |
-| :------ | :------------- |
-| 1       | 15%            |
-| 2-5     | 10%            |
-| 6       | 7%             |
-| 7-9     | 6%             |
-| 10-14   | 4%             |
+| Slot | Percentage (%) |
+| :--- | :------------- |
+| 1    | 15%            |
+| 2    | 10%            |
+| 3    | 10%            |
+| 4    | 10%            |
+| 5    | 10%            |
+| 6    | 7%             |
+| 7    | 6%             |
+| 8    | 6%             |
+| 9    | 6%             |
+| 10   | 4%             |
+| 11   | 4%             |
+| 12   | 4%             |
+| 13   | 4%             |
+| 14   | 4%             |
 | **Total** | **= 100%**     |
 
 ### Spark Bonus Logic
@@ -1060,10 +1166,26 @@ This program is designed to boost non-working income for new members joining the
    - This bonus is paid directly from the Upline
    - This benefit applies from the very first joining to every subsequent Slot Upgrade
 
+### Newcomer Growth Support Fund Distribution
+**CRITICAL FEATURE**: 50/50 split distribution system.
+
+#### Fund Distribution Logic:
+1. **50% Instant Claim**: User can immediately claim 50% of their newcomer growth support
+2. **50% Upline Fund**: Remaining 50% goes to user's direct upline's newcomer growth fund
+3. **30-Day Distribution**: Upline's fund distributed among all direct referrals every 30 days
+4. **Equal Distribution**: All direct referrals of upline can claim equal share
+
+#### Distribution Process:
+- **Upon Matrix Join**: User receives newcomer growth support fund
+- **Instant Withdrawal**: User can immediately withdraw 50% to their wallet
+- **Upline Fund Creation**: 50% goes to upline's newcomer growth support fund
+- **Monthly Distribution**: Every 30 days, upline's fund distributed among all their direct referrals
+- **Claimable by All**: All direct referrals can claim their equal share from upline's fund
+
 ### Summary of Earning Journey
-- Instant Reward
-- Extra Income
-- Long-Term Support
+- **Instant Reward**: 50% immediate claim upon joining
+- **Extra Income**: Monthly opportunities based on upline activity
+- **Long-Term Support**: Continuous earning through upline's direct referral network
 
 All these benefits are combined into one program to ensure an immediate and sustained earning journey.
 
@@ -1163,6 +1285,31 @@ PHASE-2, SLOT-2 (8 people) → UPGRADE
 - Re-entry system for continuous advancement
 - Continues up to Slot 16
 
+### Global Program Tree Structure
+**CRITICAL FEATURE**: Serial placement logic with first user priority.
+
+#### Serial Placement Rules:
+1. **First User Priority**: Very first user's tree opens first and has priority
+2. **Serial Placement**: All subsequent users placed serially in first user's Phase 1 Slot 1 tree
+3. **Phase Progression**: 4 users → Phase 2, 8 users → back to Phase 1 Slot 2
+4. **Continuous Flow**: Process continues with all users following first user's progression
+
+#### Placement Logic:
+- **Very First User**: Platform's first user (could be Mother ID) gets tree priority
+- **Serial Tree Building**: All next users placed serially in first user's Phase 1 Slot 1
+- **Phase 1 Completion**: When 4 users fill first user's Phase 1 Slot 1, first user upgrades to Phase 2 Slot 1
+- **Phase 2 Completion**: When 8 users fill first user's Phase 2 Slot 1, first user upgrades to Phase 1 Slot 2
+- **Continuous Cycle**: Process repeats for all subsequent slots
+
+#### Tree Distribution Logic:
+- **30% Tree Upline Reserve**: For next slot upgrade (tree upline is the user receiving placement)
+- **30% Tree Upline Wallet**: Direct payment to tree upline
+- **10% Partner Incentive**: To direct referrer (who referred the joining user)
+- **10% Royal Captain Bonus**: Global fund distribution
+- **10% President Reward**: Global fund distribution
+- **5% Share Holders**: Separate wallet
+- **5% Triple Entry Reward**: Global fund distribution
+
 ---
 
 ## 27. TOP LEADER GIFT
@@ -1201,19 +1348,56 @@ The Jackpot Program is a raffle draw system that provides opportunities to win m
 **JACKPOT IS A RAFFLE DRAW SYSTEM. ANYONE CAN JOIN WITH JUST $2 AND GET THE CHANCE TO WIN MILLIONS OF DOLLARS.**
 
 ### Jackpot Fund Structure
+**CRITICAL FEATURE**: 4-part distribution system with weekly draws.
 
-- **ENTRY FEES**: $2
-- **OPEN POOL**: 50%
-- **TOP DIRECT PROMOTERS POOL**: 30%
-- **TOP BUYERS POOL**: 10%
-- **BINARY CONTRIBUTION**: 5% deduction from each Binary slot activation is added to the Jackpot fund
+#### Entry Requirements:
+- **ENTRY FEES**: 0.0025 BNB per entry
+- **Multiple Entries**: Users can enter multiple times with each entry requiring fee
+- **DISTRIBUTION FREQUENCY**: Every Sunday (7 days accumulation period)
+- **BINARY CONTRIBUTION**: 5% deduction from each Binary slot activation added to Jackpot fund
+
+#### 4-Part Distribution System:
+
+**1. OPEN POOL (50%)**:
+- **10 Random Winners**: 10 randomly selected winners share 50% equally
+- **Random Selection**: System randomly selects 10 winners from all entries
+- **Equal Distribution**: 50% of total jackpot fund divided equally among 10 winners
+
+**2. TOP DIRECT PROMOTERS POOL (30%)**:
+- **20 Top Promoters**: 20 users with most direct referral entries share 30% equally
+- **Direct Refer Counting**: System counts total entries from all direct referrals
+- **Example**: UserA has 10 direct referrals, each with 5 entries = 50 direct refer entries
+- **Rollover Mechanism**: If less than 20 promoters, unused portion rolls to next week's fund
+
+**3. TOP BUYERS POOL (10%)**:
+- **20 Top Buyers**: 20 users with most individual entries share 10% equally
+- **Individual Entry Counting**: Based on total individual entries per user
+- **Example**: UserA has 10 entries, UserB has 9 entries, UserC has 15 entries
+- **Rollover Mechanism**: If less than 20 buyers, unused portion rolls to next week's fund
+
+**4. NEW JOINERS POOL (10%)**:
+- **10 Random New Joiners**: Last 7 days' Binary program joiners randomly selected
+- **Eligibility**: Only users who joined Binary in last 7 days
+- **Random Distribution**: 10% equally distributed among 10 randomly selected new joiners
 
 ### Free Coupons System
 **NOTE- FREE COUPONS FOR BINARY SLOT UPGRADES**
 
-- **SLOT 5**: 1 FREE COUPON
-- **SLOT 6**: 2 FREE COUPON
-- **AND IT CONTINUES UP TO SLOT 16**
+| Slot | FREE Entry Coupons |
+| :--- | :----------------- |
+| 5    | 1 FREE Entry       |
+| 6    | 2 FREE Entries     |
+| 7    | 3 FREE Entries     |
+| 8    | 4 FREE Entries     |
+| 9    | 5 FREE Entries     |
+| 10   | 6 FREE Entries     |
+| 11   | 7 FREE Entries     |
+| 12   | 8 FREE Entries     |
+| 13   | 9 FREE Entries     |
+| 14   | 10 FREE Entries    |
+| 15   | 11 FREE Entries    |
+| 16   | 12 FREE Entries    |
+| 17   | 13 FREE Entries    |
 
 ### Jackpot Program Logic
 - Low entry fee ($2) for high reward potential
@@ -1419,4 +1603,79 @@ BitGPT is a comprehensive multi-program earning platform that combines:
 
 ---
 
-*This comprehensive documentation now covers the complete BitGPT platform roadmap and all earning programs. The implementation will follow the extended phase-by-phase development plan outlined above.*
+## 32. COMPLETE FUND DISTRIBUTION PERCENTAGES
+
+### Binary Program Fund Distribution
+Based on the final requirements, here are the complete fund distribution percentages:
+
+| Program/Component | Percentage (%) |
+| :---------------- | :------------- |
+| **Spark Bonus** | 8% |
+| **Royal Captain Bonus** | 4% |
+| **President Reward** | 3% |
+| **Leadership Stipend** | 5% |
+| **Jackpot Entry** | 5% |
+| **Partner Incentive** | 10% |
+| **Share Holders** | 5% |
+| **Level Distribution** | 60% |
+
+### Binary Level Distribution Breakdown
+**60% Level Distribution** (treated as 100% for calculation):
+
+| Level | Percentage (%) |
+| :---- | :------------- |
+| Level 1 | 30% |
+| Level 2 | 10% |
+| Level 3 | 10% |
+| Level 4 | 5% |
+| Level 5 | 5% |
+| Level 6 | 5% |
+| Level 7 | 5% |
+| Level 8 | 5% |
+| Level 9 | 5% |
+| Level 10 | 5% |
+| Level 11 | 3% |
+| Level 12 | 3% |
+| Level 13 | 3% |
+| Level 14 | 2% |
+| Level 15 | 2% |
+| Level 16 | 2% |
+
+### Matrix Program Fund Distribution
+**Matrix Program** has different distribution percentages:
+
+| Program/Component | Percentage (%) |
+| :---------------- | :------------- |
+| **Spark Bonus** | 8% |
+| **Royal Captain Bonus** | 4% |
+| **President Reward** | 3% |
+| **Newcomer Growth Support** | 20% |
+| **Mentorship Bonus** | 10% |
+| **Partner Incentive** | 10% |
+| **Share Holders** | 5% |
+| **Level Distribution** | 40% |
+
+### Global Program Fund Distribution
+**Global Program** has specific distribution structure:
+
+| Program/Component | Percentage (%) |
+| :---------------- | :------------- |
+| **Tree Upline Reserve** | 30% |
+| **Tree Upline Wallet** | 30% |
+| **Partner Incentive** | 10% |
+| **Royal Captain Bonus** | 10% |
+| **President Reward** | 10% |
+| **Share Holders** | 5% |
+| **Triple Entry Reward** | 5% |
+
+### Fund Distribution Logic
+- **Partner Incentive (10%)**: Goes directly to the referrer
+- **Level Distribution**: Distributed across levels based on dual tree rules (Binary: 60%, Matrix: 40%)
+- **Global Fund Programs**: Spark Bonus, Royal Captain Bonus, President Reward distributed among eligible users
+- **Share Holders (5%)**: Goes into a separate wallet
+- **Jackpot Fund**: Created from 5% of binary slot activations plus entry fees
+- **Tree Upline Reserve**: 30% goes to tree upline's reserve for next slot upgrade
+
+---
+
+*This comprehensive documentation now covers the complete BitGPT platform roadmap and all earning programs with accurate information from the project images. The implementation will follow the extended phase-by-phase development plan outlined above.*

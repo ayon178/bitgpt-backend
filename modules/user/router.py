@@ -159,3 +159,137 @@ async def get_my_community(
     except Exception as e:
         return error_response(str(e))
 
+
+@user_router.get("/program-sequence-status/{user_id}")
+async def get_program_sequence_status(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get user's program sequence status and next allowed programs"""
+    try:
+        from modules.user.sequence_service import ProgramSequenceService
+        
+        # Authorization check - users can only access their own data
+        authenticated_user_id = None
+        user_id_keys = ["user_id", "_id", "id", "uid"]
+        
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                authenticated_user_id = str(current_user[key])
+                break
+        
+        if authenticated_user_id and authenticated_user_id != user_id:
+            return error_response("Unauthorized to view this user's program sequence status", status_code=403)
+        
+        sequence_service = ProgramSequenceService()
+        result = sequence_service.get_user_program_sequence_status(user_id)
+        
+        if result["success"]:
+            return success_response(result["data"], "Program sequence status fetched successfully")
+        else:
+            return error_response(result["error"])
+        
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.get("/program-sequence-info")
+async def get_program_sequence_info(
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get information about the mandatory program sequence"""
+    try:
+        from modules.user.sequence_service import ProgramSequenceService
+        
+        sequence_service = ProgramSequenceService()
+        result = sequence_service.get_program_sequence_info()
+        
+        if result["success"]:
+            return success_response(result["data"], "Program sequence info fetched successfully")
+        else:
+            return error_response(result["error"])
+        
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.get("/sequence-compliance/{user_id}")
+async def check_sequence_compliance(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Check if user's program participation follows the mandatory sequence"""
+    try:
+        from modules.user.sequence_service import ProgramSequenceService
+        
+        # Authorization check - users can only access their own data or admin can access any
+        authenticated_user_id = None
+        user_id_keys = ["user_id", "_id", "id", "uid"]
+        
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                authenticated_user_id = str(current_user[key])
+                break
+        
+        # Allow admin to check any user's compliance
+        is_admin = current_user.get("role") == "admin"
+        
+        if not is_admin and authenticated_user_id and authenticated_user_id != user_id:
+            return error_response("Unauthorized to check this user's sequence compliance", status_code=403)
+        
+        sequence_service = ProgramSequenceService()
+        result = sequence_service.check_user_sequence_compliance(user_id)
+        
+        if result["success"]:
+            return success_response(result["data"], "Sequence compliance checked successfully")
+        else:
+            return error_response(result["error"])
+        
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.post("/validate-program-join/{user_id}")
+async def validate_program_join(
+    user_id: str,
+    target_program: str = Query(..., description="Target program: 'binary', 'matrix', or 'global'"),
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Validate if user can join a specific program based on mandatory sequence"""
+    try:
+        from modules.user.sequence_service import ProgramSequenceService
+        
+        # Authorization check - users can only validate for themselves or admin can validate any
+        authenticated_user_id = None
+        user_id_keys = ["user_id", "_id", "id", "uid"]
+        
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                authenticated_user_id = str(current_user[key])
+                break
+        
+        # Allow admin to validate for any user
+        is_admin = current_user.get("role") == "admin"
+        
+        if not is_admin and authenticated_user_id and authenticated_user_id != user_id:
+            return error_response("Unauthorized to validate program join for this user", status_code=403)
+        
+        sequence_service = ProgramSequenceService()
+        is_valid, error_msg = sequence_service.validate_program_join_sequence(user_id, target_program)
+        
+        result = {
+            "user_id": user_id,
+            "target_program": target_program,
+            "is_valid": is_valid,
+            "error_message": error_msg,
+            "can_join": is_valid
+        }
+        
+        if is_valid:
+            return success_response(result, "Program join validation successful")
+        else:
+            return error_response(error_msg, status_code=400)
+        
+    except Exception as e:
+        return error_response(str(e))
+

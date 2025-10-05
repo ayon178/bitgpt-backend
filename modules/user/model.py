@@ -60,10 +60,15 @@ class User(Document):
     partners_required = IntField(default=2)  # 2 partners needed for activation
     partners_count = IntField(default=0)
     
-    # Program Participation Status
+    # Program Participation Status (Mandatory Join Sequence: Binary → Matrix → Global)
     binary_joined = BooleanField(default=False)
     matrix_joined = BooleanField(default=False)
     global_joined = BooleanField(default=False)
+    
+    # Program Join Timestamps (for sequence tracking)
+    binary_joined_at = DateTimeField()
+    matrix_joined_at = DateTimeField()
+    global_joined_at = DateTimeField()
     
     # Binary Program Information
     binary_slots = ListField(EmbeddedDocumentField(BinarySlotInfo), default=[])

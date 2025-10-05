@@ -24,6 +24,7 @@ from modules.tree.model import TreePlacement
 def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Create a new user if wallet_address is unique.
+    Enforces mandatory Binary program join requirement.
 
     Returns (result, error):
       - result: {"_id": str, "token": str, "token_type": "bearer"}
@@ -41,6 +42,12 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
     existing = User.objects(wallet_address=wallet_address).first()
     if existing:
         return None, "User with this wallet_address already exists"
+    
+    # MANDATORY BINARY JOIN ENFORCEMENT
+    # According to PROJECT_DOCUMENTATION.md Section 5: "Users MUST follow this exact sequence: Binary → Matrix → Global"
+    binary_payment_tx = payload.get("binary_payment_tx")
+    if not binary_payment_tx:
+        return None, "Binary program join is mandatory. Must provide binary_payment_tx (0.0066 BNB payment proof)"
 
     try:
         # Step 0: Preconditions - Validate referrer exists
@@ -76,14 +83,19 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
         user.save()
 
         # Initialize program participation flags based on provided payments
+        # Set join timestamps for mandatory sequence tracking
         try:
+            current_time = datetime.utcnow()
             updates: Dict[str, Any] = {
-                'binary_joined': True  # Binary is required per docs; first 2 slots will activate
+                'binary_joined': True,  # Binary is required per docs; first 2 slots will activate
+                'binary_joined_at': current_time
             }
             if matrix_payment_tx:
                 updates['matrix_joined'] = True
+                updates['matrix_joined_at'] = current_time
             if global_payment_tx:
                 updates['global_joined'] = True
+                updates['global_joined_at'] = current_time
             if updates:
                 User.objects(id=user.id).update_one(**{f'set__{k}': v for k, v in updates.items()})
                 user.reload()
