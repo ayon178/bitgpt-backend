@@ -44,6 +44,8 @@ class TreePlacement(Document):
     is_active = BooleanField(default=True)
     is_activated = BooleanField(default=False)  # User activation status
     activation_date = DateTimeField()
+    # Global-first-user marker (used by GlobalSerialPlacementService)
+    is_first_user = BooleanField(default=False)
     
     # Timestamps
     created_at = DateTimeField(default=datetime.utcnow)

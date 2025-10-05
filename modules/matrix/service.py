@@ -313,6 +313,44 @@ class MatrixService:
             except Exception:
                 # In test scenarios, save might fail with mocked objects
                 pass
+
+            # Mirror Level-2 node into the direct upline's tree when a Level-1 child is placed under referrer
+            try:
+                if placement_position['level'] == 1:
+                    # Fetch direct upline (owner of parent tree)
+                    ref_owner = User.objects(id=referrer_tree.user_id).first()
+                    parent_user_id = getattr(ref_owner, 'refered_by', None)
+                    if parent_user_id:
+                        parent_tree = MatrixTree.objects(user_id=parent_user_id).first()
+                        if parent_tree:
+                            # Find referrer node position in parent's Level-1
+                            parent_l1_node = next((n for n in getattr(parent_tree, 'nodes', []) if getattr(n, 'level', 0) == 1 and getattr(n, 'user_id', None) == referrer_tree.user_id), None)
+                            if parent_l1_node is not None:
+                                # Compute Level-2 position under parent based on referrer's L1 position
+                                parent_pos = getattr(parent_l1_node, 'position', None)
+                                child_offset = placement_position['position']  # 0/1/2 under referrer
+                                if parent_pos is not None:
+                                    mapped_pos = parent_pos * 3 + child_offset
+                                    # If not already present, append Level-2 node for this child in parent tree
+                                    already = any(getattr(n, 'level', 0) == 2 and getattr(n, 'position', -1) == mapped_pos and getattr(n, 'user_id', None) == ObjectId(user_id) for n in getattr(parent_tree, 'nodes', []))
+                                    if not already:
+                                        parent_tree.nodes.append(MatrixNode(
+                                            level=2,
+                                            position=mapped_pos,
+                                            user_id=ObjectId(user_id),
+                                            placed_at=datetime.utcnow(),
+                                            is_active=True
+                                        ))
+                                        parent_tree.level_2_members = (parent_tree.level_2_members or 0) + 1
+                                        parent_tree.total_members = (parent_tree.total_members or 0) + 1
+                                        parent_tree.updated_at = datetime.utcnow()
+                                        try:
+                                            parent_tree.save()
+                                        except Exception:
+                                            pass
+            except Exception:
+                # Non-critical mirror; skip on errors
+                pass
             
             # Check if tree is complete (39 members)
             if referrer_tree.total_members >= 39:
@@ -3046,8 +3084,8 @@ class MatrixService:
             
             if integration_result.get("success"):
                 print(f"✅ Leadership Stipend integration completed automatically")
-                print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
-                print(f"   - Stipend contribution: ${integration_result.get('stipend_contribution')}")
+                print(f"   - Matrix slot: {integration_result.get('matrix_slot', 0)}")
+                print(f"   - Stipend contribution: ${integration_result.get('stipend_contribution', 0)}")
                 print(f"   - Daily return: ${integration_result.get('stipend_status', {}).get('daily_return', 0)}")
             else:
                 print(f"❌ Leadership Stipend integration failed: {integration_result.get('error')}")
@@ -3366,8 +3404,8 @@ class MatrixService:
             
             if integration_result.get("success"):
                 print(f"✅ Jackpot Program integration completed automatically")
-                print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
-                print(f"   - Jackpot contribution: ${integration_result.get('jackpot_contribution')}")
+                print(f"   - Matrix slot: {integration_result.get('matrix_slot', 0)}")
+                print(f"   - Jackpot contribution: ${integration_result.get('jackpot_contribution', 0)}")
                 print(f"   - Coupons awarded: {integration_result.get('coupon_result', {}).get('coupons_awarded', 0)}")
             else:
                 print(f"❌ Jackpot Program integration failed: {integration_result.get('error')}")

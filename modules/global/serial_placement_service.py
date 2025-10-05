@@ -104,7 +104,7 @@ class GlobalSerialPlacementService:
                 phase='PHASE-1',
                 slot_no=1,
                 level=1,
-                position=1,
+                position=str(1),
                 is_active=True,
                 is_first_user=True,  # Mark as first user
                 created_at=datetime.utcnow()
@@ -179,7 +179,7 @@ class GlobalSerialPlacementService:
                 phase=current_phase,
                 slot_no=current_slot,
                 level=1,  # All users in first user's tree are level 1
-                position=placement_position,
+                position=str(placement_position),
                 is_active=True,
                 is_first_user=False,
                 created_at=datetime.utcnow()
@@ -295,7 +295,7 @@ class GlobalSerialPlacementService:
                     phase=new_phase,
                     slot_no=new_slot,
                     level=1,
-                    position=1,
+                    position=str(1),
                     is_active=True,
                     is_first_user=True,
                     created_at=datetime.utcnow()
@@ -327,7 +327,7 @@ class GlobalSerialPlacementService:
         except Exception as e:
             return {"success": False, "error": f"Phase progression failed: {str(e)}"}
     
-    def _process_fund_distribution(self, user_id: str, amount: Decimal, distribution_type: str) -> Dict[str, Any]:
+    def _process_fund_distribution(self, user_id: str, amount: Decimal, distribution_type: str, phase: str = 'PHASE-1') -> Dict[str, Any]:
         """
         Process fund distribution according to Global program rules:
         30% Tree Upline Reserve + 30% Tree Upline Wallet + 10% Partner Incentive + 
@@ -353,37 +353,37 @@ class GlobalSerialPlacementService:
             
             # Tree Upline Reserve (30%)
             distributions.append(self._create_income_event(
-                user_id, "tree_upline_reserve", tree_upline_reserve, "Global Tree Upline Reserve"
+                user_id, self._normalize_income_type("tree_upline_reserve", phase), tree_upline_reserve, "Global Tree Upline Reserve"
             ))
             
             # Tree Upline Wallet (30%)
             distributions.append(self._create_income_event(
-                user_id, "tree_upline_wallet", tree_upline_wallet, "Global Tree Upline Wallet"
+                user_id, self._normalize_income_type("tree_upline_wallet", phase), tree_upline_wallet, "Global Tree Upline Wallet"
             ))
             
             # Partner Incentive (10%)
             distributions.append(self._create_income_event(
-                user_id, "partner_incentive", partner_incentive, "Global Partner Incentive"
+                user_id, self._normalize_income_type("partner_incentive", phase), partner_incentive, "Global Partner Incentive"
             ))
             
             # Royal Captain Bonus (10%)
             distributions.append(self._create_income_event(
-                user_id, "royal_captain_bonus", royal_captain_bonus, "Global Royal Captain Bonus"
+                user_id, self._normalize_income_type("royal_captain_bonus", phase), royal_captain_bonus, "Global Royal Captain Bonus"
             ))
             
             # President Reward (10%)
             distributions.append(self._create_income_event(
-                user_id, "president_reward", president_reward, "Global President Reward"
+                user_id, self._normalize_income_type("president_reward", phase), president_reward, "Global President Reward"
             ))
             
             # Share Holders (5%)
             distributions.append(self._create_income_event(
-                user_id, "share_holders", share_holders, "Global Share Holders"
+                user_id, self._normalize_income_type("share_holders", phase), share_holders, "Global Share Holders"
             ))
             
             # Triple Entry Reward (5%)
             distributions.append(self._create_income_event(
-                user_id, "triple_entry_reward", triple_entry_reward, "Global Triple Entry Reward"
+                user_id, self._normalize_income_type("triple_entry_reward", phase), triple_entry_reward, "Global Triple Entry Reward"
             ))
             
             return {
@@ -396,6 +396,17 @@ class GlobalSerialPlacementService:
             
         except Exception as e:
             return {"success": False, "error": f"Fund distribution failed: {str(e)}"}
+
+    def _normalize_income_type(self, income_type: str, phase: str) -> str:
+        if income_type in ("tree_upline_reserve", "tree_upline_wallet"):
+            return 'global_phase_1' if phase == 'PHASE-1' else 'global_phase_2'
+        if income_type == "royal_captain_bonus":
+            return 'royal_captain'
+        if income_type == "share_holders":
+            return 'shareholders'
+        if income_type == "triple_entry_reward":
+            return 'triple_entry'
+        return income_type
     
     def _create_income_event(self, user_id: str, income_type: str, amount: Decimal, description: str) -> Dict[str, Any]:
         """Create income event for fund distribution."""
@@ -410,7 +421,7 @@ class GlobalSerialPlacementService:
                 percentage=Decimal('100.0'),
                 tx_hash=f"GLOBAL-{income_type}-{user_id}",
                 status='completed',
-                notes=description
+                description=description
             )
             income_event.save()
             
