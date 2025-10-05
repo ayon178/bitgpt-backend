@@ -846,6 +846,89 @@ async def track_mentorship_relationship_endpoint(
     except Exception as e:
         return error_response(str(e))
 
+# ==================== SWEEPOVER MECHANISM API ENDPOINTS ====================
+
+@router.get("/sweepover-status/{user_id}")
+async def get_sweepover_status_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Get sweepover status for a user and slot."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's sweepover status")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.sweepover_service.get_sweepover_status(user_id, slot_no)
+        
+        if "error" not in result:
+            return success_response(result, "Sweepover status fetched successfully")
+        return error_response(result.get("error", "Failed to get sweepover status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/sweepover-restoration/{user_id}")
+async def check_sweepover_restoration_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Check if sweepover restoration is possible for a user and slot."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to check this user's sweepover restoration")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.sweepover_service.check_future_restoration(user_id, slot_no)
+        
+        if "error" not in result:
+            return success_response(result, "Sweepover restoration status checked successfully")
+        return error_response(result.get("error", "Failed to check sweepover restoration"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/process-sweepover-placement")
+async def process_sweepover_placement_endpoint(
+    user_id: str,
+    referrer_id: str,
+    slot_no: int,
+    tx_hash: str,
+    amount: float,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Process sweepover placement with 60-level search."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to process sweepover placement for this user")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        from decimal import Decimal
+        result = service.sweepover_service.process_sweepover_placement(
+            user_id, referrer_id, slot_no, tx_hash, Decimal(str(amount))
+        )
+        
+        if result.get("success"):
+            return success_response(result, "Sweepover placement processed successfully")
+        return error_response(result.get("error", "Failed to process sweepover placement"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
 # ==================== MATRIX UPGRADE SYSTEM API ENDPOINTS ====================
 
 @router.post("/upgrade-slot")

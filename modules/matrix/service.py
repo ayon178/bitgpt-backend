@@ -14,6 +14,8 @@ from ..newcomer_support.service import NewcomerSupportService
 from ..mentorship.service import MentorshipService
 from ..dream_matrix.service import DreamMatrixService
 from ..blockchain.model import BlockchainEvent
+from .sweepover_service import SweepoverService
+from .middle_3_service import MatrixMiddle3Service
 from .model import (
     MatrixTree, MatrixNode, MatrixActivation, MatrixUpgradeLog,
     MatrixEarningHistory, MatrixCommission, MatrixRecycleInstance, MatrixRecycleNode
@@ -32,6 +34,8 @@ class MatrixService:
         self.newcomer_support_service = NewcomerSupportService()
         self.mentorship_service = MentorshipService()
         self.dream_matrix_service = DreamMatrixService()
+        self.sweepover_service = SweepoverService()
+        self.middle_3_service = MatrixMiddle3Service()
     
     # Matrix slot definitions per PROJECT_DOCUMENTATION.md
     MATRIX_SLOTS = {
