@@ -307,3 +307,160 @@ async def validate_program_join(
     except Exception as e:
         return error_response(str(e))
 
+
+# Tree Upline Reserve System Endpoints
+
+@user_router.get("/reserve-status/{user_id}")
+async def get_reserve_status(
+    user_id: str,
+    program: str = "binary",
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get tree upline reserve status for a user"""
+    try:
+        from .tree_reserve_service import TreeUplineReserveService
+        
+        reserve_service = TreeUplineReserveService()
+        status = reserve_service.get_reserve_status(user_id, program)
+        
+        if "error" in status:
+            return error_response(status["error"])
+        
+        return success_response(status, "Reserve status retrieved successfully")
+        
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.post("/reserve/manual-add")
+async def manually_add_to_reserve(
+    payload: dict,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Manually add funds to a user's reserve"""
+    try:
+        from .tree_reserve_service import TreeUplineReserveService
+        
+        user_id = payload.get("user_id")
+        program = payload.get("program", "binary")
+        slot_no = payload.get("slot_no")
+        amount = payload.get("amount")
+        tx_hash = payload.get("tx_hash", f"MANUAL-{datetime.now().timestamp()}")
+        
+        if not all([user_id, slot_no, amount]):
+            return error_response("Missing required fields: user_id, slot_no, amount")
+        
+        reserve_service = TreeUplineReserveService()
+        success, message = reserve_service.add_to_reserve_fund(
+            user_id, program, slot_no, Decimal(str(amount)), user_id, tx_hash
+        )
+        
+        if success:
+            return success_response({"message": message}, "Funds added to reserve successfully")
+        else:
+            return error_response(message)
+            
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.post("/reserve/auto-activate/{user_id}")
+async def trigger_auto_activation(
+    user_id: str,
+    payload: dict,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Manually trigger auto-activation check for a user's reserve funds"""
+    try:
+        from .tree_reserve_service import TreeUplineReserveService
+        
+        program = payload.get("program", "binary")
+        slot_no = payload.get("slot_no")
+        
+        reserve_service = TreeUplineReserveService()
+        
+        if slot_no:
+            # Check specific slot
+            reserve_balance = reserve_service.get_reserve_balance(user_id, program, slot_no)
+            next_slot_cost = reserve_service._get_next_slot_cost(program, slot_no)
+            
+            if next_slot_cost and reserve_balance >= next_slot_cost:
+                success = reserve_service._auto_activate_slot(
+                    user_id, program, slot_no + 1, next_slot_cost, reserve_balance
+                )
+                
+                if success:
+                    return success_response(
+                        {"message": f"Auto-activated slot {slot_no + 1}"}, 
+                        "Auto-activation successful"
+                    )
+                else:
+                    return error_response("Auto-activation failed")
+            else:
+                return success_response(
+                    {"message": "Insufficient reserve funds for auto-activation"},
+                    "Check completed"
+                )
+        else:
+            # Check all slots
+            status = reserve_service.get_reserve_status(user_id, program)
+            activated_slots = []
+            
+            for slot in status.get("slots", []):
+                if slot.get("can_auto_activate", False):
+                    success = reserve_service._auto_activate_slot(
+                        user_id, program, slot["slot_no"] + 1, 
+                        Decimal(str(slot["next_slot_cost"])), 
+                        Decimal(str(slot["reserve_balance"]))
+                    )
+                    if success:
+                        activated_slots.append(slot["slot_no"] + 1)
+            
+            return success_response(
+                {"activated_slots": activated_slots}, 
+                f"Auto-activation check completed. Activated {len(activated_slots)} slots."
+            )
+            
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.get("/reserve/ledger/{user_id}")
+async def get_reserve_ledger(
+    user_id: str,
+    program: str = "binary",
+    limit: int = 50,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get reserve fund transaction ledger for a user"""
+    try:
+        from ..wallet.model import ReserveLedger
+        
+        ledger_entries = ReserveLedger.objects(
+            user_id=ObjectId(user_id),
+            program=program
+        ).order_by('-created_at').limit(limit)
+        
+        entries = []
+        for entry in ledger_entries:
+            entries.append({
+                "id": str(entry.id),
+                "slot_no": entry.slot_no,
+                "amount": float(entry.amount),
+                "direction": entry.direction,
+                "source": entry.source,
+                "balance_after": float(entry.balance_after),
+                "tx_hash": entry.tx_hash,
+                "created_at": entry.created_at
+            })
+        
+        return success_response({
+            "user_id": user_id,
+            "program": program,
+            "entries": entries,
+            "total_entries": len(entries)
+        }, "Reserve ledger retrieved successfully")
+        
+    except Exception as e:
+        return error_response(str(e))
+

@@ -411,6 +411,51 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 except Exception:
                     pass
 
+                # Tree Upline Reserve System - 30% of slot fee goes to tree upline's reserve
+                try:
+                    from .tree_reserve_service import TreeUplineReserveService
+                    reserve_service = TreeUplineReserveService()
+                    
+                    # Find tree upline for this slot
+                    tree_upline = reserve_service.find_tree_upline(str(user.id), 'binary', slot_no)
+                    
+                    if tree_upline:
+                        # Calculate 30% reserve amount
+                        reserve_amount = reserve_service.calculate_reserve_amount(amount)
+                        
+                        # Add to tree upline's reserve fund
+                        success, message = reserve_service.add_to_reserve_fund(
+                            tree_upline["user_id"],
+                            'binary',
+                            slot_no,
+                            reserve_amount,
+                            str(user.id),
+                            f"AUTO-{user.uid}-S{slot_no}-RESERVE"
+                        )
+                        
+                        if success:
+                            print(f"Added {reserve_amount} to tree upline {tree_upline['uid']} reserve: {message}")
+                        else:
+                            print(f"Failed to add to reserve fund: {message}")
+                    else:
+                        # No tree upline found, transfer to mother account
+                        reserve_amount = reserve_service.calculate_reserve_amount(amount)
+                        success, message = reserve_service.transfer_to_mother_account(
+                            str(user.id),
+                            'binary',
+                            slot_no,
+                            reserve_amount,
+                            f"AUTO-{user.uid}-S{slot_no}-MOTHER"
+                        )
+                        if success:
+                            print(f"Transferred {reserve_amount} to mother account: {message}")
+                        else:
+                            print(f"Failed to transfer to mother account: {message}")
+                            
+                except Exception as e:
+                    print(f"Error in Tree Upline Reserve System: {e}")
+                    pass
+
                 # Trigger upgrade commission logic for each activated slot
                 # Upgrade commission logic for each activated slot
                 if amount > 0:
