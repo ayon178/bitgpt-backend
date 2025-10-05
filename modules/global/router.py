@@ -62,6 +62,8 @@ async def _auth_dependency(request: Request):
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
 
+# ==================== EXISTING GLOBAL API ENDPOINTS ====================
+
 @router.post("/join")
 async def join_global(
     request: GlobalJoinRequest,

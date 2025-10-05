@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""
+Complete Fund Distribution Percentages Implementation
+This service implements all fund distribution percentages for Binary, Matrix, and Global programs
+"""
+
+from decimal import Decimal
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+from bson import ObjectId
+
+from modules.user.model import User
+from modules.income.model import IncomeEvent
+from modules.wallet.model import UserWallet, ReserveLedger
+from modules.tree.model import TreePlacement
+
+class FundDistributionService:
+    """Service for handling complete fund distribution percentages across all programs"""
+    
+    def __init__(self):
+        self.binary_percentages = {
+            "spark_bonus": Decimal('8.0'),
+            "royal_captain_bonus": Decimal('4.0'),
+            "president_reward": Decimal('3.0'),
+            "leadership_stipend": Decimal('5.0'),
+            "jackpot_entry": Decimal('5.0'),
+            "partner_incentive": Decimal('10.0'),
+            "share_holders": Decimal('5.0'),
+            "level_distribution": Decimal('60.0')
+        }
+        
+        self.matrix_percentages = {
+            "spark_bonus": Decimal('8.0'),
+            "royal_captain_bonus": Decimal('4.0'),
+            "president_reward": Decimal('3.0'),
+            "newcomer_growth_support": Decimal('20.0'),
+            "mentorship_bonus": Decimal('10.0'),
+            "partner_incentive": Decimal('10.0'),
+            "share_holders": Decimal('5.0'),
+            "level_distribution": Decimal('40.0')
+        }
+        
+        self.global_percentages = {
+            "tree_upline_reserve": Decimal('30.0'),
+            "tree_upline_wallet": Decimal('30.0'),
+            "partner_incentive": Decimal('10.0'),
+            "royal_captain_bonus": Decimal('10.0'),
+            "president_reward": Decimal('10.0'),
+            "share_holders": Decimal('5.0'),
+            "triple_entry_reward": Decimal('5.0')
+        }
+        
+        # Binary level distribution breakdown (60% treated as 100%)
+        self.binary_level_breakdown = {
+            1: Decimal('30.0'),   # Level 1: 30%
+            2: Decimal('10.0'),   # Level 2: 10%
+            3: Decimal('10.0'),    # Level 3: 10%
+            4: Decimal('5.0'),    # Level 4: 5%
+            5: Decimal('5.0'),    # Level 5: 5%
+            6: Decimal('5.0'),    # Level 6: 5%
+            7: Decimal('5.0'),    # Level 7: 5%
+            8: Decimal('5.0'),    # Level 8: 5%
+            9: Decimal('5.0'),    # Level 9: 5%
+            10: Decimal('5.0'),   # Level 10: 5%
+            11: Decimal('3.0'),   # Level 11: 3%
+            12: Decimal('3.0'),   # Level 12: 3%
+            13: Decimal('3.0'),   # Level 13: 3%
+            14: Decimal('2.0'),   # Level 14: 2%
+            15: Decimal('2.0'),   # Level 15: 2%
+            16: Decimal('2.0')    # Level 16: 2%
+        }
+        
+        # Matrix level distribution breakdown (40% treated as 100%)
+        self.matrix_level_breakdown = {
+            1: Decimal('20.0'),   # Level 1: 20%
+            2: Decimal('20.0'),   # Level 2: 20%
+            3: Decimal('60.0')    # Level 3: 60%
+        }
+
+    def distribute_binary_funds(self, user_id: str, amount: Decimal, slot_no: int, 
+                               referrer_id: str = None, tx_hash: str = None) -> Dict[str, Any]:
+        """Distribute Binary program funds according to percentages"""
+        try:
+            if not tx_hash:
+                tx_hash = f"BINARY_DIST_{user_id}_{int(datetime.now().timestamp())}"
+            
+            distributions = []
+            total_distributed = Decimal('0.0')
+            
+            # Calculate each distribution
+            for income_type, percentage in self.binary_percentages.items():
+                if income_type == "level_distribution":
+                    # Handle level distribution separately
+                    level_distributions = self._distribute_binary_levels(
+                        user_id, amount, percentage, slot_no, tx_hash
+                    )
+                    distributions.extend(level_distributions)
+                    total_distributed += amount * (percentage / Decimal('100.0'))
+                else:
+                    # Direct distribution
+                    dist_amount = amount * (percentage / Decimal('100.0'))
+                    if dist_amount > 0:
+                        distribution = self._create_income_event(
+                            user_id, user_id, 'binary', slot_no, income_type,
+                            dist_amount, percentage, tx_hash, f"Binary {income_type.replace('_', ' ').title()}"
+                        )
+                        distributions.append(distribution)
+                        total_distributed += dist_amount
+            
+            # Handle partner incentive separately if referrer provided
+            if referrer_id and "partner_incentive" in self.binary_percentages:
+                pi_amount = amount * (self.binary_percentages["partner_incentive"] / Decimal('100.0'))
+                if pi_amount > 0:
+                    pi_distribution = self._create_income_event(
+                        referrer_id, user_id, 'binary', slot_no, 'partner_incentive',
+                        pi_amount, self.binary_percentages["partner_incentive"], 
+                        tx_hash, "Binary Partner Incentive"
+                    )
+                    distributions.append(pi_distribution)
+            
+            return {
+                "success": True,
+                "total_amount": amount,
+                "total_distributed": total_distributed,
+                "distributions": distributions,
+                "distribution_type": "binary"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Binary fund distribution failed: {str(e)}"}
+
+    def distribute_matrix_funds(self, user_id: str, amount: Decimal, slot_no: int,
+                              referrer_id: str = None, tx_hash: str = None) -> Dict[str, Any]:
+        """Distribute Matrix program funds according to percentages"""
+        try:
+            if not tx_hash:
+                tx_hash = f"MATRIX_DIST_{user_id}_{int(datetime.now().timestamp())}"
+            
+            distributions = []
+            total_distributed = Decimal('0.0')
+            
+            # Calculate each distribution
+            for income_type, percentage in self.matrix_percentages.items():
+                if income_type == "level_distribution":
+                    # Handle level distribution separately
+                    level_distributions = self._distribute_matrix_levels(
+                        user_id, amount, percentage, slot_no, tx_hash
+                    )
+                    distributions.extend(level_distributions)
+                    total_distributed += amount * (percentage / Decimal('100.0'))
+                else:
+                    # Direct distribution
+                    dist_amount = amount * (percentage / Decimal('100.0'))
+                    if dist_amount > 0:
+                        distribution = self._create_income_event(
+                            user_id, user_id, 'matrix', slot_no, income_type,
+                            dist_amount, percentage, tx_hash, f"Matrix {income_type.replace('_', ' ').title()}"
+                        )
+                        distributions.append(distribution)
+                        total_distributed += dist_amount
+            
+            # Handle partner incentive separately if referrer provided
+            if referrer_id and "partner_incentive" in self.matrix_percentages:
+                pi_amount = amount * (self.matrix_percentages["partner_incentive"] / Decimal('100.0'))
+                if pi_amount > 0:
+                    pi_distribution = self._create_income_event(
+                        referrer_id, user_id, 'matrix', slot_no, 'partner_incentive',
+                        pi_amount, self.matrix_percentages["partner_incentive"], 
+                        tx_hash, "Matrix Partner Incentive"
+                    )
+                    distributions.append(pi_distribution)
+            
+            return {
+                "success": True,
+                "total_amount": amount,
+                "total_distributed": total_distributed,
+                "distributions": distributions,
+                "distribution_type": "matrix"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Matrix fund distribution failed: {str(e)}"}
+
+    def distribute_global_funds(self, user_id: str, amount: Decimal, slot_no: int,
+                               referrer_id: str = None, tx_hash: str = None) -> Dict[str, Any]:
+        """Distribute Global program funds according to percentages"""
+        try:
+            if not tx_hash:
+                tx_hash = f"GLOBAL_DIST_{user_id}_{int(datetime.now().timestamp())}"
+            
+            distributions = []
+            total_distributed = Decimal('0.0')
+            
+            # Calculate each distribution
+            for income_type, percentage in self.global_percentages.items():
+                dist_amount = amount * (percentage / Decimal('100.0'))
+                if dist_amount > 0:
+                    distribution = self._create_income_event(
+                        user_id, user_id, 'global', slot_no, income_type,
+                        dist_amount, percentage, tx_hash, f"Global {income_type.replace('_', ' ').title()}"
+                    )
+                    distributions.append(distribution)
+                    total_distributed += dist_amount
+            
+            # Handle partner incentive separately if referrer provided
+            if referrer_id and "partner_incentive" in self.global_percentages:
+                pi_amount = amount * (self.global_percentages["partner_incentive"] / Decimal('100.0'))
+                if pi_amount > 0:
+                    pi_distribution = self._create_income_event(
+                        referrer_id, user_id, 'global', slot_no, 'partner_incentive',
+                        pi_amount, self.global_percentages["partner_incentive"], 
+                        tx_hash, "Global Partner Incentive"
+                    )
+                    distributions.append(pi_distribution)
+            
+            return {
+                "success": True,
+                "total_amount": amount,
+                "total_distributed": total_distributed,
+                "distributions": distributions,
+                "distribution_type": "global"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Global fund distribution failed: {str(e)}"}
+
+    def _distribute_binary_levels(self, user_id: str, amount: Decimal, percentage: Decimal,
+                                 slot_no: int, tx_hash: str) -> List[Dict[str, Any]]:
+        """Distribute Binary level distribution (60% treated as 100%)"""
+        distributions = []
+        level_amount = amount * (percentage / Decimal('100.0'))
+        
+        # Get user's tree upline for level distribution
+        user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program='binary', is_active=True).first()
+        if not user_placement:
+            return distributions
+        
+        # Distribute to each level according to breakdown
+        for level, level_percentage in self.binary_level_breakdown.items():
+            level_dist_amount = level_amount * (level_percentage / Decimal('100.0'))
+            if level_dist_amount > 0:
+                # Find upline at this level
+                upline_id = self._find_upline_at_level(user_id, level, 'binary')
+                if upline_id:
+                    distribution = self._create_income_event(
+                        upline_id, user_id, 'binary', slot_no, f'level_{level}_distribution',
+                        level_dist_amount, level_percentage, tx_hash, f"Binary Level {level} Distribution"
+                    )
+                    distributions.append(distribution)
+        
+        return distributions
+
+    def _distribute_matrix_levels(self, user_id: str, amount: Decimal, percentage: Decimal,
+                                 slot_no: int, tx_hash: str) -> List[Dict[str, Any]]:
+        """Distribute Matrix level distribution (40% treated as 100%)"""
+        distributions = []
+        level_amount = amount * (percentage / Decimal('100.0'))
+        
+        # Get user's tree upline for level distribution
+        user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program='matrix', is_active=True).first()
+        if not user_placement:
+            return distributions
+        
+        # Distribute to each level according to breakdown
+        for level, level_percentage in self.matrix_level_breakdown.items():
+            level_dist_amount = level_amount * (level_percentage / Decimal('100.0'))
+            if level_dist_amount > 0:
+                # Find upline at this level
+                upline_id = self._find_upline_at_level(user_id, level, 'matrix')
+                if upline_id:
+                    distribution = self._create_income_event(
+                        upline_id, user_id, 'matrix', slot_no, f'level_{level}_distribution',
+                        level_dist_amount, level_percentage, tx_hash, f"Matrix Level {level} Distribution"
+                    )
+                    distributions.append(distribution)
+        
+        return distributions
+
+    def _find_upline_at_level(self, user_id: str, target_level: int, program: str) -> Optional[str]:
+        """Find upline at specific level for level distribution"""
+        try:
+            # Get user's placement
+            user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program=program, is_active=True).first()
+            if not user_placement:
+                return None
+            
+            # Find upline by traversing up the tree
+            current_level = 1
+            current_user_id = user_id
+            
+            while current_level < target_level:
+                # Find parent placement
+                parent_placement = TreePlacement.objects(
+                    program=program, 
+                    is_active=True,
+                    level=current_level + 1
+                ).first()
+                
+                if not parent_placement:
+                    break
+                
+                current_user_id = str(parent_placement.user_id)
+                current_level += 1
+            
+            if current_level == target_level:
+                return current_user_id
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error finding upline at level {target_level}: {e}")
+            return None
+
+    def _create_income_event(self, recipient_id: str, source_id: str, program: str, 
+                           slot_no: int, income_type: str, amount: Decimal, 
+                           percentage: Decimal, tx_hash: str, description: str) -> Dict[str, Any]:
+        """Create income event for distribution"""
+        try:
+            income_event = IncomeEvent(
+                user_id=ObjectId(recipient_id),
+                source_user_id=ObjectId(source_id),
+                program=program,
+                slot_no=slot_no,
+                income_type=income_type,
+                amount=amount,
+                percentage=percentage,
+                tx_hash=tx_hash,
+                status='completed',
+                description=description,
+                created_at=datetime.utcnow()
+            )
+            income_event.save()
+            
+            return {
+                "income_type": income_type,
+                "amount": amount,
+                "percentage": percentage,
+                "recipient_id": recipient_id,
+                "status": "completed",
+                "description": description
+            }
+            
+        except Exception as e:
+            return {
+                "income_type": income_type,
+                "amount": amount,
+                "percentage": percentage,
+                "recipient_id": recipient_id,
+                "status": "failed",
+                "error": str(e)
+            }
+
+    def get_distribution_summary(self, program: str) -> Dict[str, Any]:
+        """Get distribution summary for a program"""
+        try:
+            if program == 'binary':
+                percentages = self.binary_percentages
+                level_breakdown = self.binary_level_breakdown
+            elif program == 'matrix':
+                percentages = self.matrix_percentages
+                level_breakdown = self.matrix_level_breakdown
+            elif program == 'global':
+                percentages = self.global_percentages
+                level_breakdown = {}
+            else:
+                return {"success": False, "error": "Invalid program"}
+            
+            return {
+                "success": True,
+                "program": program,
+                "percentages": {k: float(v) for k, v in percentages.items()},
+                "level_breakdown": {k: float(v) for k, v in level_breakdown.items()},
+                "total_percentage": float(sum(percentages.values()))
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Failed to get distribution summary: {str(e)}"}
+
+    def validate_distribution_percentages(self, program: str) -> Dict[str, Any]:
+        """Validate that all percentages add up to 100%"""
+        try:
+            if program == 'binary':
+                percentages = self.binary_percentages
+            elif program == 'matrix':
+                percentages = self.matrix_percentages
+            elif program == 'global':
+                percentages = self.global_percentages
+            else:
+                return {"success": False, "error": "Invalid program"}
+            
+            total = sum(percentages.values())
+            is_valid = total == Decimal('100.0')
+            
+            return {
+                "success": True,
+                "program": program,
+                "total_percentage": float(total),
+                "is_valid": is_valid,
+                "validation_message": "Valid" if is_valid else f"Total should be 100%, got {float(total)}%"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Validation failed: {str(e)}"}

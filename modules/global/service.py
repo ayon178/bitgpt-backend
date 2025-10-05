@@ -18,6 +18,7 @@ from modules.spark.model import TripleEntryReward, SparkBonusDistribution
 from modules.user.model import ShareholdersDistribution, ShareholdersFund, Shareholder
 from utils import ensure_currency_for_program
 from .model import GlobalTeamMember, GlobalDistribution, GlobalTreeStructure, GlobalPhaseSeat
+from .serial_placement_service import GlobalSerialPlacementService
 
 
 class GlobalService:
@@ -27,6 +28,7 @@ class GlobalService:
         self.commission_service = CommissionService()
         self.spark_service = SparkService()
         self.company_wallet = CompanyWalletService()
+        self.serial_placement_service = GlobalSerialPlacementService()
 
     def _count_phase_children(self, parent_id: ObjectId, phase: str) -> int:
         return TreePlacement.objects(parent_id=parent_id, program='global', phase=phase, is_active=True).count()

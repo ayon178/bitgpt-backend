@@ -929,6 +929,112 @@ async def process_sweepover_placement_endpoint(
     except Exception as e:
         return error_response(str(e))
 
+# ==================== MATRIX RECYCLE SYSTEM API ENDPOINTS ====================
+
+@router.get("/recycle-status/{user_id}")
+async def get_recycle_status_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Get recycle status for a user and slot."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's recycle status")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.recycle_service.check_recycle_completion(user_id, slot_no)
+        
+        if result.get("success"):
+            return success_response(result, "Recycle status fetched successfully")
+        return error_response(result.get("error", "Failed to get recycle status"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/recycle-history/{user_id}")
+async def get_recycle_history_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Get complete recycle history for a user and slot."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's recycle history")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.recycle_service.get_recycle_history(user_id, slot_no)
+        
+        if result.get("success"):
+            return success_response(result, "Recycle history fetched successfully")
+        return error_response(result.get("error", "Failed to get recycle history"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/recycle-tree/{user_id}")
+async def get_recycle_tree_endpoint(
+    user_id: str,
+    slot_no: int,
+    recycle_no: int,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Get a specific recycle tree snapshot."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's recycle tree")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        if recycle_no < 1:
+            raise HTTPException(status_code=400, detail="Recycle number must be >= 1")
+        
+        service = MatrixService()
+        result = service.recycle_service.get_recycle_tree(user_id, slot_no, recycle_no)
+        
+        if result.get("success"):
+            return success_response(result, "Recycle tree fetched successfully")
+        return error_response(result.get("error", "Failed to get recycle tree"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/trigger-recycle")
+async def trigger_recycle_endpoint(
+    user_id: str,
+    slot_no: int,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Manually trigger recycle process (for testing purposes)."""
+    try:
+        if str(current_user["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to trigger recycle for this user")
+        
+        if slot_no < 1 or slot_no > 15:
+            raise HTTPException(status_code=400, detail="Slot number must be between 1 and 15")
+        
+        service = MatrixService()
+        result = service.recycle_service.process_manual_recycle_trigger(user_id, slot_no)
+        
+        if result.get("success"):
+            return success_response(result, "Recycle process triggered successfully")
+        return error_response(result.get("error", "Failed to trigger recycle process"))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
 # ==================== MATRIX UPGRADE SYSTEM API ENDPOINTS ====================
 
 @router.post("/upgrade-slot")
