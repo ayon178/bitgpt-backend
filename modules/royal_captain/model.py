@@ -16,7 +16,7 @@ class RoyalCaptainBonus(EmbeddedDocument):
     direct_partners_required = IntField(required=True)
     global_team_required = IntField(required=True)
     bonus_amount = FloatField(required=True)
-    currency = StringField(choices=['USD'], default='USD')
+    currency = StringField(choices=['USD', 'USDT'], default='USDT')
     bonus_description = StringField(required=True)
     is_achieved = BooleanField(default=False)
     achieved_at = DateTimeField()
@@ -119,7 +119,7 @@ class RoyalCaptainBonusPayment(Document):
     # Bonus details
     bonus_tier = IntField(required=True)  # 1-5
     bonus_amount = FloatField(required=True)
-    currency = StringField(choices=['USD'], default='USD')
+    currency = StringField(choices=['USD', 'USDT'], default='USDT')
     
     # Requirements met
     direct_partners_at_payment = IntField(required=True)
@@ -158,7 +158,7 @@ class RoyalCaptainFund(Document):
     total_fund_amount = FloatField(default=0.0)
     available_amount = FloatField(default=0.0)
     distributed_amount = FloatField(default=0.0)
-    currency = StringField(choices=['USD'], default='USD')
+    currency = StringField(choices=['USD', 'USDT'], default='USDT')
     
     # Fund sources
     fund_sources = DictField(default={

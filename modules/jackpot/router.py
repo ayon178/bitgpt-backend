@@ -1,296 +1,179 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query
+from datetime import datetime
+from decimal import Decimal
 from typing import Optional
-from bson import ObjectId
-from .model import JackpotTicket
-from .service import JackpotService
-from auth.service import authentication_service
-from ..wallet.service import WalletService
-from utils.response import success_response, error_response
+from pydantic import BaseModel
 
+from modules.jackpot.service import JackpotService
 
 router = APIRouter(prefix="/jackpot", tags=["Jackpot"])
 
-
-class TicketQuery(BaseModel):
-    user_id: Optional[str] = None
-    referrer_user_id: Optional[str] = None
-    week_id: Optional[str] = None
-    status: Optional[str] = None  # active|used|expired
-
-
 class JackpotEntryRequest(BaseModel):
     user_id: str
-    currency: str = "USDT"
-    amount: float = 5.0
+    entry_count: int = 1
+    tx_hash: Optional[str] = None
 
-
-class JackpotClaimRequest(BaseModel):
+class FreeCouponRequest(BaseModel):
     user_id: str
-    pool_type: str  # "open_pool", "top_direct_promoters", "top_buyers_pool", "new_joiners_pool"
-    currency: str = "USDT"
-    amount: float
+    slot_number: int
+    tx_hash: Optional[str] = None
 
+class BinaryContributionRequest(BaseModel):
+    user_id: str
+    slot_fee: Decimal
+    tx_hash: Optional[str] = None
 
-@router.post("/enter")
-async def enter_jackpot(
-    request: JackpotEntryRequest,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
-    """Enter Jackpot Program with $5 USDT payment"""
+@router.post("/entry")
+async def process_jackpot_entry(request: JackpotEntryRequest):
+    """Process jackpot entry for a user"""
     try:
-        # Validate user exists
-        from ..user.model import User
-        user = User.objects(id=ObjectId(request.user_id)).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        jackpot_service = JackpotService()
+        result = jackpot_service.process_jackpot_entry(
+            request.user_id, 
+            request.entry_count, 
+            request.tx_hash
+        )
         
-        # Check wallet balance
-        wallet_service = WalletService()
-        balance_result = wallet_service.get_currency_balances(request.user_id, 'main')
-        
-        # Extract balance from the correct structure
-        if balance_result.get('success', False):
-            current_balance = balance_result.get('balances', {}).get(request.currency.upper(), 0.0)
+        if result.get("success"):
+            return result
         else:
-            current_balance = balance_result.get(request.currency.upper(), 0.0)
+            raise HTTPException(status_code=400, detail=result.get("error"))
             
-        if current_balance < request.amount:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Insufficient balance. Required: {request.amount} {request.currency}, Available: {current_balance} {request.currency}"
-            )
-        
-        # Process Jackpot entry
-        result = JackpotService.process_paid_entry(
-            user_id=request.user_id,
-            amount=request.amount,
-            currency=request.currency
-        )
-        
-        if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return success_response(
-            data=result["data"],
-            message="Successfully entered Jackpot Program"
-        )
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        return error_response(str(e))
+        raise HTTPException(status_code=500, detail=f"Jackpot entry processing failed: {str(e)}")
 
-
-@router.post("/claim-reward")
-async def claim_jackpot_reward(
-    request: JackpotClaimRequest
-):
-    """Claim Jackpot reward and update user wallet"""
+@router.post("/free-coupon")
+async def process_free_coupon(request: FreeCouponRequest):
+    """Process free coupon entry from binary slot upgrade"""
     try:
-        # Validate user exists
-        from ..user.model import User
-        user = User.objects(id=ObjectId(request.user_id)).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Process reward claim
-        result = JackpotService.process_reward_claim(
-            user_id=request.user_id,
-            pool_type=request.pool_type,
-            amount=request.amount,
-            currency=request.currency
+        jackpot_service = JackpotService()
+        result = jackpot_service.process_free_coupon_entry(
+            request.user_id, 
+            request.slot_number, 
+            request.tx_hash
         )
         
-        if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return success_response(
-            data=result["data"],
-            message="Jackpot reward claimed successfully"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        return error_response(str(e))
-
-
-@router.get("/history")
-async def get_jackpot_history(
-    user_id: str = Query(..., description="User ID"),
-    history_type: str = Query("entry", description="History type: 'entry' or 'claim'"),
-    page: int = Query(1, description="Page number"),
-    limit: int = Query(10, description="Items per page")
-):
-    """Get Jackpot history (both entry and claim) for a user"""
-    try:
-        result = JackpotService.get_jackpot_history(user_id, history_type, page, limit)
-        
-        if result["success"]:
-            return success_response(result["data"], f"Jackpot {history_type} history fetched successfully")
+        if result.get("success"):
+            return result
         else:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-    except HTTPException:
-        raise
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
     except Exception as e:
-        return error_response(str(e))
+        raise HTTPException(status_code=500, detail=f"Free coupon processing failed: {str(e)}")
 
-
-@router.get("/pools-total")
-async def get_jackpot_pools_total(
-    currency: str = Query("USDT", description="Currency type")
-):
-    """Get total accumulated amounts for all Jackpot pools"""
+@router.post("/binary-contribution")
+async def process_binary_contribution(request: BinaryContributionRequest):
+    """Process binary slot activation contribution to jackpot fund"""
     try:
-        result = JackpotService.get_pools_total(currency)
+        jackpot_service = JackpotService()
+        result = jackpot_service.process_binary_contribution(
+            request.user_id, 
+            request.slot_fee, 
+            request.tx_hash
+        )
         
-        if result["success"]:
-            return success_response(result["data"], "Jackpot pools total amounts fetched successfully")
+        if result.get("success"):
+            return result
         else:
-            raise HTTPException(status_code=400, detail=result["error"])
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Binary contribution processing failed: {str(e)}")
+
+@router.get("/status/{user_id}")
+async def get_user_jackpot_status(user_id: str):
+    """Get user's jackpot status for current week"""
+    try:
+        jackpot_service = JackpotService()
+        result = jackpot_service.get_user_jackpot_status(user_id)
         
-    except HTTPException:
-        raise
+        if result.get("success"):
+            return result
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
     except Exception as e:
-        return error_response(str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get user jackpot status: {str(e)}")
 
-
-
-
-@router.post("/tickets/query")
-async def query_tickets(
-    payload: TicketQuery,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
+@router.get("/fund-status")
+async def get_jackpot_fund_status():
+    """Get current jackpot fund status"""
     try:
-        q = {}
-        if payload.user_id:
-            q['user_id'] = ObjectId(payload.user_id)
-        if payload.referrer_user_id:
-            q['referrer_user_id'] = ObjectId(payload.referrer_user_id)
-        if payload.week_id:
-            q['week_id'] = payload.week_id
-        if payload.status:
-            q['status'] = payload.status
-
-        tickets = JackpotTicket.objects(**q).order_by('-created_at')
-        data = []
-        for t in tickets:
-            data.append({
-                "id": str(t.id),
-                "user_id": str(t.user_id),
-                "referrer_user_id": str(t.referrer_user_id),
-                "week_id": t.week_id,
-                "source": t.source,
-                "free_source_slot": t.free_source_slot,
-                "status": t.status,
-                "created_at": t.created_at
-            })
-        return {"success": True, "count": len(data), "data": data}
+        jackpot_service = JackpotService()
+        result = jackpot_service.get_jackpot_fund_status()
+        
+        if result.get("success"):
+            return result
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get jackpot fund status: {str(e)}")
 
-
-@router.get("/tickets/by-user/{user_id}")
-async def tickets_by_user(
-    user_id: str,
-    week_id: Optional[str] = None,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
+@router.post("/weekly-distribution")
+async def process_weekly_distribution():
+    """Process weekly jackpot distribution (4-part system)"""
     try:
-        q = {"user_id": ObjectId(user_id)}
-        if week_id:
-            q["week_id"] = week_id
-        tickets = JackpotTicket.objects(**q).order_by('-created_at')
-        return {"success": True, "count": tickets.count(), "data": [
-            {
-                "id": str(t.id),
-                "referrer_user_id": str(t.referrer_user_id),
-                "week_id": t.week_id,
-                "source": t.source,
-                "free_source_slot": t.free_source_slot,
-                "status": t.status,
-                "created_at": t.created_at
-            } for t in tickets
-        ]}
+        jackpot_service = JackpotService()
+        result = jackpot_service.process_weekly_distribution()
+        
+        if result.get("success"):
+            return result
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Weekly distribution processing failed: {str(e)}")
 
-
-@router.get("/tickets/by-referrer/{referrer_user_id}")
-async def tickets_by_referrer(
-    referrer_user_id: str,
-    week_id: Optional[str] = None,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
+@router.get("/distribution-history")
+async def get_distribution_history(limit: int = Query(10, ge=1, le=100)):
+    """Get jackpot distribution history"""
     try:
-        q = {"referrer_user_id": ObjectId(referrer_user_id)}
-        if week_id:
-            q["week_id"] = week_id
-        tickets = JackpotTicket.objects(**q).order_by('-created_at')
-        return {"success": True, "count": tickets.count(), "data": [
-            {
-                "id": str(t.id),
-                "user_id": str(t.user_id),
-                "week_id": t.week_id,
-                "source": t.source,
-                "free_source_slot": t.free_source_slot,
-                "status": t.status,
-                "created_at": t.created_at
-            } for t in tickets
-        ]}
+        jackpot_service = JackpotService()
+        result = jackpot_service.get_distribution_history(limit)
+        
+        if result.get("success"):
+            return result
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get distribution history: {str(e)}")
 
-
-@router.get("/top-sellers")
-async def top_sellers(
-    week_id: Optional[str] = None,
-    limit: int = 10,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
+@router.get("/free-coupons-mapping")
+async def get_free_coupons_mapping():
+    """Get free coupons mapping for binary slots"""
     try:
-        res = JackpotService.compute_top_sellers(week_id=week_id, limit=limit)
-        if not res.get("success"):
-            raise HTTPException(status_code=500, detail=res.get("error", "Failed to compute top sellers"))
-        return res
-    except HTTPException:
-        raise
+        jackpot_service = JackpotService()
+        return {
+            "success": True,
+            "free_coupons_mapping": jackpot_service.free_coupons_mapping,
+            "description": "Free coupons earned from binary slot upgrades"
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get free coupons mapping: {str(e)}")
 
-@router.get("/top-buyers")
-async def top_buyers(
-    week_id: Optional[str] = None,
-    limit: int = 10,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
+@router.get("/pool-percentages")
+async def get_pool_percentages():
+    """Get jackpot pool distribution percentages"""
     try:
-        res = JackpotService.compute_top_buyers(week_id=week_id, limit=limit)
-        if not res.get("success"):
-            raise HTTPException(status_code=500, detail=res.get("error", "Failed to compute top buyers"))
-        return res
-    except HTTPException:
-        raise
+        jackpot_service = JackpotService()
+        return {
+            "success": True,
+            "pool_percentages": {
+                "open_pool": float(jackpot_service.open_pool_percentage * 100),
+                "top_promoters_pool": float(jackpot_service.top_promoters_pool_percentage * 100),
+                "top_buyers_pool": float(jackpot_service.top_buyers_pool_percentage * 100),
+                "new_joiners_pool": float(jackpot_service.new_joiners_pool_percentage * 100)
+            },
+            "winner_counts": {
+                "open_pool_winners": jackpot_service.open_pool_winners_count,
+                "top_promoters_winners": jackpot_service.top_promoters_winners_count,
+                "top_buyers_winners": jackpot_service.top_buyers_winners_count,
+                "new_joiners_winners": jackpot_service.new_joiners_winners_count
+            },
+            "entry_fee": float(jackpot_service.entry_fee),
+            "binary_contribution_percentage": float(jackpot_service.binary_contribution_percentage * 100)
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/newcomers")
-async def newcomers(
-    week_id: Optional[str] = None,
-    limit: int = 10,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
-    try:
-        res = JackpotService.pick_newcomers_for_week(week_id=week_id, limit=limit)
-        if not res.get("success"):
-            raise HTTPException(status_code=500, detail=res.get("error", "Failed to pick newcomers"))
-        return res
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"Failed to get pool percentages: {str(e)}")

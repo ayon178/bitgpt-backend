@@ -7,7 +7,7 @@ class PresidentRewardTier(EmbeddedDocument):
     direct_partners_required = IntField(required=True)
     global_team_required = IntField(required=True)
     reward_amount = FloatField(required=True)
-    currency = StringField(choices=['USD'], default='USD')
+    currency = StringField(choices=['USD', 'USDT'], default='USDT')
     tier_description = StringField(required=True)
     is_achieved = BooleanField(default=False)
     achieved_at = DateTimeField()
@@ -110,7 +110,7 @@ class PresidentRewardPayment(Document):
     # Reward details
     tier_number = IntField(required=True)  # 1-15
     reward_amount = FloatField(required=True)
-    currency = StringField(choices=['USD'], default='USD')
+    currency = StringField(choices=['USD', 'USDT'], default='USDT')
     
     # Requirements met at payment
     direct_partners_at_payment = IntField(required=True)
@@ -149,7 +149,7 @@ class PresidentRewardFund(Document):
     total_fund_amount = FloatField(default=0.0)
     available_amount = FloatField(default=0.0)
     distributed_amount = FloatField(default=0.0)
-    currency = StringField(choices=['USD'], default='USD')
+    currency = StringField(choices=['USD', 'USDT'], default='USDT')
     
     # Fund sources
     fund_sources = DictField(default={
@@ -209,7 +209,7 @@ class PresidentRewardSettings(Document):
     tier_15_reward_amount = FloatField(default=2000.0)
     
     # Payment settings
-    payment_currency = StringField(choices=['USD'], default='USD')
+    payment_currency = StringField(choices=['USD', 'USDT'], default='USDT')
     payment_method = StringField(choices=['bonus_pool'], default='bonus_pool')
     payment_delay_hours = IntField(default=48)  # 48 hours delay
     

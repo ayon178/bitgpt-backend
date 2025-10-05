@@ -154,6 +154,11 @@ class RoyalCaptainService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    # Backwards-compatible alias used by tests/scripts
+    def check_royal_captain_eligibility(self, user_id: str, force_check: bool = False) -> Dict[str, Any]:
+        """Alias for check_eligibility to preserve older call sites"""
+        return self.check_eligibility(user_id, force_check)
     
     def process_bonus_tiers(self, user_id: str) -> Dict[str, Any]:
         """Process Royal Captain bonus tiers for user"""
@@ -220,6 +225,52 @@ class RoyalCaptainService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_royal_captain_status(self, user_id: str) -> Dict[str, Any]:
+        """Return current Royal Captain status for a user"""
+        try:
+            rc = RoyalCaptain.objects(user_id=ObjectId(user_id)).first()
+            if not rc:
+                return {"success": False, "error": "User not in Royal Captain program"}
+            return {
+                "success": True,
+                "user_id": user_id,
+                "is_eligible": rc.is_eligible,
+                "is_active": rc.is_active,
+                "current_tier": rc.current_tier,
+                "total_direct_partners": rc.total_direct_partners,
+                "total_global_team": rc.total_global_team,
+                "total_bonus_earned": rc.total_bonus_earned,
+                "both_packages_active": rc.both_packages_active,
+                "direct_partners_with_both_packages": rc.direct_partners_with_both_packages,
+                "bonuses": [
+                    {
+                        "bonus_tier": b.bonus_tier,
+                        "direct_partners_required": b.direct_partners_required,
+                        "global_team_required": b.global_team_required,
+                        "bonus_amount": b.bonus_amount,
+                        "currency": getattr(b, 'currency', 'USDT'),
+                        "is_achieved": b.is_achieved,
+                        "achieved_at": b.achieved_at,
+                    }
+                    for b in rc.bonuses
+                ]
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def claim_royal_captain_bonus(self, user_id: str) -> Dict[str, Any]:
+        """Claim Royal Captain bonus by evaluating and awarding eligible tiers.
+        This is an alias that runs tier processing and returns the updated status.
+        """
+        result = self.process_bonus_tiers(user_id)
+        if not result.get("success"):
+            return result
+        # Return fresh status after processing
+        status = self.get_royal_captain_status(user_id)
+        if status.get("success"):
+            status["message"] = "Royal Captain bonuses processed"
+        return status
     
     def distribute_bonus_payment(self, bonus_payment_id: str) -> Dict[str, Any]:
         """Distribute Royal Captain bonus payment"""
@@ -381,42 +432,55 @@ class RoyalCaptainService:
         ]
     
     def _initialize_bonus_tiers(self) -> List[RoyalCaptainBonus]:
-        """Initialize Royal Captain bonus tiers"""
+        """Initialize Royal Captain bonus tiers according to PROJECT_DOCUMENTATION.md"""
         return [
             RoyalCaptainBonus(
                 bonus_tier=1,
                 direct_partners_required=5,
                 global_team_required=0,
                 bonus_amount=200.0,
-                bonus_description="First tier bonus - 5 direct partners"
+                currency='USDT',
+                bonus_description="Royal Captain Bonus - 5 direct partners (Binary+Matrix+Global)"
             ),
             RoyalCaptainBonus(
                 bonus_tier=2,
                 direct_partners_required=5,
                 global_team_required=10,
                 bonus_amount=200.0,
-                bonus_description="Second tier bonus - 5 direct partners, 10 global team"
+                currency='USDT',
+                bonus_description="Royal Captain Bonus - 5 direct partners, 10 global team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=3,
                 direct_partners_required=5,
-                global_team_required=20,
+                global_team_required=50,
                 bonus_amount=200.0,
-                bonus_description="Third tier bonus - 5 direct partners, 20 global team"
+                currency='USDT',
+                bonus_description="Royal Captain Bonus - 5 direct partners, 50 global team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=4,
                 direct_partners_required=5,
-                global_team_required=30,
-                bonus_amount=250.0,
-                bonus_description="Fourth tier bonus - 5 direct partners, 30 global team"
+                global_team_required=100,
+                bonus_amount=200.0,
+                currency='USDT',
+                bonus_description="Royal Captain Bonus - 5 direct partners, 100 global team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=5,
                 direct_partners_required=5,
-                global_team_required=40,
+                global_team_required=200,
                 bonus_amount=250.0,
-                bonus_description="Fifth tier bonus - 5 direct partners, 40 global team"
+                currency='USDT',
+                bonus_description="Royal Captain Bonus - 5 direct partners, 200 global team"
+            ),
+            RoyalCaptainBonus(
+                bonus_tier=6,
+                direct_partners_required=5,
+                global_team_required=300,
+                bonus_amount=250.0,
+                currency='USDT',
+                bonus_description="Royal Captain Bonus - 5 direct partners, 300 global team"
             )
         ]
     
@@ -455,38 +519,24 @@ class RoyalCaptainService:
             }
     
     def _check_direct_partners(self, user_id: str) -> Dict[str, Any]:
-        """Check direct partners with both packages"""
+        """Check direct partners with both packages using referral link (fast path)"""
         try:
-            # Get direct partners
-            direct_partners = TreePlacement.objects(
-                parent_id=ObjectId(user_id),
-                is_active=True
-            ).all()
-            
+            # Fetch direct partners by referral relationship
+            direct_users = User.objects(refered_by=ObjectId(user_id))
             partners_with_both_packages = 0
             partners_list = []
-            
-            for partner in direct_partners:
-                partner_id = partner.user_id
-                partners_list.append(partner_id)
-                
-                # Check if partner has both packages
-                package_status = self._check_package_requirements(str(partner_id))
-                if package_status["both_active"]:
+            for u in direct_users:
+                partners_list.append(u.id)
+                pkg = self._check_package_requirements(str(u.id))
+                if pkg["both_active"]:
                     partners_with_both_packages += 1
-            
             return {
-                "total_partners": len(direct_partners),
+                "total_partners": len(direct_users),
                 "partners_with_both_packages": partners_with_both_packages,
                 "partners_list": partners_list
             }
-            
         except Exception:
-            return {
-                "total_partners": 0,
-                "partners_with_both_packages": 0,
-                "partners_list": []
-            }
+            return {"total_partners": 0, "partners_with_both_packages": 0, "partners_list": []}
     
     def _check_global_team(self, user_id: str) -> Dict[str, Any]:
         """Check global team size"""

@@ -101,27 +101,29 @@ class PresidentRewardService:
             president_reward.global_team_size = team_status["total_team"]
             president_reward.global_team_members = team_status["team_list"]
             
-            # Determine eligibility
+            # Determine eligibility (documentation): 10 direct partners + 400 global team
             eligibility.is_eligible_for_president_reward = (
-                eligibility.direct_partners_both_count >= 30
-            )
-            
-            # Check tier qualifications
-            eligibility.qualified_for_tier_1 = (
                 eligibility.direct_partners_both_count >= 10 and
-                eligibility.global_team_count >= 80
-            )
-            eligibility.qualified_for_tier_6 = (
-                eligibility.direct_partners_both_count >= 15 and
                 eligibility.global_team_count >= 400
             )
+
+            # Check tier qualifications from configured tiers
+            tier_requirements = {t.tier_number: (t.direct_partners_required, t.global_team_required) for t in president_reward.tiers}
+            eligibility.qualified_for_tier_1 = (
+                eligibility.direct_partners_both_count >= tier_requirements.get(1, (0, 0))[0] and
+                eligibility.global_team_count >= tier_requirements.get(1, (0, 0))[1]
+            )
+            eligibility.qualified_for_tier_6 = (
+                eligibility.direct_partners_both_count >= tier_requirements.get(6, (0, 0))[0] and
+                eligibility.global_team_count >= tier_requirements.get(6, (0, 0))[1]
+            )
             eligibility.qualified_for_tier_10 = (
-                eligibility.direct_partners_both_count >= 20 and
-                eligibility.global_team_count >= 1000
+                eligibility.direct_partners_both_count >= tier_requirements.get(10, (0, 0))[0] and
+                eligibility.global_team_count >= tier_requirements.get(10, (0, 0))[1]
             )
             eligibility.qualified_for_tier_15 = (
-                eligibility.direct_partners_both_count >= 30 and
-                eligibility.global_team_count >= 40000
+                eligibility.direct_partners_both_count >= tier_requirements.get(15, (0, 0))[0] and
+                eligibility.global_team_count >= tier_requirements.get(15, (0, 0))[1]
             )
             
             # Update eligibility reasons
@@ -199,7 +201,7 @@ class PresidentRewardService:
                             president_reward_id=president_reward.id,
                             tier_number=tier.tier_number,
                             reward_amount=tier.reward_amount,
-                            currency="USD",
+                            currency=getattr(tier, 'currency', 'USDT'),
                             direct_partners_at_payment=president_reward.direct_partners_both,
                             global_team_at_payment=president_reward.global_team_size,
                             payment_status="pending"
@@ -398,83 +400,44 @@ class PresidentRewardService:
             return {"success": False, "error": str(e)}
     
     def _initialize_president_reward_tiers(self) -> List[PresidentRewardTier]:
-        """Initialize President Reward tiers based on PROJECT_DOCUMENTATION.md"""
+        """Initialize President Reward tiers per PROJECT_DOCUMENTATION.md (USDT)."""
         return [
-            # Tier 1-5: $500-$700
-            PresidentRewardTier(tier_number=1, direct_partners_required=10, global_team_required=80, reward_amount=500.0, tier_description="Tier 1: 10 direct partners, 80 global team"),
-            PresidentRewardTier(tier_number=2, direct_partners_required=10, global_team_required=150, reward_amount=700.0, tier_description="Tier 2: 10 direct partners, 150 global team"),
-            PresidentRewardTier(tier_number=3, direct_partners_required=10, global_team_required=200, reward_amount=700.0, tier_description="Tier 3: 10 direct partners, 200 global team"),
-            PresidentRewardTier(tier_number=4, direct_partners_required=10, global_team_required=250, reward_amount=700.0, tier_description="Tier 4: 10 direct partners, 250 global team"),
-            PresidentRewardTier(tier_number=5, direct_partners_required=10, global_team_required=300, reward_amount=700.0, tier_description="Tier 5: 10 direct partners, 300 global team"),
-            
-            # Tier 6-9: $800
-            PresidentRewardTier(tier_number=6, direct_partners_required=15, global_team_required=400, reward_amount=800.0, tier_description="Tier 6: 15 direct partners, 400 global team"),
-            PresidentRewardTier(tier_number=7, direct_partners_required=15, global_team_required=500, reward_amount=800.0, tier_description="Tier 7: 15 direct partners, 500 global team"),
-            PresidentRewardTier(tier_number=8, direct_partners_required=15, global_team_required=600, reward_amount=800.0, tier_description="Tier 8: 15 direct partners, 600 global team"),
-            PresidentRewardTier(tier_number=9, direct_partners_required=15, global_team_required=700, reward_amount=800.0, tier_description="Tier 9: 15 direct partners, 700 global team"),
-            
-            # Tier 10-14: $1500
-            PresidentRewardTier(tier_number=10, direct_partners_required=20, global_team_required=1000, reward_amount=1500.0, tier_description="Tier 10: 20 direct partners, 1000 global team"),
-            PresidentRewardTier(tier_number=11, direct_partners_required=20, global_team_required=1500, reward_amount=1500.0, tier_description="Tier 11: 20 direct partners, 1500 global team"),
-            PresidentRewardTier(tier_number=12, direct_partners_required=20, global_team_required=2000, reward_amount=1500.0, tier_description="Tier 12: 20 direct partners, 2000 global team"),
-            PresidentRewardTier(tier_number=13, direct_partners_required=20, global_team_required=2500, reward_amount=1500.0, tier_description="Tier 13: 20 direct partners, 2500 global team"),
-            PresidentRewardTier(tier_number=14, direct_partners_required=20, global_team_required=3000, reward_amount=2000.0, tier_description="Tier 14: 20 direct partners, 3000 global team"),
-            
-            # Tier 15: $3000
-            PresidentRewardTier(tier_number=15, direct_partners_required=30, global_team_required=40000, reward_amount=3000.0, tier_description="Tier 15: 30 direct partners, 40000 global team")
+            # 10 directs tier set
+            PresidentRewardTier(tier_number=1, direct_partners_required=10, global_team_required=400, reward_amount=500.0, currency='USDT', tier_description="Tier 1: 10 directs, 400 team"),
+            PresidentRewardTier(tier_number=2, direct_partners_required=10, global_team_required=600, reward_amount=700.0, currency='USDT', tier_description="Tier 2: 10 directs, 600 team"),
+            PresidentRewardTier(tier_number=3, direct_partners_required=10, global_team_required=800, reward_amount=700.0, currency='USDT', tier_description="Tier 3: 10 directs, 800 team"),
+            PresidentRewardTier(tier_number=4, direct_partners_required=10, global_team_required=1000, reward_amount=700.0, currency='USDT', tier_description="Tier 4: 10 directs, 1000 team"),
+            PresidentRewardTier(tier_number=5, direct_partners_required=10, global_team_required=1200, reward_amount=700.0, currency='USDT', tier_description="Tier 5: 10 directs, 1200 team"),
+            # 15 directs tier set
+            PresidentRewardTier(tier_number=6, direct_partners_required=15, global_team_required=1500, reward_amount=800.0, currency='USDT', tier_description="Tier 6: 15 directs, 1500 team"),
+            PresidentRewardTier(tier_number=7, direct_partners_required=15, global_team_required=1800, reward_amount=800.0, currency='USDT', tier_description="Tier 7: 15 directs, 1800 team"),
+            PresidentRewardTier(tier_number=8, direct_partners_required=15, global_team_required=2100, reward_amount=800.0, currency='USDT', tier_description="Tier 8: 15 directs, 2100 team"),
+            PresidentRewardTier(tier_number=9, direct_partners_required=15, global_team_required=2400, reward_amount=800.0, currency='USDT', tier_description="Tier 9: 15 directs, 2400 team"),
+            # 20 directs tier set
+            PresidentRewardTier(tier_number=10, direct_partners_required=20, global_team_required=2700, reward_amount=1500.0, currency='USDT', tier_description="Tier 10: 20 directs, 2700 team"),
+            PresidentRewardTier(tier_number=11, direct_partners_required=20, global_team_required=3000, reward_amount=1500.0, currency='USDT', tier_description="Tier 11: 20 directs, 3000 team"),
+            PresidentRewardTier(tier_number=12, direct_partners_required=20, global_team_required=3500, reward_amount=2000.0, currency='USDT', tier_description="Tier 12: 20 directs, 3500 team"),
+            PresidentRewardTier(tier_number=13, direct_partners_required=20, global_team_required=4000, reward_amount=2500.0, currency='USDT', tier_description="Tier 13: 20 directs, 4000 team"),
+            PresidentRewardTier(tier_number=14, direct_partners_required=20, global_team_required=5000, reward_amount=2500.0, currency='USDT', tier_description="Tier 14: 20 directs, 5000 team"),
+            # 25 directs
+            PresidentRewardTier(tier_number=15, direct_partners_required=25, global_team_required=6000, reward_amount=5000.0, currency='USDT', tier_description="Tier 15: 25 directs, 6000 team"),
         ]
     
     def _check_direct_partners(self, user_id: str) -> Dict[str, int]:
-        """Check direct partners for Matrix and Global programs"""
+        """Fast direct partner check using referral link; relies on joined flags."""
         try:
-            # Get direct partners from tree
-            direct_partners = TreePlacement.objects(
-                parent_id=ObjectId(user_id),
-                is_active=True
-            ).all()
-            
-            matrix_partners = 0
-            global_partners = 0
-            both_partners = 0
-            
-            for partner in direct_partners:
-                partner_id = partner.user_id
-                
-                # Check Matrix package
-                matrix_activations = SlotActivation.objects(
-                    user_id=partner_id,
-                    program="matrix",
-                    status="completed"
-                ).count()
-                
-                # Check Global package
-                global_activations = SlotActivation.objects(
-                    user_id=partner_id,
-                    program="global",
-                    status="completed"
-                ).count()
-                
-                if matrix_activations > 0:
-                    matrix_partners += 1
-                if global_activations > 0:
-                    global_partners += 1
-                if matrix_activations > 0 and global_activations > 0:
-                    both_partners += 1
-            
+            directs = User.objects(refered_by=ObjectId(user_id))
+            matrix_partners = sum(1 for u in directs if getattr(u, 'matrix_joined', False))
+            global_partners = sum(1 for u in directs if getattr(u, 'global_joined', False))
+            both_partners = sum(1 for u in directs if getattr(u, 'matrix_joined', False) and getattr(u, 'global_joined', False))
             return {
                 "matrix_partners": matrix_partners,
                 "global_partners": global_partners,
                 "both_partners": both_partners,
-                "total_partners": len(direct_partners)
+                "total_partners": directs.count()
             }
-            
         except Exception:
-            return {
-                "matrix_partners": 0,
-                "global_partners": 0,
-                "both_partners": 0,
-                "total_partners": 0
-            }
+            return {"matrix_partners": 0, "global_partners": 0, "both_partners": 0, "total_partners": 0}
     
     def _check_global_team(self, user_id: str) -> Dict[str, Any]:
         """Check global team size"""

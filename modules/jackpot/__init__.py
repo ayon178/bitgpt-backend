@@ -1,1 +1,1 @@
-from .model import JackpotTicket, JackpotFund
+# Jackpot module for 4-Part Distribution System

@@ -43,7 +43,7 @@ from modules.income import IncomeEvent, SpilloverEvent
 from modules.leadership_stipend.model import LeadershipStipend
 from modules.income.bonus_fund import BonusFund, FundDistribution
 from modules.wallet import UserWallet, ReserveLedger, WalletLedger
-from modules.jackpot import JackpotTicket, JackpotFund
+from modules.jackpot.model import JackpotDistribution, JackpotUserEntry, JackpotFreeCoupon, JackpotFund
 from modules.spark import SparkCycle, TripleEntryReward
 # TODO: Re-enable GlobalPhaseState import when models are implemented in modules/global/model.py
 from modules.qualification import Qualification

@@ -1,553 +1,701 @@
-from typing import Optional, Dict, Any
-from bson import ObjectId
-from datetime import datetime
-import random
+from datetime import datetime, timedelta
 from decimal import Decimal
-from .model import JackpotTicket, JackpotFund
+from bson import ObjectId
+import random
+import uuid
+from typing import Dict, List, Any, Optional
+
 from modules.user.model import User
-from modules.wallet.service import WalletService
-
-
-def current_week_id() -> str:
-    now = datetime.utcnow()
-    return f"{now.isocalendar().year}-{now.isocalendar().week:02d}"
-
+from modules.income.model import IncomeEvent
+from modules.wallet.model import UserWallet
+from modules.jackpot.model import (
+    JackpotDistribution, JackpotUserEntry, JackpotFreeCoupon, 
+    JackpotFund, JackpotEntry, JackpotWinner
+)
 
 class JackpotService:
-    """Handles jackpot entries and free coupon awards."""
-
-    @staticmethod
-    def process_paid_entry(user_id: str, amount: float, currency: str = "USDT") -> Dict[str, Any]:
-        """Process paid Jackpot entry with $5 USDT payment and fund distribution"""
+    """Service for managing Jackpot 4-Part Distribution System"""
+    
+    def __init__(self):
+        self.entry_fee = Decimal('0.0025')  # 0.0025 BNB per entry
+        self.binary_contribution_percentage = Decimal('0.05')  # 5% from binary slot activations
+        
+        # Pool distribution percentages
+        self.open_pool_percentage = Decimal('0.50')  # 50%
+        self.top_promoters_pool_percentage = Decimal('0.30')  # 30%
+        self.top_buyers_pool_percentage = Decimal('0.10')  # 10%
+        self.new_joiners_pool_percentage = Decimal('0.10')  # 10%
+        
+        # Winner counts
+        self.open_pool_winners_count = 10
+        self.top_promoters_winners_count = 20
+        self.top_buyers_winners_count = 20
+        self.new_joiners_winners_count = 10
+        
+        # Free coupons mapping for binary slots
+        self.free_coupons_mapping = {
+            5: 1, 6: 2, 7: 3, 8: 4, 9: 5, 10: 6, 11: 7, 12: 8,
+            13: 9, 14: 10, 15: 11, 16: 12, 17: 13
+        }
+    
+    def _get_current_week_dates(self) -> tuple:
+        """Get current week start and end dates (Sunday to Sunday)"""
+        today = datetime.utcnow()
+        # Get the start of the week (Sunday)
+        days_since_sunday = today.weekday() + 1  # Monday is 0, so Sunday is 6
+        if days_since_sunday == 7:  # If today is Sunday
+            days_since_sunday = 0
+        
+        week_start = today - timedelta(days=days_since_sunday)
+        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        
+        return week_start, week_end
+    
+    def _get_or_create_user_entry(self, user_id: str, week_start: datetime, week_end: datetime) -> JackpotUserEntry:
+        """Get or create user entry record for the week"""
+        user_entry = JackpotUserEntry.objects(
+            user_id=ObjectId(user_id),
+            week_start_date=week_start,
+            week_end_date=week_end
+        ).first()
+        
+        if not user_entry:
+            user_entry = JackpotUserEntry(
+                user_id=ObjectId(user_id),
+                week_start_date=week_start,
+                week_end_date=week_end,
+                paid_entries_count=0,
+                free_entries_count=0,
+                total_entries_count=0,
+                direct_referrals_entries_count=0,
+                entries=[],
+                free_coupons_earned=0,
+                free_coupons_used=0,
+                binary_contributions=Decimal('0.0')
+            )
+            user_entry.save()
+        
+        return user_entry
+    
+    def _get_or_create_jackpot_fund(self, week_start: datetime, week_end: datetime) -> JackpotFund:
+        """Get or create jackpot fund for the week"""
+        fund = JackpotFund.objects(
+            week_start_date=week_start,
+            week_end_date=week_end
+        ).first()
+        
+        if not fund:
+            fund_id = f"JACKPOT_FUND_{week_start.strftime('%Y%m%d')}_{week_end.strftime('%Y%m%d')}"
+            fund = JackpotFund(
+                fund_id=fund_id,
+                week_start_date=week_start,
+                week_end_date=week_end,
+                entry_fees_total=Decimal('0.0'),
+                binary_contributions_total=Decimal('0.0'),
+                rollover_from_previous=Decimal('0.0'),
+                total_fund=Decimal('0.0'),
+                open_pool_allocation=Decimal('0.0'),
+                top_promoters_pool_allocation=Decimal('0.0'),
+                top_buyers_pool_allocation=Decimal('0.0'),
+                new_joiners_pool_allocation=Decimal('0.0'),
+                status='accumulating'
+            )
+            fund.save()
+        
+        return fund
+    
+    def process_jackpot_entry(self, user_id: str, entry_count: int = 1, tx_hash: str = None) -> Dict[str, Any]:
+        """Process jackpot entry for a user"""
         try:
-            # Get user and referrer info
-            user = User.objects(id=ObjectId(user_id)).first()
-            if not user:
-                return {"success": False, "error": "User not found"}
+            week_start, week_end = self._get_current_week_dates()
             
-            referrer_user_id = str(user.refered_by) if user.refered_by else None
-            if not referrer_user_id:
-                return {"success": False, "error": "Referrer not found for jackpot entry"}
+            # Get or create user entry record
+            user_entry = self._get_or_create_user_entry(user_id, week_start, week_end)
             
-            # Deduct amount from wallet
-            wallet_service = WalletService()
-            deduction_result = wallet_service.debit_main_wallet(
-                user_id=user_id,
-                amount=Decimal(str(amount)),
-                currency=currency,
-                reason="jackpot_entry",
-                tx_hash=f"jackpot_entry_{user_id}_{datetime.utcnow().timestamp()}"
-            )
+            # Calculate total cost
+            total_cost = self.entry_fee * entry_count
             
-            if not deduction_result["success"]:
-                return {"success": False, "error": f"Wallet deduction failed: {deduction_result['error']}"}
-            
-            # Create Jackpot ticket
-            ticket_result = JackpotService.create_entry(
-                user_id=user_id,
-                source="paid",
-                referrer_user_id=referrer_user_id
-            )
-            
-            if not ticket_result["success"]:
-                # Refund the wallet deduction if ticket creation fails
-                wallet_service.credit_main_wallet(
-                    user_id=user_id,
-                    amount=Decimal(str(amount)),
-                    currency=currency,
-                    reason="jackpot_entry_refund",
-                    tx_hash=f"jackpot_refund_{user_id}_{datetime.utcnow().timestamp()}"
+            # Create entry records
+            new_entries = []
+            for i in range(entry_count):
+                entry_id = f"ENTRY_{user_id}_{int(datetime.utcnow().timestamp() * 1000)}_{i}"
+                entry = JackpotEntry(
+                    entry_id=entry_id,
+                    entry_type='paid',
+                    entry_fee=self.entry_fee,
+                    tx_hash=tx_hash or f"JACKPOT_TX_{entry_id}",
+                    created_at=datetime.utcnow()
                 )
-                return {"success": False, "error": f"Ticket creation failed: {ticket_result['error']}"}
+                new_entries.append(entry)
             
-            # Update Jackpot fund with proper distribution
-            fund_result = JackpotService.update_jackpot_fund(amount, currency)
+            # Update user entry record
+            user_entry.entries.extend(new_entries)
+            user_entry.paid_entries_count += entry_count
+            user_entry.total_entries_count += entry_count
+            user_entry.updated_at = datetime.utcnow()
+            user_entry.save()
             
-            if not fund_result["success"]:
-                return {"success": False, "error": f"Fund update failed: {fund_result['error']}"}
+            # Update jackpot fund
+            fund = self._get_or_create_jackpot_fund(week_start, week_end)
+            fund.entry_fees_total += total_cost
+            fund.total_fund += total_cost
+            fund.updated_at = datetime.utcnow()
+            fund.save()
+            
+            # Update user's direct referrals entries count
+            self._update_direct_referrals_entries_count(user_id, week_start, week_end, entry_count)
             
             return {
                 "success": True,
-                "data": {
-                    "ticket_id": ticket_result["ticket_id"],
-                    "amount_paid": amount,
-                    "currency": currency,
-                    "week_id": current_week_id(),
-                    "fund_distribution": fund_result["data"]["distribution"],
-                    "transaction_id": f"jackpot_entry_{user_id}_{datetime.utcnow().timestamp()}"
-                }
+                "entry_count": entry_count,
+                "total_cost": total_cost,
+                "week_start": week_start,
+                "week_end": week_end,
+                "user_total_entries": user_entry.total_entries_count,
+                "fund_total": fund.total_fund
             }
             
         except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def update_jackpot_fund(amount: float, currency: str = "USDT") -> Dict[str, Any]:
-        """Update Jackpot fund with proper distribution according to documentation"""
+            return {
+                "success": False,
+                "error": f"Jackpot entry processing failed: {str(e)}"
+            }
+    
+    def process_free_coupon_entry(self, user_id: str, slot_number: int, tx_hash: str = None) -> Dict[str, Any]:
+        """Process free coupon entry from binary slot upgrade"""
         try:
-            week_id = current_week_id()
+            if slot_number not in self.free_coupons_mapping:
+                return {
+                    "success": False,
+                    "error": f"Slot {slot_number} does not qualify for free coupons"
+                }
             
-            # Get or create JackpotFund for current week
-            fund = JackpotFund.objects(week_id=week_id).first()
-            if not fund:
-                fund = JackpotFund(
-                    week_id=week_id,
-                    total_pool=Decimal('0'),
-                    open_winners_pool=Decimal('0'),
-                    seller_pool=Decimal('0'),
-                    buyer_pool=Decimal('0'),
-                    newcomer_pool=Decimal('0'),
-                    winners={'open': [], 'top_sellers': [], 'top_buyers': [], 'newcomers': []}
+            week_start, week_end = self._get_current_week_dates()
+            coupons_earned = self.free_coupons_mapping[slot_number]
+            
+            # Get or create user entry record
+            user_entry = self._get_or_create_user_entry(user_id, week_start, week_end)
+            
+            # Create free coupon record
+            free_coupon = JackpotFreeCoupon(
+                user_id=ObjectId(user_id),
+                slot_number=slot_number,
+                coupons_earned=coupons_earned,
+                coupons_used=0,
+                week_start_date=week_start,
+                week_end_date=week_end,
+                earned_at=datetime.utcnow()
+            )
+            free_coupon.save()
+            
+            # Create free entry records
+            new_entries = []
+            for i in range(coupons_earned):
+                entry_id = f"FREE_ENTRY_{user_id}_{slot_number}_{int(datetime.utcnow().timestamp() * 1000)}_{i}"
+                entry = JackpotEntry(
+                    entry_id=entry_id,
+                    entry_type='free',
+                    entry_fee=Decimal('0.0'),
+                    tx_hash=tx_hash or f"FREE_COUPON_TX_{entry_id}",
+                    created_at=datetime.utcnow()
                 )
+                new_entries.append(entry)
             
-            # Fund distribution according to documentation:
-            # 50% Open Pool, 30% Top Direct Promoters, 10% Top Buyers, 10% System
-            open_pool_amount = Decimal(str(amount * 0.50))      # 50%
-            seller_pool_amount = Decimal(str(amount * 0.30))     # 30% 
-            buyer_pool_amount = Decimal(str(amount * 0.10))      # 10%
-            newcomer_pool_amount = Decimal(str(amount * 0.10))   # 10% (system/admin)
+            # Update user entry record
+            user_entry.entries.extend(new_entries)
+            user_entry.free_entries_count += coupons_earned
+            user_entry.total_entries_count += coupons_earned
+            user_entry.free_coupons_earned += coupons_earned
+            user_entry.updated_at = datetime.utcnow()
+            user_entry.save()
             
-            # Update fund amounts
-            fund.total_pool += Decimal(str(amount))
-            fund.open_winners_pool += open_pool_amount
-            fund.seller_pool += seller_pool_amount
-            fund.buyer_pool += buyer_pool_amount
-            fund.newcomer_pool += newcomer_pool_amount
+            return {
+                "success": True,
+                "slot_number": slot_number,
+                "coupons_earned": coupons_earned,
+                "week_start": week_start,
+                "week_end": week_end,
+                "user_total_entries": user_entry.total_entries_count
+            }
             
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Free coupon processing failed: {str(e)}"
+            }
+    
+    def process_binary_contribution(self, user_id: str, slot_fee: Decimal, tx_hash: str = None) -> Dict[str, Any]:
+        """Process binary slot activation contribution to jackpot fund"""
+        try:
+            week_start, week_end = self._get_current_week_dates()
+            contribution_amount = slot_fee * self.binary_contribution_percentage
+            
+            # Get or create user entry record
+            user_entry = self._get_or_create_user_entry(user_id, week_start, week_end)
+            user_entry.binary_contributions += contribution_amount
+            user_entry.updated_at = datetime.utcnow()
+            user_entry.save()
+            
+            # Update jackpot fund
+            fund = self._get_or_create_jackpot_fund(week_start, week_end)
+            fund.binary_contributions_total += contribution_amount
+            fund.total_fund += contribution_amount
+            fund.updated_at = datetime.utcnow()
             fund.save()
             
             return {
                 "success": True,
-                "data": {
-                    "week_id": week_id,
-                    "total_pool": float(fund.total_pool),
-                    "distribution": {
-                        "open_pool": float(fund.open_winners_pool),
-                        "seller_pool": float(fund.seller_pool),
-                        "buyer_pool": float(fund.buyer_pool),
-                        "newcomer_pool": float(fund.newcomer_pool)
-                    }
-                }
+                "slot_fee": slot_fee,
+                "contribution_amount": contribution_amount,
+                "contribution_percentage": self.binary_contribution_percentage,
+                "week_start": week_start,
+                "week_end": week_end,
+                "fund_total": fund.total_fund
             }
             
         except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def create_entry(user_id: str, source: str, referrer_user_id: Optional[str] = None, free_source_slot: Optional[int] = None) -> Dict[str, Any]:
-        try:
-            # Resolve referrer if not provided
-            if not referrer_user_id:
-                user = User.objects(id=ObjectId(user_id)).first()
-                if user and user.refered_by:
-                    referrer_user_id = str(user.refered_by)
-                else:
-                    return {"success": False, "error": "Referrer not found for jackpot entry"}
-
-            ticket = JackpotTicket(
-                user_id=ObjectId(user_id),
-                referrer_user_id=ObjectId(referrer_user_id),
-                week_id=current_week_id(),
-                source=source,
-                free_source_slot=free_source_slot,
-                status='active'
-            )
-            ticket.save()
-            return {"success": True, "ticket_id": str(ticket.id)}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def award_free_coupon_for_binary_slot(user_id: str, slot_no: int) -> None:
-        """Award free jackpot coupons based on binary slot upgrades.
-        Per docs: Slot 5 => 1, Slot 6 => 2, ... up to Slot 16 (progressive). Here we implement:
-        - Slot 5: 1 entry, Slot 6: 2 entries, and from 7..16: (slot_no - 4) entries.
-        """
-        if slot_no < 5:
-            return
-        entries = max(1, slot_no - 4)
-        user = User.objects(id=ObjectId(user_id)).first()
-        referrer = str(user.refered_by) if user and user.refered_by else None
-        for _ in range(entries):
-            JackpotService.create_entry(user_id=user_id, source='free', referrer_user_id=referrer, free_source_slot=slot_no)
-
-    @staticmethod
-    def process_reward_claim(user_id: str, pool_type: str, amount: float, currency: str = "USDT") -> Dict[str, Any]:
-        """Process Jackpot reward claim and update user wallet"""
-        try:
-            # Validate user exists
-            user = User.objects(id=ObjectId(user_id)).first()
-            if not user:
-                return {"success": False, "error": "User not found"}
-            
-            # Validate pool type
-            valid_pools = ["open_pool", "top_direct_promoters", "top_buyers_pool", "new_joiners_pool"]
-            if pool_type not in valid_pools:
-                return {"success": False, "error": f"Invalid pool type. Must be one of: {valid_pools}"}
-            
-            # Add reward to user's wallet
-            wallet_service = WalletService()
-            credit_result = wallet_service.credit_main_wallet(
-                user_id=user_id,
-                amount=Decimal(str(amount)),
-                currency=currency,
-                reason=f"jackpot_{pool_type}_reward",
-                tx_hash=f"jackpot_claim_{user_id}_{pool_type}_{datetime.utcnow().timestamp()}"
-            )
-            
-            if not credit_result["success"]:
-                return {"success": False, "error": f"Wallet credit failed: {credit_result['error']}"}
-            
-            # Log the reward claim (optional - you can create a JackpotRewardClaim model if needed)
-            # For now, we'll just return success
-            
             return {
-                "success": True,
-                "data": {
+                "success": False,
+                "error": f"Binary contribution processing failed: {str(e)}"
+            }
+    
+    def _update_direct_referrals_entries_count(self, user_id: str, week_start: datetime, week_end: datetime, entry_count: int):
+        """Update direct referrals entries count for promoters pool"""
+        try:
+            # Find the user's direct upline
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user or not user.refered_by:
+                return
+            
+            upline_id = user.refered_by
+            upline_entry = self._get_or_create_user_entry(upline_id, week_start, week_end)
+            upline_entry.direct_referrals_entries_count += entry_count
+            upline_entry.updated_at = datetime.utcnow()
+            upline_entry.save()
+                
+        except Exception as e:
+            print(f"Error updating direct referrals entries count: {e}")
+    
+    def get_user_jackpot_status(self, user_id: str) -> Dict[str, Any]:
+        """Get user's jackpot status for current week"""
+        try:
+            week_start, week_end = self._get_current_week_dates()
+            
+            user_entry = JackpotUserEntry.objects(
+                user_id=ObjectId(user_id),
+                week_start_date=week_start,
+                week_end_date=week_end
+            ).first()
+            
+            if not user_entry:
+                return {
+                    "success": True,
                     "user_id": user_id,
-                    "pool_type": pool_type,
-                    "amount_claimed": amount,
-                    "currency": currency,
-                    "new_wallet_balance": credit_result["balance"],
-                    "transaction_id": f"jackpot_claim_{user_id}_{pool_type}_{datetime.utcnow().timestamp()}",
-                    "claimed_at": datetime.utcnow().isoformat()
+                    "week_start": week_start,
+                    "week_end": week_end,
+                    "paid_entries_count": 0,
+                    "free_entries_count": 0,
+                    "total_entries_count": 0,
+                    "direct_referrals_entries_count": 0,
+                    "free_coupons_earned": 0,
+                    "free_coupons_used": 0,
+                    "binary_contributions": Decimal('0.0')
                 }
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "week_start": week_start,
+                "week_end": week_end,
+                "paid_entries_count": user_entry.paid_entries_count,
+                "free_entries_count": user_entry.free_entries_count,
+                "total_entries_count": user_entry.total_entries_count,
+                "direct_referrals_entries_count": user_entry.direct_referrals_entries_count,
+                "free_coupons_earned": user_entry.free_coupons_earned,
+                "free_coupons_used": user_entry.free_coupons_used,
+                "binary_contributions": user_entry.binary_contributions
             }
             
         except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def get_jackpot_history(user_id: str, history_type: str, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Jackpot history (entry or claim) for a user"""
+            return {
+                "success": False,
+                "error": f"Failed to get user jackpot status: {str(e)}"
+            }
+    
+    def get_jackpot_fund_status(self) -> Dict[str, Any]:
+        """Get current jackpot fund status"""
         try:
-            # Validate history type
-            if history_type not in ["entry", "claim"]:
-                return {"success": False, "error": "Invalid history type. Must be 'entry' or 'claim'"}
+            week_start, week_end = self._get_current_week_dates()
             
-            if history_type == "entry":
-                return JackpotService.get_entry_history(user_id, page, limit)
-            else:
-                return JackpotService.get_claim_history(user_id, page, limit)
+            fund = JackpotFund.objects(
+                week_start_date=week_start,
+                week_end_date=week_end
+            ).first()
+            
+            if not fund:
+                return {
+                    "success": True,
+                    "week_start": week_start,
+                    "week_end": week_end,
+                    "total_fund": Decimal('0.0'),
+                    "entry_fees_total": Decimal('0.0'),
+                    "binary_contributions_total": Decimal('0.0'),
+                    "rollover_from_previous": Decimal('0.0'),
+                    "open_pool_allocation": Decimal('0.0'),
+                    "top_promoters_pool_allocation": Decimal('0.0'),
+                    "top_buyers_pool_allocation": Decimal('0.0'),
+                    "new_joiners_pool_allocation": Decimal('0.0'),
+                    "status": "accumulating"
+                }
+            
+            return {
+                "success": True,
+                "week_start": week_start,
+                "week_end": week_end,
+                "total_fund": fund.total_fund,
+                "entry_fees_total": fund.entry_fees_total,
+                "binary_contributions_total": fund.binary_contributions_total,
+                "rollover_from_previous": fund.rollover_from_previous,
+                "open_pool_allocation": fund.open_pool_allocation,
+                "top_promoters_pool_allocation": fund.top_promoters_pool_allocation,
+                "top_buyers_pool_allocation": fund.top_buyers_pool_allocation,
+                "new_joiners_pool_allocation": fund.new_joiners_pool_allocation,
+                "status": fund.status
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get jackpot fund status: {str(e)}"
+            }
+    
+    def process_weekly_distribution(self) -> Dict[str, Any]:
+        """Process weekly jackpot distribution (4-part system)"""
+        try:
+            # Get previous week's dates
+            week_start, week_end = self._get_current_week_dates()
+            previous_week_start = week_start - timedelta(days=7)
+            previous_week_end = week_end - timedelta(days=7)
+            
+            # Get jackpot fund for previous week
+            fund = JackpotFund.objects(
+                week_start_date=previous_week_start,
+                week_end_date=previous_week_end
+            ).first()
+            
+            if not fund or fund.total_fund <= 0:
+                return {
+                    "success": False,
+                    "error": "No jackpot fund found for distribution"
+                }
+            
+            # Calculate pool allocations
+            open_pool_amount = fund.total_fund * self.open_pool_percentage
+            top_promoters_pool_amount = fund.total_fund * self.top_promoters_pool_percentage
+            top_buyers_pool_amount = fund.total_fund * self.top_buyers_pool_percentage
+            new_joiners_pool_amount = fund.total_fund * self.new_joiners_pool_percentage
+            
+            # Update fund allocations
+            fund.open_pool_allocation = open_pool_amount
+            fund.top_promoters_pool_allocation = top_promoters_pool_amount
+            fund.top_buyers_pool_allocation = top_buyers_pool_amount
+            fund.new_joiners_pool_allocation = new_joiners_pool_amount
+            fund.status = 'ready_for_distribution'
+            fund.save()
+            
+            # Create distribution record
+            distribution_id = f"JACKPOT_DIST_{previous_week_start.strftime('%Y%m%d')}_{previous_week_end.strftime('%Y%m%d')}"
+            distribution = JackpotDistribution(
+                distribution_id=distribution_id,
+                week_start_date=previous_week_start,
+                week_end_date=previous_week_end,
+                total_fund=fund.total_fund,
+                total_entries=0,  # Will be calculated
+                open_pool_amount=open_pool_amount,
+                top_promoters_pool_amount=top_promoters_pool_amount,
+                top_buyers_pool_amount=top_buyers_pool_amount,
+                new_joiners_pool_amount=new_joiners_pool_amount,
+                winners=[],
+                status='pending'
+            )
+            
+            # Process each pool
+            winners = []
+            
+            # 1. Open Pool (50%) - 10 random winners
+            open_pool_winners = self._select_open_pool_winners(previous_week_start, previous_week_end, open_pool_amount)
+            winners.extend(open_pool_winners)
+            
+            # 2. Top Direct Promoters Pool (30%) - 20 top promoters
+            promoters_winners = self._select_top_promoters_winners(previous_week_start, previous_week_end, top_promoters_pool_amount)
+            winners.extend(promoters_winners)
+            
+            # 3. Top Buyers Pool (10%) - 20 top buyers
+            buyers_winners = self._select_top_buyers_winners(previous_week_start, previous_week_end, top_buyers_pool_amount)
+            winners.extend(buyers_winners)
+            
+            # 4. New Joiners Pool (10%) - 10 random new joiners
+            new_joiners_winners = self._select_new_joiners_winners(previous_week_start, previous_week_end, new_joiners_pool_amount)
+            winners.extend(new_joiners_winners)
+            
+            # Update distribution with winners
+            distribution.winners = winners
+            distribution.total_entries = len(winners)
+            distribution.status = 'completed'
+            distribution.distribution_date = datetime.utcnow()
+            distribution.save()
+            
+            # Distribute winnings to users
+            self._distribute_winnings(winners)
+            
+            return {
+                "success": True,
+                "distribution_id": distribution_id,
+                "total_fund": fund.total_fund,
+                "open_pool_amount": open_pool_amount,
+                "top_promoters_pool_amount": top_promoters_pool_amount,
+                "top_buyers_pool_amount": top_buyers_pool_amount,
+                "new_joiners_pool_amount": new_joiners_pool_amount,
+                "total_winners": len(winners),
+                "winners": winners
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Weekly distribution processing failed: {str(e)}"
+            }
+    
+    def _select_open_pool_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal) -> List[Dict]:
+        """Select 10 random winners for open pool"""
+        try:
+            # Get all users with entries in the week
+            user_entries = JackpotUserEntry.objects(
+                week_start_date=week_start,
+                week_end_date=week_end,
+                total_entries_count__gt=0
+            )
+            
+            if not user_entries:
+                return []
+            
+            # Create weighted list based on entry count
+            weighted_users = []
+            for entry in user_entries:
+                for _ in range(entry.total_entries_count):
+                    weighted_users.append(entry.user_id)
+            
+            if len(weighted_users) == 0:
+                return []
+            
+            # Select 10 random winners
+            winners = []
+            winner_amount = pool_amount / self.open_pool_winners_count
+            
+            selected_users = random.sample(weighted_users, min(self.open_pool_winners_count, len(weighted_users)))
+            
+            for i, user_id in enumerate(selected_users):
+                # Count entries for this user
+                user_entry = JackpotUserEntry.objects(
+                    user_id=user_id,
+                    week_start_date=week_start,
+                    week_end_date=week_end
+                ).first()
+                
+                entries_count = user_entry.total_entries_count if user_entry else 0
+                
+                winner = JackpotWinner(
+                    user_id=user_id,
+                    pool_type='open_pool',
+                    rank=i + 1,
+                    amount_won=winner_amount,
+                    entries_count=entries_count
+                )
+                winners.append(winner)
+            
+            return winners
+            
+        except Exception as e:
+            print(f"Error selecting open pool winners: {e}")
+            return []
+    
+    def _select_top_promoters_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal) -> List[Dict]:
+        """Select 20 top promoters based on direct referrals entries"""
+        try:
+            # Get users with direct referrals entries, sorted by count
+            user_entries = JackpotUserEntry.objects(
+                week_start_date=week_start,
+                week_end_date=week_end,
+                direct_referrals_entries_count__gt=0
+            ).order_by('-direct_referrals_entries_count')
+            
+            if not user_entries:
+                return []
+            
+            winners = []
+            winner_amount = pool_amount / self.top_promoters_winners_count
+            
+            # Select top 20 promoters
+            selected_entries = user_entries[:self.top_promoters_winners_count]
+            
+            for i, entry in enumerate(selected_entries):
+                winner = JackpotWinner(
+                    user_id=entry.user_id,
+                    pool_type='top_promoters',
+                    rank=i + 1,
+                    amount_won=winner_amount,
+                    entries_count=entry.total_entries_count,
+                    direct_referrals_count=entry.direct_referrals_entries_count
+                )
+                winners.append(winner)
+            
+            return winners
+            
+        except Exception as e:
+            print(f"Error selecting top promoters winners: {e}")
+            return []
+    
+    def _select_top_buyers_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal) -> List[Dict]:
+        """Select 20 top buyers based on individual entries"""
+        try:
+            # Get users with entries, sorted by total entries count
+            user_entries = JackpotUserEntry.objects(
+                week_start_date=week_start,
+                week_end_date=week_end,
+                total_entries_count__gt=0
+            ).order_by('-total_entries_count')
+            
+            if not user_entries:
+                return []
+            
+            winners = []
+            winner_amount = pool_amount / self.top_buyers_winners_count
+            
+            # Select top 20 buyers
+            selected_entries = user_entries[:self.top_buyers_winners_count]
+            
+            for i, entry in enumerate(selected_entries):
+                winner = JackpotWinner(
+                    user_id=entry.user_id,
+                    pool_type='top_buyers',
+                    rank=i + 1,
+                    amount_won=winner_amount,
+                    entries_count=entry.total_entries_count
+                )
+                winners.append(winner)
+            
+            return winners
+            
+        except Exception as e:
+            print(f"Error selecting top buyers winners: {e}")
+            return []
+    
+    def _select_new_joiners_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal) -> List[Dict]:
+        """Select 10 random new joiners from last 7 days"""
+        try:
+            # Get users who joined Binary in the last 7 days
+            new_joiners = User.objects(
+                binary_joined=True,
+                binary_joined_at__gte=week_start - timedelta(days=7),
+                binary_joined_at__lte=week_end
+            )
+            
+            if not new_joiners:
+                return []
+            
+            # Convert to list and select 10 random winners
+            new_joiners_list = list(new_joiners)
+            winners = []
+            winner_amount = pool_amount / self.new_joiners_winners_count
+            
+            selected_users = random.sample(new_joiners_list, min(self.new_joiners_winners_count, len(new_joiners_list)))
+            
+            for i, user in enumerate(selected_users):
+                winner = JackpotWinner(
+                    user_id=user.id,
+                    pool_type='new_joiners',
+                    rank=i + 1,
+                    amount_won=winner_amount,
+                    entries_count=0,  # New joiners don't need entries
+                    is_new_joiner=True
+                )
+                winners.append(winner)
+            
+            return winners
+            
+        except Exception as e:
+            print(f"Error selecting new joiners winners: {e}")
+            return []
+    
+    def _distribute_winnings(self, winners: List[Dict]):
+        """Distribute winnings to users' wallets"""
+        try:
+            for winner in winners:
+                # Create income event
+                income_event = IncomeEvent(
+                    user_id=winner.user_id,
+                    source_user_id=winner.user_id,
+                    program='jackpot',
+                    slot_no=0,
+                    income_type='jackpot',
+                    amount=winner.amount_won,
+                    percentage=Decimal('100.0'),
+                    tx_hash=f"JACKPOT_WIN_{winner.user_id}_{int(datetime.utcnow().timestamp())}",
+                    status='completed',
+                    description=f"Jackpot {winner.pool_type} winner - Rank {winner.rank}",
+                    created_at=datetime.utcnow()
+                )
+                income_event.save()
+                
+                # Update user wallet
+                wallet = UserWallet.objects(user_id=winner.user_id, wallet_type='main').first()
+                if not wallet:
+                    wallet = UserWallet(
+                        user_id=winner.user_id,
+                        wallet_type='main',
+                        balance=Decimal('0.0'),
+                        currency='BNB'
+                    )
+                
+                wallet.balance += winner.amount_won
+                wallet.last_updated = datetime.utcnow()
+                wallet.save()
                 
         except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def get_entry_history(user_id: str, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Jackpot entry history for a user"""
+            print(f"Error distributing winnings: {e}")
+    
+    def get_distribution_history(self, limit: int = 10) -> Dict[str, Any]:
+        """Get jackpot distribution history"""
         try:
-            # Get user's Jackpot tickets (entries)
-            tickets = JackpotTicket.objects(user_id=ObjectId(user_id)).order_by('-created_at')
-            total_entries = tickets.count()
+            distributions = JackpotDistribution.objects().order_by('-created_at').limit(limit)
             
-            # Pagination
-            page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 10)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_tickets = tickets[start:end]
-            
-            # Format entry data exactly like the image
-            items = []
-            for i, ticket in enumerate(page_tickets):
-                # Format date exactly like image (DDMON,YYYY (HH:MM))
-                created_date = ticket.created_at.strftime("%d%b,%Y")
-                created_time = ticket.created_at.strftime("(%H:%M)")
-                time_date = f"{created_date} {created_time}"
-                
-                # Determine entry price based on source
-                if ticket.source == "paid":
-                    entry_price = "5 $"  # $5 for paid entries
-                else:
-                    entry_price = "0 $"  # Free entries
-                
-                items.append({
-                    "entry_no": start + i + 1,  # Sequential entry number
-                    "entry_price": entry_price,
-                    "time_date": time_date,
-                    "source": ticket.source,
-                    "week_id": ticket.week_id,
-                    "created_at": ticket.created_at.isoformat()
+            history = []
+            for dist in distributions:
+                history.append({
+                    "distribution_id": dist.distribution_id,
+                    "week_start": dist.week_start_date,
+                    "week_end": dist.week_end_date,
+                    "total_fund": dist.total_fund,
+                    "open_pool_amount": dist.open_pool_amount,
+                    "top_promoters_pool_amount": dist.top_promoters_pool_amount,
+                    "top_buyers_pool_amount": dist.top_buyers_pool_amount,
+                    "new_joiners_pool_amount": dist.new_joiners_pool_amount,
+                    "total_winners": len(dist.winners),
+                    "status": dist.status,
+                    "distribution_date": dist.distribution_date,
+                    "created_at": dist.created_at
                 })
             
             return {
                 "success": True,
-                "data": {
-                    "history_type": "entry",
-                    "page": page,
-                    "limit": limit,
-                    "total": total_entries,
-                    "items": items
-                }
+                "distributions": history,
+                "total_count": len(history)
             }
             
         except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def get_claim_history(user_id: str, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Jackpot claim history for a user from WalletLedger"""
-        try:
-            from modules.wallet.model import WalletLedger
-            
-            # Get user's Jackpot reward claims from WalletLedger
-            claims = WalletLedger.objects(
-                user_id=ObjectId(user_id),
-                reason__regex="^jackpot_.*_reward$"
-            ).order_by('-created_at')
-            
-            total_claims = claims.count()
-            
-            # Pagination
-            page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 10)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_claims = claims[start:end]
-            
-            # Format claim data exactly like the image
-            items = []
-            for i, claim in enumerate(page_claims):
-                # Format date exactly like image (DDMON,YYYY (HH:MM))
-                created_date = claim.created_at.strftime("%d%b,%Y")
-                created_time = claim.created_at.strftime("(%H:%M)")
-                time_date = f"{created_date} {created_time}"
-                
-                # Map reason to pool type name
-                pool_type_mapping = {
-                    "jackpot_open_pool_reward": "OPEN POOL",
-                    "jackpot_top_direct_promoters_reward": "TOP DIRECT PROMOTERS",
-                    "jackpot_top_buyers_pool_reward": "TOP BUYERS POOL",
-                    "jackpot_new_joiners_pool_reward": "New Joiners Pool"
-                }
-                
-                pool_type = pool_type_mapping.get(claim.reason, "UNKNOWN POOL")
-                win_price = f"{float(claim.amount)} $"
-                
-                items.append({
-                    "type": pool_type,
-                    "win_price": win_price,
-                    "time_date": time_date,
-                    "amount": float(claim.amount),
-                    "currency": claim.currency,
-                    "tx_hash": claim.tx_hash,
-                    "created_at": claim.created_at.isoformat()
-                })
-            
             return {
-                "success": True,
-                "data": {
-                    "history_type": "claim",
-                    "page": page,
-                    "limit": limit,
-                    "total": total_claims,
-                    "items": items
-                }
+                "success": False,
+                "error": f"Failed to get distribution history: {str(e)}"
             }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def get_pools_total(currency: str = "USDT") -> Dict[str, Any]:
-        try:
-            # Get all JackpotFund records for the given currency
-            funds = JackpotFund.objects().order_by('-created_at')
-            
-            # Initialize totals for all pools
-            total_open_pool = Decimal('0')
-            total_seller_pool = Decimal('0') 
-            total_buyer_pool = Decimal('0')
-            total_newcomer_pool = Decimal('0')
-            total_overall = Decimal('0')
-            
-            # Sum up all funds from all weeks
-            for fund in funds:
-                total_open_pool += fund.open_winners_pool
-                total_seller_pool += fund.seller_pool
-                total_buyer_pool += fund.buyer_pool
-                total_newcomer_pool += fund.newcomer_pool
-                total_overall += fund.total_pool
-            
-            return {
-                "success": True,
-                "data": {
-                    "currency": currency.upper(),
-                    "pools": {
-                        "open_pool": {
-                            "percentage": 50,
-                            "name": "50% OPEN POOL",
-                            "total_amount": float(total_open_pool)
-                        },
-                        "top_direct_promoters": {
-                            "percentage": 30,
-                            "name": "30% TOP DIRECT PROMOTERS",
-                            "total_amount": float(total_seller_pool)
-                        },
-                        "top_buyers_pool": {
-                            "percentage": 10,
-                            "name": "10% TOP BUYERS POOL", 
-                            "total_amount": float(total_buyer_pool)
-                        },
-                        "new_joiners_pool": {
-                            "percentage": 10,
-                            "name": "10% New Joiners Pool",
-                            "total_amount": float(total_newcomer_pool)
-                        }
-                    },
-                    "total_overall": float(total_overall),
-                    "last_updated": datetime.utcnow().isoformat()
-                }
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def compute_top_sellers(week_id: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
-        """Compute top sellers for a given week: referrers whose referred users bought the most tickets.
-        We count tickets grouped by referrer_user_id among PAID tickets in the week.
-        """
-        try:
-            wid = week_id or current_week_id()
-            pipeline = [
-                {"$match": {"week_id": wid, "source": "paid"}},
-                {"$group": {"_id": "$referrer_user_id", "ticket_count": {"$sum": 1}}},
-                {"$sort": {"ticket_count": -1}},
-                {"$limit": int(limit)}
-            ]
-            # Using MongoEngine's aggregate via underlying collection
-            coll = JackpotTicket._get_collection()
-            result = list(coll.aggregate(pipeline))
-            # Persist into JackpotFund.winners.top_sellers
-            fund = JackpotFund.objects(week_id=wid).first()
-            if not fund:
-                fund = JackpotFund(
-                    week_id=wid,
-                    total_pool=Decimal('0'),
-                    open_winners_pool=Decimal('0'),
-                    seller_pool=Decimal('0'),
-                    buyer_pool=Decimal('0'),
-                    newcomer_pool=Decimal('0'),
-                    winners={'open': [], 'top_sellers': [], 'top_buyers': [], 'newcomers': []}
-                )
-            fund.winners['top_sellers'] = [
-                {"referrer_user_id": str(item.get("_id")), "tickets": int(item.get("ticket_count", 0))}
-                for item in result
-            ]
-            fund.save()
-            return {"success": True, "week_id": wid, "top_sellers": fund.winners['top_sellers']}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def compute_top_buyers_all_time(limit: int = 10) -> Dict[str, Any]:
-        """Compute all-time top buyers: users with most total tickets (paid + free)."""
-        try:
-            pipeline = [
-                {"$group": {"_id": "$user_id", "ticket_count": {"$sum": 1}}},
-                {"$sort": {"ticket_count": -1}},
-                {"$limit": int(limit)}
-            ]
-            coll = JackpotTicket._get_collection()
-            result = list(coll.aggregate(pipeline))
-            top_buyers = [
-                {"user_id": str(item.get("_id")), "tickets": int(item.get("ticket_count", 0))}
-                for item in result
-            ]
-            # Optionally store a snapshot in SystemConfig or a dedicated stats collection; return for now
-            return {"success": True, "top_buyers": top_buyers}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def compute_top_buyers(week_id: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
-        """Compute top buyers either for a given week (if week_id provided) or all-time otherwise."""
-        try:
-            match_stage = {}
-            if week_id:
-                match_stage["week_id"] = week_id
-            pipeline = []
-            if match_stage:
-                pipeline.append({"$match": match_stage})
-            pipeline.extend([
-                {"$group": {"_id": "$user_id", "ticket_count": {"$sum": 1}}},
-                {"$sort": {"ticket_count": -1}},
-                {"$limit": int(limit)}
-            ])
-            coll = JackpotTicket._get_collection()
-            result = list(coll.aggregate(pipeline))
-            top_buyers = [
-                {"user_id": str(item.get("_id")), "tickets": int(item.get("ticket_count", 0))}
-                for item in result
-            ]
-            return {"success": True, "week_id": week_id, "top_buyers": top_buyers}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    @staticmethod
-    def pick_newcomers_for_week(week_id: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
-        """Pick random newcomers for the week (users who first joined that week and have a jackpot entry).
-        Definition: Users whose account creation date falls within the week, and they have at least one JackpotTicket in that same week.
-        """
-        try:
-            wid = week_id or current_week_id()
-            # Compute week boundaries (UTC Monday..Sunday per ISO week)
-            now = datetime.utcnow()
-            year, week, _ = now.isocalendar()
-            if week_id:
-                parts = week_id.split('-')
-                if len(parts) == 2:
-                    year = int(parts[0])
-                    week = int(parts[1])
-            # First day of ISO week
-            # Find Monday of the given ISO week
-            # Build a date from year-week-1 (Monday)
-            from datetime import date, timedelta
-            d = date.fromisocalendar(year, week, 1)
-            week_start = datetime(d.year, d.month, d.day)
-            week_end = week_start + timedelta(days=7)
-
-            # Users created within the week
-            user_coll = User._get_collection()
-            new_users = list(user_coll.find({
-                "created_at": {"$gte": week_start, "$lt": week_end}
-            }, {"_id": 1}))
-            new_user_ids = {u["_id"] for u in new_users}
-
-            if not new_user_ids:
-                return {"success": True, "week_id": wid, "newcomers": []}
-
-            # Those who also have at least one ticket in the same week
-            ticket_coll = JackpotTicket._get_collection()
-            cursor = ticket_coll.aggregate([
-                {"$match": {"week_id": wid, "user_id": {"$in": list(new_user_ids)}}},
-                {"$group": {"_id": "$user_id"}}
-            ])
-            eligible = [str(doc["_id"]) for doc in cursor]
-
-            # Randomly pick up to limit users
-            if not eligible:
-                return {"success": True, "week_id": wid, "newcomers": []}
-            winners = random.sample(eligible, k=min(limit, len(eligible)))
-
-            # Persist in JackpotFund
-            fund = JackpotFund.objects(week_id=wid).first()
-            if not fund:
-                fund = JackpotFund(
-                    week_id=wid,
-                    total_pool=Decimal('0'),
-                    open_winners_pool=Decimal('0'),
-                    seller_pool=Decimal('0'),
-                    buyer_pool=Decimal('0'),
-                    newcomer_pool=Decimal('0'),
-                    winners={'open': [], 'top_sellers': [], 'top_buyers': [], 'newcomers': []}
-                )
-            fund.winners['newcomers'] = winners
-            fund.save()
-            return {"success": True, "week_id": wid, "newcomers": winners}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-
