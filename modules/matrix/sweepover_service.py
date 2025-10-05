@@ -336,18 +336,17 @@ class SweepoverService:
             
             if catalog:
                 activation = MatrixActivation(
-                    user_id=ObjectId(user_id),
-                    program='matrix',
-                    slot_no=slot_no,
-                    slot_name=catalog.name,
-                    activation_type='join',
-                    upgrade_source='sweepover',
-                    amount_paid=amount,
-                    currency='USDT',
-                    tx_hash=tx_hash,
-                    is_auto_upgrade=False,
-                    status='completed'
-                )
+                        user_id=ObjectId(user_id),
+                        slot_no=slot_no,
+                        slot_name=catalog.name,
+                        activation_type='upgrade' if slot_no > 1 else 'initial',
+                        upgrade_source='manual',
+                        amount_paid=amount,
+                        currency='USDT',
+                        tx_hash=tx_hash,
+                        is_auto_upgrade=False,
+                        status='completed'
+                    )
                 activation.save()
                 
         except Exception as e:
@@ -424,7 +423,7 @@ class SweepoverService:
                 source_user_id=ObjectId(source_user_id),
                 program='matrix',
                 slot_no=slot_no,
-                income_type=income_type,
+                income_type='level_payout',
                 amount=amount,
                 percentage=Decimal('100.0'),
                 tx_hash=f"SWEEPOVER-{source_user_id}-S{slot_no}",
@@ -442,21 +441,18 @@ class SweepoverService:
         This income goes to Leadership Stipend for distribution to eligible members.
         """
         try:
-            # Calculate missed income (would have been 20% for Level 1)
+            # Calculate missed income (would have been 20% for Level 1). Route to leadership stipend pool
             missed_amount = amount * Decimal('0.20')
-            
-            # Create missed income record
             IncomeEvent(
-                user_id=ObjectId("000000000000000000000000"),  # System/Missed income
+                user_id=ObjectId("000000000000000000000000"),  # system pool
                 source_user_id=ObjectId(direct_upline_id),
                 program='matrix',
                 slot_no=slot_no,
-                income_type='missed_income',
+                income_type='leadership_stipend',
                 amount=missed_amount,
                 percentage=Decimal('20.0'),
                 tx_hash=f"MISSED-{direct_upline_id}-S{slot_no}",
-                status='missed',
-                notes=f"Missed income due to sweepover to {eligible_upline_id}"
+                status='pending'
             ).save()
             
             print(f"Logged missed income: {missed_amount} for upline {direct_upline_id} on slot {slot_no}")

@@ -1200,28 +1200,56 @@ class MatrixService:
     # ==================== AUTO UPGRADE SYSTEM METHODS ====================
     
     def detect_middle_three_members(self, user_id: str, slot_no: int):
-        """Detect the middle 3 members at each level for auto upgrade."""
+        """Detect the middle 3 members robustly by deriving Level-2 middle indices from Level-1 parents.
+        Level-1 has positions [0,1,2]. Each L1 parent has three children at Level-2 with indices [p*3 + 0, p*3 + 1, p*3 + 2].
+        The middle child under each L1 is index (p*3 + 1). We compute this from existing nodes rather than assuming order.
+        """
         try:
             matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
             if not matrix_tree:
                 return {"success": False, "error": "Matrix tree not found"}
-            
-            # Get Level 2 nodes (positions 1, 4, 7 are middle 3)
+
+            # Find existing Level-1 parents (positions 0..2)
+            level1_positions_present = sorted({n.position for n in matrix_tree.nodes if n.level == 1})
+            # Derive expected middle indexes for Level-2 under each present L1 position
+            expected_middle_indexes = [(p * 3) + 1 for p in level1_positions_present if p in (0, 1, 2)]
+
             level_2_nodes = [node for node in matrix_tree.nodes if node.level == 2]
-            
-            # Middle 3 positions in Level 2: 1, 4, 7 (one under each Level 1 member)
-            middle_three_positions = [1, 4, 7]
             middle_three_members = []
-            
-            for node in level_2_nodes:
-                if node.position in middle_three_positions:
+            for idx in expected_middle_indexes:
+                match = next((n for n in level_2_nodes if n.position == idx and n.user_id), None)
+                if match:
                     middle_three_members.append({
-                        "user_id": str(node.user_id),
-                        "level": node.level,
-                        "position": node.position,
-                        "placed_at": node.placed_at
+                        "user_id": str(match.user_id),
+                        "level": match.level,
+                        "position": match.position,
+                        "placed_at": getattr(match, 'placed_at', None)
                     })
-            
+
+            # Fallback: if Level-2 nodes aren't persisted on the parent tree, derive middle children via L1 child trees
+            if len(middle_three_members) < 3:
+                l1_nodes = [n for n in matrix_tree.nodes if n.level == 1 and n.position in (0, 1, 2)]
+                l1_nodes_sorted = sorted(l1_nodes, key=lambda n: n.position)
+                derived = []
+                for l1 in l1_nodes_sorted:
+                    child_tree = MatrixTree.objects(user_id=l1.user_id).first()
+                    if not child_tree:
+                        continue
+                    middle_child = next((cn for cn in getattr(child_tree, 'nodes', []) if getattr(cn, 'level', 0) == 1 and getattr(cn, 'position', -1) == 1), None)
+                    if middle_child and getattr(middle_child, 'user_id', None):
+                        mapped_position = (l1.position * 3) + 1
+                        derived.append({
+                            "user_id": str(middle_child.user_id),
+                            "level": 2,
+                            "position": mapped_position,
+                            "placed_at": getattr(middle_child, 'placed_at', None)
+                        })
+                existing_positions = {m["position"] for m in middle_three_members}
+                for d in derived:
+                    if d["position"] not in existing_positions:
+                        middle_three_members.append(d)
+                        existing_positions.add(d["position"])
+
             return {
                 "success": True,
                 "middle_three_members": middle_three_members,

@@ -81,7 +81,7 @@ class BinaryService:
                 slot_no=slot_no,
                 slot_name=catalog.name,
                 activation_type='upgrade',
-                upgrade_source='manual',
+                upgrade_source='wallet',
                 amount_paid=amount,
                 currency=currency,
                 tx_hash=tx_hash,
@@ -138,7 +138,7 @@ class BinaryService:
             # 8. Record earning history
             earning_history = EarningHistory(
                 user_id=ObjectId(user_id),
-                earning_type='binary_slot_upgrade',
+                earning_type='binary_slot',
                 program='binary',
                 amount=float(amount),
                 currency=currency,
@@ -151,7 +151,7 @@ class BinaryService:
             # 9. Record blockchain event
             blockchain_event = BlockchainEvent(
                 tx_hash=tx_hash,
-                event_type='slot_upgraded',
+                event_type='upgrade_triggered',
                 event_data={
                     'program': 'binary',
                     'slot_no': slot_no,
