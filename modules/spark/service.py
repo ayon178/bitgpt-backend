@@ -74,17 +74,14 @@ class SparkService:
 
     # ------------------ Fund Info & Slot Breakdown ------------------
     def get_spark_bonus_fund_info(self) -> Dict[str, Any]:
-        """Return a best-effort snapshot of Spark Bonus fund.
-        Since a dedicated fund ledger isn't persisted yet, we infer from the latest
-        SparkBonusDistribution record's total_fund_amount field when available.
-        Fallback to 0 if none exists.
-        Values are expressed in USDT.
+        """Return Spark Bonus fund totals.
+        For stability, read from env `SPARK_POOL_TOTAL_USDT` (default 1000) instead of
+        inferring from distribution history. Values are in USDT.
         """
         try:
-            latest = SparkBonusDistribution.objects().order_by('-distributed_at', '-created_at').first()
-            total = float(getattr(latest, 'total_fund_amount', 0.0) or 0.0)
-            # Treat entire amount as available for display; real implementation should
-            # subtract distributed/locked portions from a persistent Spark fund.
+            import os
+            total_env = os.getenv('SPARK_POOL_TOTAL_USDT', '1000')
+            total = float(total_env) if total_env else 1000.0
             return {
                 "success": True,
                 "currency": "USDT",
@@ -168,14 +165,33 @@ class SparkService:
             d = Decimal(str(val))
             return float((d / rate).quantize(Decimal('0.00000001')))
 
-        # Build a unified slots array with both currencies per slot
+        # Build a unified slots array with both currencies per slot, adjusted by claim ledger
         slots_combined: List[Dict[str, Any]] = []
+        # Fetch per-slot deductions
+        try:
+            from modules.spark.model import SparkSlotClaimLedger as _SSCL
+            from datetime import datetime as _DT
+            day_start = _DT.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            ledgers = list(_SSCL.objects(created_at__gte=day_start))
+        except Exception:
+            ledgers = []
+        def deducted(slot_no: int, curr: str, base: float) -> float:
+            try:
+                from decimal import Decimal as _D
+                total = _D('0')
+                for l in ledgers:
+                    if int(getattr(l, 'slot_number', 0)) == int(slot_no) and str(getattr(l, 'currency','')).upper() == curr:
+                        total += _D(str(getattr(l, 'amount', 0) or 0))
+                val = _D(str(base)) - total
+                return float(max(_D('0'), val))
+            except Exception:
+                return base
         for s in slots_usdt:
             slots_combined.append({
                 "slot_number": s["slot_number"],
                 "percentage": s["percentage"],
-                "allocated_amount_usdt": s["allocated_amount"],
-                "allocated_amount_bnb": usdt_to_bnb(s["allocated_amount"]),
+                "allocated_amount_usdt": deducted(s["slot_number"], 'USDT', s["allocated_amount"]),
+                "allocated_amount_bnb": deducted(s["slot_number"], 'BNB', usdt_to_bnb(s["allocated_amount"])) ,
                 "user_eligible": s.get("user_eligible"),
             })
 
@@ -210,6 +226,125 @@ class SparkService:
             "total_allocated": funds.get((currency or "USDT").upper(), {}).get("total_allocated"),
             "unallocated": funds.get((currency or "USDT").upper(), {}).get("unallocated"),
         }
+
+    # ------------------ Claim Processing ------------------
+    def get_slot_eligible_user_ids(self, slot_no: int) -> List[str]:
+        """Return user ids eligible for Spark Bonus for a given Matrix slot.
+        Eligibility = any of:
+          - SlotActivation(program='matrix', slot_no, status='completed')
+          - MatrixActivation(slot_no)
+        """
+        try:
+            from modules.slot.model import SlotActivation
+            from modules.matrix.model import MatrixActivation as _MA
+            from bson import ObjectId
+            ids1 = [str(a.user_id) for a in SlotActivation.objects(program='matrix', slot_no=slot_no, status='completed').only('user_id')]
+            ids2 = [str(a.user_id) for a in _MA.objects(slot_no=slot_no).only('user_id')]
+            return sorted(list(set(ids1 + ids2)))
+        except Exception:
+            return []
+
+    def claim_spark_bonus(self, slot_no: int, currency: str = 'USDT', claimer_user_id: str | None = None) -> Dict[str, Any]:
+        """Distribute the allocated fund for a slot equally among eligible users and credit wallets.
+        - currency: 'USDT' or 'BNB'
+        - uses current slot breakdown to get allocated amount per slot
+        """
+        try:
+            currency = (currency or 'USDT').upper()
+            if currency not in ('USDT', 'BNB'):
+                return {"success": False, "error": "Invalid currency"}
+
+            # Get allocated amount for this slot (exact, not per-day fraction)
+            br = self.get_slot_breakdown('USDT')  # baseline in USDT
+            slots = br.get('slots', [])
+            alloc_usdt = 0.0
+            for s in slots:
+                if int(s.get('slot_number')) == int(slot_no):
+                    alloc_usdt = float(s.get('allocated_amount_usdt') or 0.0)
+                    break
+            if alloc_usdt <= 0:
+                return {"success": False, "error": "No allocated fund for this slot"}
+
+            # Get eligible users
+            user_ids = self.get_slot_eligible_user_ids(slot_no)
+            if not user_ids:
+                return {"success": False, "error": "No eligible users for this slot"}
+
+            # If claimer is provided, enforce they are eligible
+            if claimer_user_id and claimer_user_id not in user_ids:
+                return {"success": False, "error": "Claimer is not eligible for this slot"}
+
+            # Idempotency: prevent duplicate claim for this claimer+slot+currency per day
+            try:
+                from datetime import datetime as _DT
+                from modules.spark.model import SparkBonusDistribution as _SBD
+                if claimer_user_id:
+                    day_start = _DT.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+                    dup = _SBD.objects(user_id=ObjectId(claimer_user_id), slot_number=slot_no, currency=currency, created_at__gte=day_start).first()
+                    if dup:
+                        return {"success": False, "error": "Already claimed for this slot today"}
+            except Exception:
+                pass
+
+            from decimal import Decimal as _D
+            # Full slot allocation divided by the number of eligible users
+            per_user_usdt = (_D(str(alloc_usdt)) / _D(str(len(user_ids)))).quantize(_D('0.00000001'))
+
+            # Convert if needed
+            import os
+            rate = _D(os.getenv('SPARK_USDT_PER_BNB', '300') or '300')
+            if rate <= 0:
+                rate = _D('300')
+            if currency == 'BNB':
+                per_user_amount = (per_user_usdt / rate).quantize(_D('0.00000001'))
+            else:
+                per_user_amount = per_user_usdt
+
+            # Credit wallets and record distribution history
+            from modules.wallet.service import WalletService
+            from modules.spark.model import SparkBonusDistribution, SparkSlotClaimLedger
+            ws = WalletService()
+            credited = []
+            for uid in user_ids:
+                r = ws.credit_main_wallet(uid, per_user_amount, currency, 'spark_bonus_distribution', f'SPARK-{slot_no}-{currency}')
+                # Save history
+                try:
+                    SparkBonusDistribution(
+                        user_id=ObjectId(uid),
+                        slot_number=int(slot_no),
+                        distribution_amount=per_user_amount,
+                        currency=currency,
+                        fund_source='spark_bonus',
+                        distribution_percentage=self._slot_percentage(slot_no),
+                        total_fund_amount=_D(str(alloc_usdt)),
+                        matrix_slot_name='',
+                        matrix_slot_level=int(slot_no),
+                        status='completed',
+                        distributed_at=_DT.utcnow(),
+                        wallet_credit_tx_hash=f'SPARK-{slot_no}-{currency}',
+                        wallet_credit_status='completed',
+                    ).save()
+                except Exception:
+                    pass
+                credited.append({"user_id": uid, "amount": float(per_user_amount), "currency": currency, "result": r})
+
+            # Write one ledger row reducing the visible allocated amount for this slot
+            try:
+                SparkSlotClaimLedger(slot_number=int(slot_no), currency=currency, amount=per_user_amount * len(user_ids)).save()
+            except Exception:
+                pass
+
+            return {
+                "success": True,
+                "slot_no": slot_no,
+                "currency": currency,
+                "eligible_users": len(user_ids),
+                "per_user_amount": float(per_user_amount),
+                "total_distributed": float(per_user_amount) * len(user_ids),
+                "details": credited,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     @staticmethod
     def _slot_percentage(slot_no: int) -> Decimal:

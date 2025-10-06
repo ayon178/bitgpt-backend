@@ -72,3 +72,21 @@ class SparkBonusDistribution(Document):
             'created_at'
         ]
     }
+
+
+class SparkSlotClaimLedger(Document):
+    """Track per-slot claim deductions to adjust allocated amounts in the UI.
+    This does NOT change the total Spark fund summary; it only reduces the
+    slot's displayed allocated_amount for the current cycle/day.
+    """
+    slot_number = IntField(required=True)
+    currency = StringField(choices=['USDT', 'BNB'], required=True)
+    amount = DecimalField(required=True, precision=8)
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    meta = {
+        'collection': 'spark_slot_claim_ledger',
+        'indexes': [
+            ('slot_number', 'currency', 'created_at')
+        ]
+    }

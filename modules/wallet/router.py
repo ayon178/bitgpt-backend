@@ -8,6 +8,7 @@ from .service import WalletService
 from ..newcomer_support.service import NewcomerSupportService
 from ..mentorship.service import MentorshipService
 from ..spark.service import SparkService
+from ..spark.model import SparkBonusDistribution
 
 router = APIRouter(prefix="/wallet", tags=["Wallet"])
 
@@ -324,6 +325,30 @@ async def get_spark_bonus_overview(
         raise
     except Exception as e:
         return error_response(str(e))
+
+
+@router.post("/income/spark-bonus/claim")
+async def claim_spark_bonus(
+    user_id: str = Query(..., description="User who is claiming"),
+    slot_number: int = Query(..., ge=1, le=14, description="Matrix slot number 1-14"),
+    currency: str = Query("USDT", description="USDT or BNB")
+):
+    """Claim Spark Bonus for a slot: splits allocated fund equally among eligible users and credits wallets.
+    No auth required here for testing; protect in prod.
+    """
+    try:
+        svc = SparkService()
+        data = svc.claim_spark_bonus(slot_number, currency, claimer_user_id=user_id)
+        if not data.get("success"):
+            raise HTTPException(status_code=400, detail=data.get("error", "Claim failed"))
+        return success_response(data, "Spark Bonus claim processed")
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+    # Removed: moved to /spark/bonus/history route
 
 
 @router.get("/income/leadership-stipend")

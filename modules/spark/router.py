@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from datetime import datetime
 from auth.service import authentication_service
 from .service import SparkService
 from pydantic import BaseModel
 from decimal import Decimal
+from .model import SparkBonusDistribution
+from bson import ObjectId
+from datetime import datetime, timedelta
 
 
 router = APIRouter(prefix="/spark", tags=["Spark / Triple Entry Reward"])
@@ -30,6 +33,61 @@ async def triple_entry_eligibles(
 class SparkDistributeRequest(BaseModel):
     cycle_no: int
     slot_no: int
+
+
+@router.get("/bonus/history")
+async def get_spark_bonus_history(
+    user_id: str = Query(..., description="User ID"),
+    currency: str | None = Query(None, description="Filter by currency (USDT or BNB)"),
+    slot_number: int | None = Query(None, ge=1, le=14, description="Filter by matrix slot 1-14"),
+    start_date: str | None = Query(None, description="YYYY-MM-DD inclusive"),
+    end_date: str | None = Query(None, description="YYYY-MM-DD inclusive"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100)
+):
+    try:
+        q = SparkBonusDistribution.objects(user_id=ObjectId(user_id))
+        if currency:
+            q = q.filter(currency=currency.upper())
+        if slot_number:
+            q = q.filter(slot_number=int(slot_number))
+        if start_date:
+            sd = datetime.strptime(start_date, "%Y-%m-%d")
+            q = q.filter(created_at__gte=sd)
+        if end_date:
+            ed = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+            q = q.filter(created_at__lt=ed)
+
+        total = q.count()
+        items = q.order_by('-created_at').skip((page - 1) * limit).limit(limit)
+
+        data = []
+        for it in items:
+            data.append({
+                "id": str(it.id),
+                "slot_number": it.slot_number,
+                "amount": float(it.distribution_amount or 0),
+                "currency": it.currency,
+                "status": it.status,
+                "distributed_at": it.distributed_at,
+                "created_at": it.created_at,
+                "wallet_credit_tx_hash": it.wallet_credit_tx_hash,
+            })
+
+        return {
+            "success": True,
+            "data": {
+                "claims": data,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "total_pages": (total + limit - 1) // limit,
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     total_spark_pool: float
     participant_user_ids: list[str]
 
