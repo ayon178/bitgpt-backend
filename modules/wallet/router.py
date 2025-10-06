@@ -304,3 +304,32 @@ async def get_global_partner_incentive(
         return error_response(str(e))
 
 
+@router.get("/miss-profit/{user_id}")
+async def get_user_miss_profit_history(
+    user_id: str,
+    currency: str = Query("USDT", description="Currency type (USDT, BNB)"),
+    page: int = Query(1, description="Page number"),
+    limit: int = Query(50, description="Items per page"),
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Get user's miss profit history with currency filtering"""
+    try:
+        requester_id = _extract_requester_id(current_user)
+        requester_role = current_user.get("role") if isinstance(current_user, dict) else None
+        if requester_id and requester_id != user_id and requester_role != "admin":
+            raise HTTPException(status_code=403, detail="Unauthorized to view this user's miss profit history")
+
+        service = WalletService()
+        result = service.get_user_miss_profit_history(user_id, currency, page, limit)
+
+        if result["success"]:
+            return success_response(result["data"], "User miss profit history fetched successfully")
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+

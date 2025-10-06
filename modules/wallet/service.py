@@ -1061,3 +1061,96 @@ class WalletService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+    def get_user_miss_profit_history(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """Get user's miss profit history with currency filtering"""
+        try:
+            from ..missed_profit.model import MissedProfit
+            from ..user.model import User
+            
+            # Validate currency
+            currency = currency.upper()
+            if currency not in ['USDT', 'BNB']:
+                return {"success": False, "error": "Invalid currency. Must be USDT or BNB"}
+            
+            # Get missed profit entries for the user with currency filter
+            missed_profits = MissedProfit.objects(
+                user_id=ObjectId(user_id),
+                currency=currency,
+                is_active=True
+            ).order_by('-created_at')
+            
+            total_entries = missed_profits.count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 50)))
+            start = (page - 1) * limit
+            end = start + limit
+            page_entries = missed_profits[start:end]
+            
+            # Pre-fetch all users to optimize performance
+            user_ids = set()
+            for entry in page_entries:
+                user_ids.add(entry.user_id)
+                if hasattr(entry, 'upline_user_id') and entry.upline_user_id:
+                    user_ids.add(entry.upline_user_id)
+            
+            # Batch fetch all users
+            users = {str(u.id): u for u in User.objects(id__in=list(user_ids)).only('id', 'uid')}
+            
+            # Format data for frontend (matching the screenshot structure)
+            items = []
+            for i, entry in enumerate(page_entries):
+                # Format date exactly like image (DD Mon YYYY (HH:MM))
+                created_date = entry.created_at.strftime("%d %b %Y")
+                created_time = entry.created_at.strftime("(%H:%M)")
+                time_date = f"{created_date} {created_time}"
+                
+                # Get user info from pre-fetched data
+                user = users.get(str(entry.user_id))
+                user_display_id = str(entry.user_id)  # Show ObjectId instead of uid
+                
+                # Get partner info (the user who caused the miss profit - from_user_id)
+                partner_id = None
+                if hasattr(entry, 'upline_user_id') and entry.upline_user_id:
+                    partner_id = str(entry.upline_user_id)  # Show ObjectId instead of uid
+                
+                # Get user's current rank/level for display
+                user_level = entry.user_level
+                
+                # Dynamic currency field based on actual currency
+                currency_field = f"miss_{currency.lower()}"
+                
+                items.append({
+                    "user_id": user_display_id,
+                    "partner": partner_id or "--",
+                    "rank": user_level,
+                    currency_field: float(entry.missed_profit_amount),
+                    "time_date": time_date,
+                    "missed_profit_type": entry.missed_profit_type,
+                    "primary_reason": entry.primary_reason,
+                    "reason_description": entry.reason_description,
+                    "program_type": entry.program_type,
+                    "recovery_status": entry.recovery_status,
+                    "is_distributed": entry.is_distributed
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_entries,
+                    "currency": currency,
+                    "items": items,
+                    "summary": {
+                        "total_missed_amount": sum(float(item[currency_field]) for item in items),
+                        "total_entries": len(items),
+                        "undistributed_count": len([item for item in items if not item["is_distributed"]]),
+                        "recovery_pending_count": len([item for item in items if item["recovery_status"] == "pending"])
+                    }
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}

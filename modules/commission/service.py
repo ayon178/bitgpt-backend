@@ -251,8 +251,9 @@ class CommissionService:
                     except Exception:
                         pass
                 else:
-                    # Route missed 30% to stipend
+                    # Route missed 30% to stipend - upline doesn't have required slot level
                     try:
+                        upline_current_level = self._get_user_current_level(str(level_upline), program)
                         self.handle_missed_profit(
                             user_id=str(level_upline),
                             from_user_id=from_user_id,
@@ -261,7 +262,7 @@ class CommissionService:
                             slot_name=slot_name,
                             amount=level_commission,
                             currency=currency,
-                            reason='level_or_activity_ineligible'
+                            reason=f'upline_slot_level_insufficient_upline_level_{upline_current_level}_required_level_{slot_no}'
                         )
                     except Exception:
                         pass
@@ -347,25 +348,26 @@ class CommissionService:
     def handle_missed_profit(self, user_id: str, from_user_id: str, program: str, 
                            slot_no: int, slot_name: str, amount: Decimal, 
                            currency: str, reason: str) -> Dict[str, Any]:
-        """Handle missed profit due to inactivity or level advancement"""
+        """Handle missed profit when upline user doesn't have required slot level for downline upgrade"""
         try:
-            # Get user's current level
-            user_level = self._get_user_current_level(user_id, program)
-            required_level = slot_no
+            # Get upline user's current highest slot level
+            upline_current_level = self._get_user_current_level(user_id, program)
+            downline_upgrade_level = slot_no
             
             # Create missed profit record
+            # user_id = who missed the profit (upline)
+            # upline_user_id = who caused the miss profit (downline who upgraded)
             missed_profit = MissedProfit(
-                user_id=ObjectId(user_id),
-                from_user_id=ObjectId(from_user_id),
-                program=program,
-                missed_amount=amount,
+                user_id=ObjectId(user_id),  # Upline who missed the profit
+                upline_user_id=ObjectId(from_user_id),  # Downline who upgraded (caused miss profit)
+                missed_profit_type="commission",
+                missed_profit_amount=float(amount),
                 currency=currency,
-                slot_no=slot_no,
-                slot_name=slot_name,
-                missed_reason=reason,
-                user_level=user_level,
-                required_level=required_level,
-                handling_status='pending'
+                primary_reason="level_advancement",
+                reason_description=reason,
+                user_level=upline_current_level,
+                upgrade_slot_level=downline_upgrade_level,
+                program_type=program
             )
             missed_profit.save()
             
