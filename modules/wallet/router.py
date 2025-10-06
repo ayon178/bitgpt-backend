@@ -7,6 +7,7 @@ from utils.response import success_response, error_response
 from .service import WalletService
 from ..newcomer_support.service import NewcomerSupportService
 from ..mentorship.service import MentorshipService
+from ..spark.service import SparkService
 
 router = APIRouter(prefix="/wallet", tags=["Wallet"])
 
@@ -297,6 +298,130 @@ async def get_global_partner_incentive(
             return success_response(result["data"], "Global Partner Incentive data fetched successfully")
         else:
             raise HTTPException(status_code=400, detail=result["error"])
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/income/spark-bonus")
+async def get_spark_bonus_overview(
+    currency: str = Query("USDT", description="Display currency; Spark fund is tracked in USDT"),
+    user_id: str | None = Query(None, description="Optional user id to include eligibility flag"),
+    slot_number: int | None = Query(None, ge=1, le=14, description="Filter by specific matrix slot number 1-14"),
+):
+    """Spark Bonus fund overview for Triple Entry Reward page.
+    Returns total fund, baseline (80%), and slot-wise allocations for slots 1–14.
+    """
+    try:
+        svc = SparkService()
+        data = svc.get_slot_breakdown(currency, user_id=user_id, slot_number=slot_number)
+        if not data.get("success"):
+            raise HTTPException(status_code=400, detail=data.get("error", "Unable to compute Spark fund"))
+        return success_response(data, "Spark Bonus fund overview")
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/income/leadership-stipend")
+async def get_leadership_stipend_income(
+    user_id: str = Query(..., description="User ID"),
+    currency: str = Query("BNB", description="Currency (BNB only)"),
+    slot: int | None = Query(None, description="Filter by slot number 10-16"),
+):
+    """Return slot-wise Leadership Stipend summary (slots 10-16) and claim history.
+    - Shows funded amount per slot (total_paid), pending and progress percent to next tier
+    - Claim history lists LeadershipStipendPayment records; can be filtered by slot
+    """
+    try:
+        from modules.leadership_stipend.model import LeadershipStipend, LeadershipStipendPayment
+        from bson import ObjectId
+        from datetime import datetime
+        from decimal import Decimal
+
+        ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+        # Preload payments first and compute per-slot totals
+        from modules.leadership_stipend.model import LeadershipStipendPayment as _LSP
+        pay_q = {"user_id": ObjectId(user_id)}
+        if slot:
+            pay_q["slot_number"] = int(slot)
+        payments_cursor = _LSP.objects(__raw__=pay_q).order_by('-payment_date')
+        payments = []
+        slot_paid: dict[int, float] = {}
+        for p in payments_cursor:
+            if currency.upper() != (p.currency or "BNB").upper():
+                continue
+            amt = float(p.daily_return_amount or 0.0)
+            slot_paid[p.slot_number] = slot_paid.get(p.slot_number, 0.0) + amt
+            payments.append({
+                "id": str(p.id),
+                "slot_number": p.slot_number,
+                "tier_name": p.tier_name,
+                "amount": amt,
+                "currency": p.currency,
+                "payment_date": p.payment_date,
+                "status": p.payment_status,
+                "reference": p.payment_reference,
+                "processed_at": p.processed_at,
+                "paid_at": p.paid_at,
+            })
+
+        if not ls:
+            # If user not in stipend yet, still return payments summary
+            return success_response({
+                "user_id": user_id,
+                "summary": {
+                    "current_tier": 0,
+                    "current_tier_name": "",
+                    "current_daily_return": 0,
+                    "is_eligible": False,
+                    "is_active": False,
+                    "total_earned": 0,
+                    "total_paid": 0,
+                    "pending_amount": 0,
+                },
+                "tiers": [],
+                "payments": payments,
+            }, "Leadership Stipend income fetched")
+
+        # Build tier summaries
+        tiers = []
+        for t in ls.tiers:
+            if t.slot_number < 10 or t.slot_number > 16:
+                continue
+            if slot and t.slot_number != int(slot):
+                continue
+            tiers.append({
+                "slot_number": t.slot_number,
+                "tier_name": t.tier_name,
+                "slot_value": t.slot_value,
+                "daily_return": t.daily_return,
+                "funded_amount": slot_paid.get(t.slot_number, 0.0),
+                "pending_amount": t.pending_amount or 0.0,
+                "progress_percent": 0,
+                "is_active": bool(t.is_active),
+                "activated_at": t.activated_at,
+            })
+
+        data = {
+            "user_id": user_id,
+            "summary": {
+                "current_tier": ls.current_tier,
+                "current_tier_name": ls.current_tier_name,
+                "current_daily_return": ls.current_daily_return,
+                "is_eligible": ls.is_eligible,
+                "is_active": ls.is_active,
+                "total_earned": ls.total_earned,
+                "total_paid": ls.total_paid,
+                "pending_amount": ls.pending_amount,
+            },
+            "tiers": tiers,
+            "payments": payments,
+        }
+        return success_response(data, "Leadership Stipend income fetched")
 
     except HTTPException:
         raise

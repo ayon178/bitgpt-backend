@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from .model import TripleEntryReward, SparkCycle, SparkBonusDistribution
 from ..user.model import User
+import os
 
 
 class SparkService:
@@ -70,6 +71,145 @@ class SparkService:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    # ------------------ Fund Info & Slot Breakdown ------------------
+    def get_spark_bonus_fund_info(self) -> Dict[str, Any]:
+        """Return a best-effort snapshot of Spark Bonus fund.
+        Since a dedicated fund ledger isn't persisted yet, we infer from the latest
+        SparkBonusDistribution record's total_fund_amount field when available.
+        Fallback to 0 if none exists.
+        Values are expressed in USDT.
+        """
+        try:
+            latest = SparkBonusDistribution.objects().order_by('-distributed_at', '-created_at').first()
+            total = float(getattr(latest, 'total_fund_amount', 0.0) or 0.0)
+            # Treat entire amount as available for display; real implementation should
+            # subtract distributed/locked portions from a persistent Spark fund.
+            return {
+                "success": True,
+                "currency": "USDT",
+                "total_fund_amount": total,
+                "available_amount": total,
+                "updated_at": datetime.utcnow(),
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_slot_breakdown(self, currency: str = "USDT", user_id: str | None = None, slot_number: int | None = None) -> Dict[str, Any]:
+        """Compute slot-wise Spark fund breakdown for UI display.
+        - Uses 80% of the total Spark fund as baseline per documentation
+        - Distributes across slots 1-14 by documented percentages
+        - Returns both per-slot allocation and summary totals
+        - Always returns BOTH currencies (USDT and BNB) in a "funds" object
+        """
+        info = self.get_spark_bonus_fund_info()
+        if not info.get("success"):
+            return {"success": False, "error": info.get("error", "Fund info not available")}
+
+        total_usdt = Decimal(str(info.get("available_amount", 0)))
+        baseline_usdt = (total_usdt * Decimal('0.80'))
+
+        slots_usdt: List[Dict[str, Any]] = []
+        total_allocated = Decimal('0')
+        slot_range = range(1, 15) if slot_number is None else [int(slot_number)]
+
+        # Determine user's eligible matrix slots (1-14) based on completed activations
+        eligible_slots: List[int] = []
+        if user_id:
+            try:
+                from modules.slot.model import SlotActivation  # lazy import
+                from modules.matrix.model import MatrixActivation as _MA
+                slots_a = [
+                    int(sa.slot_no) for sa in SlotActivation.objects(
+                        user_id=ObjectId(user_id),
+                        program='matrix',
+                        status='completed',
+                        slot_no__gte=1,
+                        slot_no__lte=14
+                    ).only('slot_no')
+                ]
+                slots_b = [
+                    int(ma.slot_no) for ma in _MA.objects(
+                        user_id=ObjectId(user_id)
+                    ).only('slot_no')
+                ]
+                eligible_slots = sorted(list(set(slots_a + slots_b)))
+            except Exception:
+                eligible_slots = []
+        for slot_no in slot_range:
+            pct = self._slot_percentage(slot_no)
+            alloc = (baseline_usdt * pct / Decimal('100')) if pct > 0 else Decimal('0')
+            total_allocated += alloc
+            slots_usdt.append({
+                "slot_number": slot_no,
+                "percentage": float(pct),
+                "allocated_amount": float(alloc),  # USDT value
+                "user_eligible": (slot_no in eligible_slots) if user_id else None,
+            })
+
+        # Eligibility: Triple Entry for this user (joined all three)
+        is_user_eligible = False
+        if user_id:
+            try:
+                u = User.objects(id=ObjectId(user_id)).first()
+                is_user_eligible = bool(u and u.binary_joined and u.matrix_joined and u.global_joined)
+            except Exception:
+                is_user_eligible = False
+
+        # Build BOTH currencies views
+        try:
+            rate = Decimal(os.getenv('SPARK_USDT_PER_BNB', '300'))
+            if rate <= 0:
+                rate = Decimal('300')
+        except Exception:
+            rate = Decimal('300')
+
+        def usdt_to_bnb(val: Decimal | float) -> float:
+            d = Decimal(str(val))
+            return float((d / rate).quantize(Decimal('0.00000001')))
+
+        # Build a unified slots array with both currencies per slot
+        slots_combined: List[Dict[str, Any]] = []
+        for s in slots_usdt:
+            slots_combined.append({
+                "slot_number": s["slot_number"],
+                "percentage": s["percentage"],
+                "allocated_amount_usdt": s["allocated_amount"],
+                "allocated_amount_bnb": usdt_to_bnb(s["allocated_amount"]),
+                "user_eligible": s.get("user_eligible"),
+            })
+
+        funds = {
+            "USDT": {
+                "total_fund_amount": float(total_usdt),
+                "baseline_amount": float(baseline_usdt),
+                "total_allocated": float(total_allocated),
+                "unallocated": float(max(Decimal('0'), baseline_usdt - total_allocated)),
+            },
+            "BNB": {
+                "total_fund_amount": usdt_to_bnb(total_usdt),
+                "baseline_amount": usdt_to_bnb(baseline_usdt),
+                "total_allocated": usdt_to_bnb(total_allocated),
+                "unallocated": usdt_to_bnb(max(Decimal('0'), baseline_usdt - total_allocated)),
+            }
+        }
+
+        return {
+            "success": True,
+            "funds": funds,
+            "slots": slots_combined,
+            "user": {
+                "user_id": user_id,
+                "is_triple_entry_eligible": is_user_eligible,
+                "eligible_slots": eligible_slots
+            } if user_id else None,
+            # Backward-compat single-currency view (defaults to requested or USDT)
+            "currency": (currency or "USDT").upper(),
+            "total_fund_amount": funds.get((currency or "USDT").upper(), {}).get("total_fund_amount"),
+            "baseline_amount": funds.get((currency or "USDT").upper(), {}).get("baseline_amount"),
+            "total_allocated": funds.get((currency or "USDT").upper(), {}).get("total_allocated"),
+            "unallocated": funds.get((currency or "USDT").upper(), {}).get("unallocated"),
+        }
 
     @staticmethod
     def _slot_percentage(slot_no: int) -> Decimal:

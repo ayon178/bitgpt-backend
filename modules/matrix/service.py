@@ -1934,11 +1934,19 @@ class MatrixService:
             user = None
             if upgrade_type == "manual" and not early_success:
                 user = User.objects(id=ObjectId(user_id)).first()
-                # For test-compat: treat missing user as zero balance instead of hard error
-                wallet_balance = getattr(user, 'wallet_balance', 0) if user else 0
+                # Prefer real wallet balance from UserWallet ledger (USDT)
+                try:
+                    from ..wallet.service import WalletService
+                    ws = WalletService()
+                    resp = ws.get_currency_balances(user_id=user_id, wallet_type='main')
+                    balances = (resp or {}).get('balances') or {}
+                    wallet_balance = float(balances.get('USDT', 0))
+                except Exception:
+                    # Fallback to optional user field if present
+                    wallet_balance = getattr(user, 'wallet_balance', 0) if user else 0
                 if wallet_balance < upgrade_cost:
                     return {
-                        "success": False, 
+                        "success": False,
                         "error": f"Insufficient funds. Required: ${upgrade_cost}, Available: ${wallet_balance}"
                     }
                 
@@ -1954,8 +1962,23 @@ class MatrixService:
 
             # Deduct from wallet now that validations passed
             if upgrade_type == "manual" and (user is not None) and not early_success:
-                user.wallet_balance -= upgrade_cost
-                user.save()
+                # Deduct from ledger-based wallet (USDT)
+                try:
+                    from ..wallet.model import WalletLedger
+                    from decimal import Decimal
+                    from datetime import datetime
+                    # Record debit entry; reconciliation will update UserWallet
+                    WalletLedger(
+                        user_id=ObjectId(user_id),
+                        amount=Decimal(str(upgrade_cost)),
+                        currency='USDT',
+                        type='debit',
+                        reason='matrix_manual_upgrade',
+                        tx_hash=f"MATRIX-UPGRADE-{user_id}-{to_slot_no}",
+                        created_at=datetime.utcnow()
+                    ).save()
+                except Exception:
+                    pass
             
             # Update matrix tree
             if matrix_tree and not early_success:
@@ -1975,6 +1998,31 @@ class MatrixService:
                 contributors=[]
             )
             
+            # Ensure a SlotActivation record exists for eligibility consumers (e.g., Spark)
+            try:
+                from ..slot.model import SlotActivation, SlotCatalog
+                from decimal import Decimal as _D
+                from datetime import datetime as _DT
+                exists = SlotActivation.objects(user_id=ObjectId(user_id), program='matrix', slot_no=to_slot_no, status='completed').first()
+                if not exists:
+                    cat = SlotCatalog.objects(program='matrix', slot_no=to_slot_no, is_active=True).first()
+                    SlotActivation(
+                        user_id=ObjectId(user_id),
+                        program='matrix',
+                        slot_no=to_slot_no,
+                        slot_name=(cat.name if cat else f"Slot {to_slot_no}"),
+                        activation_type='upgrade',
+                        upgrade_source=('wallet' if upgrade_type == 'manual' else 'auto'),
+                        amount_paid=_D(str(upgrade_cost)),
+                        currency='USDT',
+                        tx_hash=f"MATRIX-ACT-{user_id}-{to_slot_no}-{int(_DT.utcnow().timestamp())}",
+                        status='completed',
+                        activated_at=_DT.utcnow(),
+                        completed_at=_DT.utcnow()
+                    ).save()
+            except Exception as e:
+                print(f"MatrixService: failed to create SlotActivation for slot {to_slot_no}: {e}")
+
             # Log earning history
             self._log_earning_history(
                 user_id=user_id,
