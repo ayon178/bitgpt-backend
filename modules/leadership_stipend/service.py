@@ -266,6 +266,20 @@ class LeadershipStipendService:
                 except Exception:
                     pass
             
+            # Credit user's wallet (BNB) for the payment amount
+            try:
+                from modules.wallet.service import WalletService
+                wallet_service = WalletService()
+                wallet_service.credit_main_wallet(
+                    user_id=str(payment.user_id),
+                    amount=payment.daily_return_amount,
+                    currency=payment.currency or 'BNB',
+                    reason='leadership_stipend_payment',
+                    tx_hash=f'LS-PAY-{str(payment.id)}'
+                )
+            except Exception:
+                pass
+
             # Complete payment
             payment.payment_status = "paid"
             payment.paid_at = datetime.utcnow()

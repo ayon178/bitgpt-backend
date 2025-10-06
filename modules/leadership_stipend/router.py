@@ -27,6 +27,11 @@ class LeadershipStipendPaymentRequest(BaseModel):
     slot_number: int
     amount: float
 
+class LeadershipStipendClaimRequest(BaseModel):
+    user_id: str
+    slot_number: int
+    amount: float | None = None  # optional; if not provided, use tier daily_return
+
 class LeadershipStipendSettingsRequest(BaseModel):
     leadership_stipend_enabled: bool
     auto_eligibility_check: bool
@@ -396,6 +401,242 @@ async def create_leadership_stipend_payment(request: LeadershipStipendPaymentReq
             message="Leadership Stipend payment created"
         )
         
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.post("/claim")
+async def create_leadership_stipend_claim(
+    user_id: str = Query(...),
+    slot_number: int = Query(..., ge=10, le=16),
+    currency: str = Query("BNB")
+):
+    """Claim Leadership Stipend for a specific slot by a user.
+    - Computes eligible users for the slot
+    - Divides the slot's daily allocation equally among eligible users
+    - Credits ONLY the claimer's wallet with their share
+    - Records history and prevents multiple claims (per user+slot per day)
+    """
+    try:
+        currency = currency.upper()
+        if currency not in ("BNB",):
+            raise HTTPException(status_code=400, detail="Only BNB is supported for stipend")
+
+        # Validate user and record
+        user = User.objects(id=ObjectId(user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+        if not ls:
+            raise HTTPException(status_code=404, detail="User not in Leadership Stipend program")
+
+        # Prevent duplicate claim same day for same user+slot
+        day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        dup = LeadershipStipendPayment.objects(
+            user_id=ObjectId(user_id),
+            slot_number=slot_number,
+            payment_date__gte=day_start,
+            payment_status__in=["pending", "paid"]
+        ).first()
+        if dup:
+            raise HTTPException(status_code=400, detail="Already claimed for this slot today")
+
+        # Determine eligible users for this slot
+        eligibles = []
+        for rec in LeadershipStipend.objects(is_active=True).only('user_id', 'tiers'):
+            try:
+                if any(t.slot_number == slot_number and t.is_active for t in rec.tiers):
+                    eligibles.append(rec.user_id)
+            except Exception:
+                continue
+        if not eligibles:
+            raise HTTPException(status_code=400, detail="No eligible users for this slot")
+
+        # Slot allocation for the day = tier daily_return
+        tier = _get_tier_info(slot_number)
+        per_slot_allocation = float(tier.get("daily_return", 0.0))
+        if per_slot_allocation <= 0:
+            raise HTTPException(status_code=400, detail="No allocation for this slot")
+
+        # Per-user share
+        per_user_amount = per_slot_allocation / max(1, len(eligibles))
+
+        # Check fund available; if not enough, scale down
+        fund = LeadershipStipendFund.objects(is_active=True).first()
+        if not fund or fund.available_amount <= 0:
+            raise HTTPException(status_code=400, detail="Insufficient stipend fund")
+        if fund.available_amount < per_user_amount:
+            per_user_amount = float(fund.available_amount)
+
+        # Create pending payment for claimer only
+        payment = LeadershipStipendPayment(
+            user_id=ObjectId(user_id),
+            leadership_stipend_id=ls.id,
+            slot_number=slot_number,
+            tier_name=tier["tier_name"],
+            daily_return_amount=per_user_amount,
+            currency=currency,
+            payment_date=datetime.utcnow(),
+            payment_period_start=datetime.utcnow(),
+            payment_period_end=datetime.utcnow(),
+            payment_status="pending"
+        )
+        payment.save()
+
+        # Auto-distribute to claimer
+        from .service import LeadershipStipendService
+        svc = LeadershipStipendService()
+        res = svc.distribute_stipend_payment(str(payment.id))
+        if not res.get("success"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Distribution failed"))
+
+        return success_response({
+            "payment_id": str(payment.id),
+            "user_id": user_id,
+            "slot_number": slot_number,
+            "eligible_users": len(eligibles),
+            "amount_credited": per_user_amount,
+            "currency": currency,
+            "payment_status": "paid",
+        }, "Leadership Stipend claim processed")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/claims/history")
+async def get_leadership_stipend_claim_history(
+    user_id: str,
+    currency: str | None = Query(None, description="Filter by currency (BNB)"),
+    slot_number: int | None = Query(None, ge=10, le=16),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100)
+):
+    try:
+        q = LeadershipStipendPayment.objects(user_id=ObjectId(user_id))
+        if currency:
+            q = q.filter(currency=currency.upper())
+        if slot_number:
+            q = q.filter(slot_number=int(slot_number))
+        total = q.count()
+        items = q.order_by('-created_at').skip((page - 1) * limit).limit(limit)
+        data = []
+        for p in items:
+            data.append({
+                "id": str(p.id),
+                "slot_number": p.slot_number,
+                "tier_name": p.tier_name,
+                "amount": p.daily_return_amount,
+                "currency": p.currency,
+                "status": p.payment_status,
+                "payment_date": p.payment_date,
+                "paid_at": p.paid_at,
+                "created_at": p.created_at,
+            })
+        return success_response({
+            "claims": data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": (total + limit - 1) // limit
+            }
+        }, "Leadership Stipend claims history fetched")
+    except Exception as e:
+        return error_response(str(e))
+
+
+class LeadershipStipendSlotClaimRequest(BaseModel):
+    slot_number: int
+    currency: str = "BNB"
+    amount_per_user: float | None = None
+
+
+@router.post("/claim/slot-distribute")
+async def distribute_slot_claim(request: LeadershipStipendSlotClaimRequest):
+    """Distribute Leadership Stipend for a slot among all eligible users equally.
+    amount_per_user: if not provided, defaults to tier daily_return; if fund has less than needed, it will split available equally.
+    """
+    try:
+        if request.slot_number < 10 or request.slot_number > 16:
+            raise HTTPException(status_code=400, detail="Invalid slot (10-16)")
+
+        # Fetch eligible users: LeadershipStipend with tier is_active for this slot
+        eligibles = []
+        for ls in LeadershipStipend.objects(is_active=True).only('user_id', 'tiers'):
+            try:
+                if any(t.slot_number == request.slot_number and t.is_active for t in ls.tiers):
+                    eligibles.append(ls.user_id)
+            except Exception:
+                continue
+        if not eligibles:
+            raise HTTPException(status_code=400, detail="No eligible users for this slot")
+
+        tier_info = _get_tier_info(request.slot_number)
+        per_user = request.amount_per_user if request.amount_per_user and request.amount_per_user > 0 else float(tier_info.get('daily_return', 0.0))
+        if per_user <= 0:
+            raise HTTPException(status_code=400, detail="amount_per_user invalid")
+
+        # Ensure fund availability; if insufficient, scale down per_user equally
+        fund = LeadershipStipendFund.objects(is_active=True).first()
+        if not fund:
+            raise HTTPException(status_code=400, detail="Stipend fund not found")
+        total_needed = per_user * len(eligibles)
+        if fund.available_amount < total_needed:
+            if fund.available_amount <= 0:
+                raise HTTPException(status_code=400, detail="Insufficient fund")
+            per_user = fund.available_amount / len(eligibles)
+
+        created = []
+        for uid in eligibles:
+            p = LeadershipStipendPayment(
+                user_id=uid,
+                leadership_stipend_id=LeadershipStipend.objects(user_id=uid).first().id,
+                slot_number=request.slot_number,
+                tier_name=tier_info['tier_name'],
+                daily_return_amount=per_user,
+                currency='BNB',
+                payment_date=datetime.utcnow(),
+                payment_period_start=datetime.utcnow(),
+                payment_period_end=datetime.utcnow(),
+                payment_status='pending'
+            )
+            p.save()
+            created.append(str(p.id))
+        # Distribute all
+        from .service import LeadershipStipendService
+        svc = LeadershipStipendService()
+        paid = []
+        for pid in created:
+            r = svc.distribute_stipend_payment(pid)
+            if r.get('success'):
+                paid.append(pid)
+        return success_response({
+            "slot_number": request.slot_number,
+            "eligible_users": len(eligibles),
+            "amount_per_user": per_user,
+            "payments_created": len(created),
+            "payments_paid": len(paid)
+        }, "Leadership Stipend slot claim distributed")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.post("/claim/{payment_id}/distribute")
+async def distribute_leadership_stipend_claim(payment_id: str):
+    """Distribute a pending Leadership Stipend payment by payment_id."""
+    try:
+        from .service import LeadershipStipendService
+        svc = LeadershipStipendService()
+        res = svc.distribute_stipend_payment(payment_id)
+        if not res.get("success"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Failed to distribute claim"))
+        return success_response(res, "Leadership Stipend claim distributed")
+    except HTTPException as e:
+        raise e
     except Exception as e:
         return error_response(str(e))
 
