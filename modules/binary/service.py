@@ -201,7 +201,8 @@ class BinaryService:
             # Check if slot already exists
             slot_exists = False
             for slot_info in user.binary_slots:
-                if slot_info.slot_no == slot_no:
+                # BinarySlotInfo does not have slot_no; compare by slot_name
+                if getattr(slot_info, 'slot_name', None) == slot_name:
                     slot_info.is_active = True
                     slot_info.activated_at = datetime.utcnow()
                     slot_exists = True
@@ -210,10 +211,18 @@ class BinaryService:
             # Add new slot if not exists
             if not slot_exists:
                 from ..user.model import BinarySlotInfo
+                # derive level from catalog if available
+                level = slot_no
+                try:
+                    catalog = SlotCatalog.objects(program='binary', slot_no=slot_no, is_active=True).first()
+                    if catalog and getattr(catalog, 'level', None) is not None:
+                        level = catalog.level
+                except Exception:
+                    pass
                 new_slot = BinarySlotInfo(
-                    slot_no=slot_no,
                     slot_name=slot_name,
                     slot_value=float(amount),
+                    level=level,
                     is_active=True,
                     activated_at=datetime.utcnow()
                 )

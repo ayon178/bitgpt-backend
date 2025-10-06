@@ -165,6 +165,7 @@ class AuthenticationService(object):
         return {
             "_id": str(user.id),
             "uid": user.uid,
+            "refer_code": user.refer_code,
             "name": user.name,
             "wallet_address": user.wallet_address,
             "role": user.role,
@@ -199,6 +200,7 @@ class AuthenticationService(object):
                 "user": {
                     "_id": str(user.id),
                     "uid": user.uid,
+                    "refer_code": user.refer_code,
                     "name": user.name,
                     "wallet_address": user.wallet_address,
                     "role": user.role,
@@ -223,6 +225,7 @@ class AuthenticationService(object):
                 "user": {
                     "_id": str(user.id),
                     "uid": user.uid,
+                    "refer_code": user.refer_code,
                     "name": user.name,
                     "wallet_address": user.wallet_address,
                     "role": user.role,

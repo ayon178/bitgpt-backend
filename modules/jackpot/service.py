@@ -38,6 +38,17 @@ class JackpotService:
             13: 9, 14: 10, 15: 11, 16: 12, 17: 13
         }
     
+    @staticmethod
+    def award_free_coupon_for_binary_slot(user_id: str, slot_no: int) -> dict:
+        """Compatibility helper used by BinaryService and user joins.
+
+        Awards free coupons for a given binary slot upgrade by delegating to
+        process_free_coupon_entry. Exposed as a static method so it can be
+        invoked both on the class and on an instance safely.
+        """
+        svc = JackpotService()
+        return svc.process_free_coupon_entry(user_id=user_id, slot_number=slot_no)
+
     def _get_current_week_dates(self) -> tuple:
         """Get current week start and end dates (Sunday to Sunday)"""
         today = datetime.utcnow()

@@ -464,3 +464,125 @@ async def get_reserve_ledger(
     except Exception as e:
         return error_response(str(e))
 
+
+@user_router.get("/income/leadership-stipend")
+async def get_leadership_stipend_income(
+    user_id: str = Query(..., description="User ID"),
+    currency: str = Query("BNB", description="Currency (BNB only)"),
+    slot: int | None = Query(None, description="Filter by slot number 10-16"),
+):
+    """Return slot-wise Leadership Stipend summary (slots 10-16) and claim history.
+    - Shows funded amount per slot (total_paid), pending and progress percent to next tier
+    - Claim history lists LeadershipStipendPayment records; can be filtered by slot
+    """
+    try:
+        from modules.leadership_stipend.model import LeadershipStipend, LeadershipStipendPayment
+        from bson import ObjectId
+        from datetime import datetime
+        from decimal import Decimal
+
+        ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+        # Preload payments first and compute per-slot totals
+        from modules.leadership_stipend.model import LeadershipStipendPayment as _LSP
+        pay_q = {"user_id": ObjectId(user_id)}
+        if slot:
+            pay_q["slot_number"] = int(slot)
+        payments_cursor = _LSP.objects(__raw__=pay_q).order_by('-payment_date')
+        payments = []
+        slot_paid: dict[int, float] = {}
+        for p in payments_cursor:
+            if currency.upper() != (p.currency or "BNB").upper():
+                continue
+            amt = float(p.daily_return_amount or 0.0)
+            slot_paid[p.slot_number] = slot_paid.get(p.slot_number, 0.0) + amt
+            payments.append({
+                "id": str(p.id),
+                "slot_number": p.slot_number,
+                "tier_name": p.tier_name,
+                "amount": amt,
+                "currency": p.currency,
+                "payment_date": p.payment_date,
+                "status": p.payment_status,
+                "reference": p.payment_reference,
+                "processed_at": p.processed_at,
+                "paid_at": p.paid_at,
+            })
+
+        if not ls:
+            # If user not in stipend yet, still return payments summary
+            total_paid = sum(slot_paid.values())
+            return success_response({
+                "user_id": user_id,
+                "currency": currency.upper(),
+                "tiers": [],
+                "payments": payments,
+                "summary": {"total_paid": round(total_paid, 8), "total_target": 0.0, "pending": 0.0, "overall_progress_percent": 0.0}
+            }, "Leadership Stipend income (from payments only)")
+
+        # Slot wise breakdown for slots 10..16
+        tiers = []
+        slot_min, slot_max = 10, 16
+        # Load real activations for eligibility/activation timestamp
+        try:
+            from modules.slot.model import SlotActivation as _SA
+            from bson import ObjectId as _OID
+            activations_cur = _SA.objects(user_id=_OID(user_id), program='binary', status='completed').only('slot_no','activated_at','completed_at').all()
+            slot_to_latest_activation = {}
+            for a in activations_cur:
+                when = getattr(a, 'activated_at', None) or getattr(a, 'completed_at', None)
+                if when:
+                    prev = slot_to_latest_activation.get(a.slot_no)
+                    if not prev or when > prev:
+                        slot_to_latest_activation[a.slot_no] = when
+        except Exception:
+            slot_to_latest_activation = {}
+        for t in (ls.tiers or []):
+            if t.slot_number < slot_min or t.slot_number > slot_max:
+                continue
+            if currency.upper() != (t.currency or "BNB").upper():
+                continue
+            if slot and t.slot_number != slot:
+                continue
+            # Progress: paid / daily_return (target) capped at 100
+            target = float(t.daily_return or 0.0)
+            paid = float(slot_paid.get(t.slot_number, 0.0))
+            progress = 0.0
+            if target > 0:
+                progress = min(100.0, round((paid / target) * 100.0, 2))
+            # Eligibility: slot is considered eligible if user has completed activation for that slot (>=10)
+            eligible = bool(slot_to_latest_activation.get(t.slot_number))
+            act_ts = t.activated_at or slot_to_latest_activation.get(t.slot_number)
+            tiers.append({
+                "slot_number": t.slot_number,
+                "tier_name": t.tier_name,
+                "slot_value": float(t.slot_value or 0.0),
+                "daily_return": target,
+                "funded_amount": paid,
+                "pending_amount": max(0.0, round(target - paid, 8)) if target > 0 else 0.0,
+                "progress_percent": progress,
+                "eligible": eligible,
+                "is_active": eligible or bool(t.is_active),
+                "activated_at": act_ts,
+            })
+
+        # Overall summary
+        total_paid = sum(t.get("funded_amount", 0.0) for t in tiers)
+        total_target = sum(t.get("daily_return", 0.0) for t in tiers)
+        total_pending = max(0.0, total_target - total_paid)
+
+        return success_response({
+            "user_id": user_id,
+            "currency": currency.upper(),
+            "tiers": tiers,
+            "payments": payments,
+            "summary": {
+                "total_paid": round(total_paid, 8),
+                "total_target": round(total_target, 8),
+                "pending": round(total_pending, 8),
+                "overall_progress_percent": round((total_paid / total_target) * 100.0, 2) if total_target > 0 else 0.0
+            }
+        }, "Leadership Stipend income fetched successfully")
+
+    except Exception as e:
+        return error_response(str(e))
+

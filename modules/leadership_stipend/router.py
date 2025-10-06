@@ -46,6 +46,15 @@ class LeadershipStipendCalculationRequest(BaseModel):
     calculation_date: str
     calculation_type: str = "daily"
 
+class ClaimHistoryQuery(BaseModel):
+    user_id: str
+    status: Optional[str] = None  # pending, processing, paid, failed
+    slot_number: Optional[int] = None  # 10-16
+    start_date: Optional[str] = None  # ISO date YYYY-MM-DD
+    end_date: Optional[str] = None    # ISO date YYYY-MM-DD
+    page: int = 1
+    limit: int = 50
+
 # API Endpoints
 
 @router.post("/join")
@@ -167,6 +176,81 @@ async def check_leadership_stipend_eligibility(user_id: str):
             message="Leadership Stipend eligibility checked"
         )
         
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/claims/history")
+async def get_claim_history(
+    user_id: str,
+    status: Optional[str] = Query(None, regex="^(pending|processing|paid|failed)$"),
+    slot_number: Optional[int] = Query(None, ge=10, le=16),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100)
+):
+    """Get Leadership Stipend claim history filtered by user with optional status, slot, and date range. Supports pagination."""
+    try:
+        # Base filter
+        q = LeadershipStipendPayment.objects(user_id=ObjectId(user_id))
+        
+        # Status filter
+        if status:
+            q = q.filter(payment_status=status)
+        
+        # Slot filter
+        if slot_number is not None:
+            q = q.filter(slot_number=slot_number)
+        
+        # Date range filters on payment_date
+        try:
+            if start_date:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                q = q.filter(payment_date__gte=start_dt)
+            if end_date:
+                # inclusive end of day
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+                q = q.filter(payment_date__lt=end_dt)
+        except Exception:
+            pass
+        
+        total_count = q.count()
+        skip = (page - 1) * limit
+        items = q.order_by('-payment_date', '-created_at').skip(skip).limit(limit)
+        
+        data = [
+            {
+                "id": str(p.id),
+                "user_id": str(p.user_id),
+                "slot_number": p.slot_number,
+                "tier_name": p.tier_name,
+                "daily_return_amount": p.daily_return_amount,
+                "currency": p.currency,
+                "payment_status": p.payment_status,
+                "payment_reference": p.payment_reference,
+                "payment_date": p.payment_date,
+                "payment_period_start": p.payment_period_start,
+                "payment_period_end": p.payment_period_end,
+                "processed_at": p.processed_at,
+                "paid_at": p.paid_at,
+                "failed_reason": p.failed_reason,
+                "created_at": p.created_at,
+            }
+            for p in items
+        ]
+        
+        return success_response(
+            data={
+                "claims": data,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total_count,
+                    "total_pages": (total_count + limit - 1) // limit,
+                },
+            },
+            message="Leadership Stipend claim history retrieved",
+        )
     except Exception as e:
         return error_response(str(e))
 
