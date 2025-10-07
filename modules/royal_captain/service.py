@@ -259,20 +259,90 @@ class RoyalCaptainService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def claim_royal_captain_bonus(self, user_id: str) -> Dict[str, Any]:
-        """Claim Royal Captain bonus by evaluating and awarding eligible tiers.
-        This is an alias that runs tier processing and returns the updated status.
+    def claim_royal_captain_bonus(self, user_id: str, currency: str = 'USDT') -> Dict[str, Any]:
+        """Claim Royal Captain bonus for the user's current eligible tier.
+        - Checks eligibility and tier thresholds
+        - Prevents claims within 24 hours of last claim
+        - When eligible for a higher tier, stops previous tier and starts new tier
+        - Credits wallet in the requested currency (USDT or BNB)
         """
-        result = self.process_bonus_tiers(user_id)
-        if not result.get("success"):
-            return result
-        # Return fresh status after processing
-        status = self.get_royal_captain_status(user_id)
-        if status.get("success"):
-            status["message"] = "Royal Captain bonuses processed"
-        return status
+        try:
+            currency = (currency or 'USDT').upper()
+            if currency not in ('USDT', 'BNB'):
+                return {"success": False, "error": "Invalid currency; must be USDT or BNB"}
+
+            # Check eligibility
+            elig = self.check_eligibility(user_id, force_check=True)
+            if not elig.get('success') or not elig.get('is_eligible'):
+                return {"success": False, "error": "You are not eligible to claim Royal Captain bonus"}
+
+            rc = RoyalCaptain.objects(user_id=ObjectId(user_id)).first()
+            if not rc:
+                return {"success": False, "error": "User not in Royal Captain program"}
+
+            # Prevent claims within 24h
+            last_payment = RoyalCaptainBonusPayment.objects(user_id=ObjectId(user_id)).order_by('-created_at').first()
+            if last_payment:
+                hours_since = (datetime.utcnow() - last_payment.created_at).total_seconds() / 3600
+                if hours_since < 24:
+                    return {"success": False, "error": f"You can claim again in {int(24 - hours_since)} hours"}
+
+            # Determine the highest tier the user qualifies for
+            highest_tier = None
+            for b in sorted(rc.bonuses, key=lambda x: x.bonus_tier, reverse=True):
+                if self._check_bonus_tier_requirements(rc, b):
+                    highest_tier = b
+                    break
+            if not highest_tier:
+                return {"success": False, "error": "Not eligible for any tier"}
+
+            # Check if this tier was already paid (is_achieved)
+            if highest_tier.is_achieved:
+                return {"success": False, "error": f"Tier {highest_tier.bonus_tier} already claimed"}
+
+            # Mark tier achieved
+            highest_tier.is_achieved = True
+            highest_tier.achieved_at = datetime.utcnow()
+
+            # Create payment
+            payment = RoyalCaptainBonusPayment(
+                user_id=ObjectId(user_id),
+                royal_captain_id=rc.id,
+                bonus_tier=highest_tier.bonus_tier,
+                bonus_amount=highest_tier.bonus_amount,
+                currency=currency,
+                direct_partners_at_payment=rc.direct_partners_with_both_packages,
+                global_team_at_payment=rc.total_global_team,
+                payment_status='pending'
+            )
+            payment.save()
+
+            # Auto-distribute (credit wallet)
+            dist = self.distribute_bonus_payment(str(payment.id), currency=currency)
+            if not dist.get('success'):
+                return {"success": False, "error": dist.get('error', 'Distribution failed')}
+
+            # Update Royal Captain record
+            rc.current_tier = highest_tier.bonus_tier
+            rc.total_bonus_earned += highest_tier.bonus_amount
+            rc.last_updated = datetime.utcnow()
+            rc.save()
+
+            self._log_action(user_id, "bonus_earned", f"Claimed tier {highest_tier.bonus_tier}: ${highest_tier.bonus_amount} {currency}")
+
+            return {
+                "success": True,
+                "user_id": user_id,
+                "tier": highest_tier.bonus_tier,
+                "amount": highest_tier.bonus_amount,
+                "currency": currency,
+                "payment_id": str(payment.id),
+                "message": f"Royal Captain bonus tier {highest_tier.bonus_tier} claimed successfully"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
-    def distribute_bonus_payment(self, bonus_payment_id: str) -> Dict[str, Any]:
+    def distribute_bonus_payment(self, bonus_payment_id: str, currency: str = 'USDT') -> Dict[str, Any]:
         """Distribute Royal Captain bonus payment"""
         try:
             bonus_payment = RoyalCaptainBonusPayment.objects(id=ObjectId(bonus_payment_id)).first()
@@ -302,6 +372,20 @@ class RoyalCaptainService:
             fund.total_amount_distributed += bonus_payment.bonus_amount
             fund.last_updated = datetime.utcnow()
             fund.save()
+            
+            # Credit wallet
+            try:
+                from modules.wallet.service import WalletService
+                ws = WalletService()
+                ws.credit_main_wallet(
+                    user_id=str(bonus_payment.user_id),
+                    amount=bonus_payment.bonus_amount,
+                    currency=currency,
+                    reason='royal_captain_bonus',
+                    tx_hash=f'RC-PAY-{bonus_payment_id}'
+                )
+            except Exception:
+                pass
             
             # Complete payment
             bonus_payment.payment_status = "paid"

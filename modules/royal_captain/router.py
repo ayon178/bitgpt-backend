@@ -610,3 +610,65 @@ async def get_royal_captain_leaderboard(limit: int = Query(50, le=100)):
         
     except Exception as e:
         return error_response(str(e))
+
+
+@router.post("/claim")
+async def claim_royal_captain_bonus(
+    user_id: str = Query(...),
+    currency: str = Query("USDT", description="USDT or BNB")
+):
+    """Claim Royal Captain bonus for the user's current eligible tier.
+    - Validates eligibility (5 direct partners with all 3 programs active)
+    - Prevents claims within 24 hours
+    - Determines highest tier based on global team thresholds
+    - Credits wallet and records history
+    """
+    try:
+        from .service import RoyalCaptainService
+        svc = RoyalCaptainService()
+        res = svc.claim_royal_captain_bonus(user_id, currency)
+        if not res.get("success"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Claim failed"))
+        return success_response(res, "Royal Captain bonus claimed")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/claim/history")
+async def get_royal_captain_claim_history(
+    user_id: str = Query(...),
+    currency: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100)
+):
+    """Get Royal Captain bonus claim history for a user."""
+    try:
+        q = RoyalCaptainBonusPayment.objects(user_id=ObjectId(user_id))
+        if currency:
+            q = q.filter(currency=currency.upper())
+        total = q.count()
+        items = q.order_by('-created_at').skip((page - 1) * limit).limit(limit)
+        data = []
+        for it in items:
+            data.append({
+                "id": str(it.id),
+                "tier": it.bonus_tier,
+                "amount": it.bonus_amount,
+                "currency": it.currency,
+                "status": it.payment_status,
+                "paid_at": it.paid_at,
+                "created_at": it.created_at,
+            })
+        return success_response({
+            "claims": data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": (total + limit - 1) // limit,
+            }
+        }, "Royal Captain claim history fetched")
+    except Exception as e:
+        return error_response(str(e))
