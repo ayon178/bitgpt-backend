@@ -56,14 +56,41 @@ class SparkService:
             return {"success": False, "error": str(e)}
 
     def contribute_to_fund(self, amount: float, source: str = "matrix", metadata: Dict[str, Any] | None = None, program: str | None = None, **kwargs) -> Dict[str, Any]:
-        """Stub: Record a contribution into the Spark/Triple Entry fund.
-        Accepts optional 'program' and arbitrary kwargs for compatibility.
+        """Record contribution to Spark fund and distribute to Triple Entry (18%) and Top Leaders Gift (2%).
+        Matrix distribution gets remaining 80%.
         """
         try:
             contributed = float(amount) if amount is not None else 0.0
+            
+            # Deduct 2% for Top Leaders Gift Fund
+            top_leaders_amount = contributed * 0.02
+            
+            # Contribute to Top Leaders Gift Fund
+            try:
+                from modules.top_leader_gift.payment_model import TopLeadersGiftFund
+                fund = TopLeadersGiftFund.objects(is_active=True).first()
+                if not fund:
+                    fund = TopLeadersGiftFund()
+                
+                # Determine currency from program/source
+                currency = kwargs.get('currency', 'USDT')
+                if currency == 'BNB' or program == 'binary':
+                    fund.total_fund_bnb += top_leaders_amount
+                    fund.available_bnb += top_leaders_amount
+                else:
+                    fund.total_fund_usdt += top_leaders_amount
+                    fund.available_usdt += top_leaders_amount
+                
+                fund.last_updated = datetime.utcnow()
+                fund.save()
+            except Exception as e:
+                print(f"Failed to contribute to Top Leaders Gift Fund: {str(e)}")
+            
             return {
                 "success": True,
                 "contributed": contributed,
+                "top_leaders_gift_contribution": top_leaders_amount,
+                "remaining_for_distribution": contributed - top_leaders_amount,
                 "source": source,
                 "program": program or source,
                 "metadata": metadata or {},

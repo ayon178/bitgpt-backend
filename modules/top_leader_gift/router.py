@@ -861,3 +861,184 @@ def _get_eligibility_reasons(eligibility: TopLeaderGiftEligibility) -> List[str]
         reasons.append("Need team size of at least 300")
     
     return reasons
+
+# ==================== NEW CLAIM API ENDPOINTS ====================
+
+@router.post("/claim")
+async def claim_top_leaders_gift_new(
+    user_id: str = Query(..., description="User ID"),
+    level_number: int = Query(..., ge=1, le=5, description="Level number (1-5)"),
+    currency: str = Query('BOTH', description="Currency (USDT, BNB, or BOTH)")
+):
+    """
+    Claim Top Leaders Gift reward for a specific level.
+    
+    Eligibility Requirements:
+    - Level 1: Rank 6, 5 direct partners with rank 5, 300 team → $1800 USDT + 0.91 BNB
+    - Level 2: Rank 8, 7 direct partners with rank 6, 500 team → $18000 USDT + 9.12 BNB
+    - Level 3: Rank 11, 8 direct partners with rank 10, 1000 team → $1.8M USDT + 912 BNB
+    - Level 4: Rank 13, 9 direct partners with rank 13, 2000 team → $30M USDT + 15200 BNB
+    - Level 5: Rank 15, 10 direct partners with rank 14, 3000 team → $90M USDT + 45600 BNB
+    
+    Fund is distributed from Spark Bonus 2% pool, allocated by level percentages.
+    """
+    try:
+        from .claim_service import TopLeadersGiftClaimService
+        service = TopLeadersGiftClaimService()
+        result = service.claim_reward(user_id=user_id, level_number=level_number, currency=currency)
+        
+        if not result.get('success'):
+            return error_response(result.get('error', 'Claim failed'))
+        
+        return success_response(
+            data={
+                "user_id": result.get('user_id'),
+                "level": result.get('level'),
+                "claimed_usdt": result.get('claimed_usdt'),
+                "claimed_bnb": result.get('claimed_bnb'),
+                "currency": result.get('currency'),
+                "payment_id": result.get('payment_id')
+            },
+            message=result.get('message', 'Top Leaders Gift claimed successfully')
+        )
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/claim/history")
+async def get_claim_history_new(
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    level_number: Optional[int] = Query(None, ge=1, le=5, description="Filter by level"),
+    currency: Optional[str] = Query(None, description="Filter by currency"),
+    status: Optional[str] = Query(None, description="Filter by payment status"),
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=100, description="Items per page")
+):
+    """Get Top Leaders Gift claim history"""
+    try:
+        from .payment_model import TopLeadersGiftPayment
+        
+        # Build query
+        query_filter = {}
+        
+        if user_id:
+            query_filter['user_id'] = ObjectId(user_id)
+        if level_number:
+            query_filter['level_number'] = level_number
+        if currency:
+            query_filter['currency'] = currency.upper()
+        if status:
+            query_filter['payment_status'] = status
+        
+        # Date range
+        if start_date or end_date:
+            date_filter = {}
+            if start_date:
+                date_filter['$gte'] = datetime.strptime(start_date, '%Y-%m-%d')
+            if end_date:
+                date_filter['$lte'] = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+            query_filter['created_at'] = date_filter
+        
+        # Pagination
+        skip = (page - 1) * limit
+        total = TopLeadersGiftPayment.objects(**query_filter).count()
+        
+        payments = TopLeadersGiftPayment.objects(**query_filter).order_by('-created_at').skip(skip).limit(limit)
+        
+        claims_list = []
+        for payment in payments:
+            claims_list.append({
+                "id": str(payment.id),
+                "user_id": str(payment.user_id),
+                "level": payment.level_number,
+                "level_name": payment.level_name,
+                "claimed_usdt": payment.claimed_amount_usdt,
+                "claimed_bnb": payment.claimed_amount_bnb,
+                "currency": payment.currency,
+                "status": payment.payment_status,
+                "self_rank": payment.self_rank_at_claim,
+                "direct_partners": payment.direct_partners_at_claim,
+                "total_team": payment.total_team_at_claim,
+                "paid_at": payment.paid_at,
+                "created_at": payment.created_at
+            })
+        
+        return success_response(
+            data={
+                "claims": claims_list,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "total_pages": (total + limit - 1) // limit
+                }
+            },
+            message="Top Leaders Gift claim history retrieved"
+        )
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/fund/overview")
+async def get_fund_overview_new(
+    currency: str = Query('USDT', description="Currency (USDT or BNB)")
+):
+    """
+    Get Top Leaders Gift fund overview from Spark 2%.
+    
+    Shows:
+    - Total fund collected (2% from Spark Bonus)
+    - Available balance (USDT & BNB)
+    - Level-wise allocation (37.5%, 25%, 15%, 12.5%, 10%)
+    - Distribution statistics
+    """
+    try:
+        from .payment_model import TopLeadersGiftFund
+        
+        currency = (currency or 'USDT').upper()
+        
+        fund = TopLeadersGiftFund.objects(is_active=True).first()
+        if not fund:
+            fund = TopLeadersGiftFund()
+            fund.save()
+        
+        # Build response with both currencies
+        funds = {
+            "USDT": {
+                "total_fund": fund.total_fund_usdt,
+                "available": fund.available_usdt,
+                "distributed": fund.distributed_usdt
+            },
+            "BNB": {
+                "total_fund": fund.total_fund_bnb,
+                "available": fund.available_bnb,
+                "distributed": fund.distributed_bnb
+            }
+        }
+        
+        # Level allocations
+        levels = []
+        for i in range(1, 6):
+            percentage = getattr(fund, f'level_{i}_percentage', 0.0)
+            levels.append({
+                "level": i,
+                "percentage": percentage,
+                "allocated_usdt": fund.available_usdt * (percentage / 100.0),
+                "allocated_bnb": fund.available_bnb * (percentage / 100.0)
+            })
+        
+        return success_response(
+            data={
+                "funds": funds,
+                "levels": levels,
+                "statistics": {
+                    "total_claims": fund.total_claims,
+                    "total_users_claimed": fund.total_users_claimed
+                },
+                "currency": currency,
+                "last_updated": fund.last_updated
+            },
+            message="Top Leaders Gift fund overview"
+        )
+    except Exception as e:
+        return error_response(str(e))

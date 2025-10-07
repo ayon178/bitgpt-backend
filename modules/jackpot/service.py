@@ -440,11 +440,11 @@ class JackpotService:
             winners.extend(open_pool_winners)
             
             # 2. Top Direct Promoters Pool (30%) - 20 top promoters
-            promoters_winners = self._select_top_promoters_winners(previous_week_start, previous_week_end, top_promoters_pool_amount)
+            promoters_winners = self._select_top_promoters_winners(previous_week_start, previous_week_end, top_promoters_pool_amount, distribution)
             winners.extend(promoters_winners)
             
             # 3. Top Buyers Pool (10%) - 20 top buyers
-            buyers_winners = self._select_top_buyers_winners(previous_week_start, previous_week_end, top_buyers_pool_amount)
+            buyers_winners = self._select_top_buyers_winners(previous_week_start, previous_week_end, top_buyers_pool_amount, distribution)
             winners.extend(buyers_winners)
             
             # 4. New Joiners Pool (10%) - 10 random new joiners
@@ -461,6 +461,17 @@ class JackpotService:
             # Distribute winnings to users
             self._distribute_winnings(winners)
             
+            # Add rollover amounts to next week's fund
+            total_rollover = distribution.promoters_rollover + distribution.buyers_rollover
+            if total_rollover > 0:
+                next_week_start = week_start
+                next_week_end = week_end
+                next_fund = self._get_or_create_jackpot_fund(next_week_start, next_week_end)
+                next_fund.rollover_from_previous += total_rollover
+                next_fund.total_fund += total_rollover
+                next_fund.updated_at = datetime.utcnow()
+                next_fund.save()
+            
             return {
                 "success": True,
                 "distribution_id": distribution_id,
@@ -470,6 +481,7 @@ class JackpotService:
                 "top_buyers_pool_amount": top_buyers_pool_amount,
                 "new_joiners_pool_amount": new_joiners_pool_amount,
                 "total_winners": len(winners),
+                "rollover_to_next_week": total_rollover,
                 "winners": winners
             }
             
@@ -532,8 +544,8 @@ class JackpotService:
             print(f"Error selecting open pool winners: {e}")
             return []
     
-    def _select_top_promoters_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal) -> List[Dict]:
-        """Select 20 top promoters based on direct referrals entries"""
+    def _select_top_promoters_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal, distribution: 'JackpotDistribution') -> List[Dict]:
+        """Select 20 top promoters based on direct referrals entries with rollover"""
         try:
             # Get users with direct referrals entries, sorted by count
             user_entries = JackpotUserEntry.objects(
@@ -543,13 +555,24 @@ class JackpotService:
             ).order_by('-direct_referrals_entries_count')
             
             if not user_entries:
+                # Full pool goes to rollover
+                distribution.promoters_rollover = pool_amount
                 return []
             
             winners = []
-            winner_amount = pool_amount / self.top_promoters_winners_count
+            actual_winner_count = min(len(user_entries), self.top_promoters_winners_count)
             
-            # Select top 20 promoters
-            selected_entries = user_entries[:self.top_promoters_winners_count]
+            if actual_winner_count < self.top_promoters_winners_count:
+                # Calculate rollover for missing winners
+                distributed_amount = pool_amount * (actual_winner_count / self.top_promoters_winners_count)
+                rollover_amount = pool_amount - distributed_amount
+                distribution.promoters_rollover = rollover_amount
+                winner_amount = distributed_amount / actual_winner_count if actual_winner_count > 0 else Decimal('0.0')
+            else:
+                winner_amount = pool_amount / self.top_promoters_winners_count
+            
+            # Select top promoters
+            selected_entries = user_entries[:actual_winner_count]
             
             for i, entry in enumerate(selected_entries):
                 winner = JackpotWinner(
@@ -568,8 +591,8 @@ class JackpotService:
             print(f"Error selecting top promoters winners: {e}")
             return []
     
-    def _select_top_buyers_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal) -> List[Dict]:
-        """Select 20 top buyers based on individual entries"""
+    def _select_top_buyers_winners(self, week_start: datetime, week_end: datetime, pool_amount: Decimal, distribution: 'JackpotDistribution') -> List[Dict]:
+        """Select 20 top buyers based on individual entries with rollover"""
         try:
             # Get users with entries, sorted by total entries count
             user_entries = JackpotUserEntry.objects(
@@ -579,13 +602,24 @@ class JackpotService:
             ).order_by('-total_entries_count')
             
             if not user_entries:
+                # Full pool goes to rollover
+                distribution.buyers_rollover = pool_amount
                 return []
             
             winners = []
-            winner_amount = pool_amount / self.top_buyers_winners_count
+            actual_winner_count = min(len(user_entries), self.top_buyers_winners_count)
+            
+            if actual_winner_count < self.top_buyers_winners_count:
+                # Calculate rollover for missing winners
+                distributed_amount = pool_amount * (actual_winner_count / self.top_buyers_winners_count)
+                rollover_amount = pool_amount - distributed_amount
+                distribution.buyers_rollover = rollover_amount
+                winner_amount = distributed_amount / actual_winner_count if actual_winner_count > 0 else Decimal('0.0')
+            else:
+                winner_amount = pool_amount / self.top_buyers_winners_count
             
             # Select top 20 buyers
-            selected_entries = user_entries[:self.top_buyers_winners_count]
+            selected_entries = user_entries[:actual_winner_count]
             
             for i, entry in enumerate(selected_entries):
                 winner = JackpotWinner(
