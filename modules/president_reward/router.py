@@ -614,30 +614,30 @@ async def get_president_reward_milestones(user_id: str):
 
 # Helper functions
 def _initialize_president_reward_tiers() -> List[PresidentRewardTier]:
-    """Initialize President Reward tiers based on user requirements"""
+    """Initialize President Reward tiers - 60% USDT + 40% BNB"""
     return [
         # 10 direct partners tiers
-        PresidentRewardTier(tier_number=1, direct_partners_required=10, global_team_required=400, reward_amount=500.0, tier_description="Tier 1: 10 direct, 400 team - $500"),
-        PresidentRewardTier(tier_number=2, direct_partners_required=10, global_team_required=600, reward_amount=700.0, tier_description="Tier 2: 10 direct, 600 team - $700"),
-        PresidentRewardTier(tier_number=3, direct_partners_required=10, global_team_required=800, reward_amount=700.0, tier_description="Tier 3: 10 direct, 800 team - $700"),
-        PresidentRewardTier(tier_number=4, direct_partners_required=10, global_team_required=1000, reward_amount=700.0, tier_description="Tier 4: 10 direct, 1000 team - $700"),
-        PresidentRewardTier(tier_number=5, direct_partners_required=10, global_team_required=1200, reward_amount=700.0, tier_description="Tier 5: 10 direct, 1200 team - $700"),
+        PresidentRewardTier(tier_number=1, direct_partners_required=10, global_team_required=400, reward_amount_usd=500.0, reward_amount_usdt=300.0, reward_amount_bnb=0.15, tier_description="Tier 1: 10 direct, 400 team"),
+        PresidentRewardTier(tier_number=2, direct_partners_required=10, global_team_required=600, reward_amount_usd=700.0, reward_amount_usdt=420.0, reward_amount_bnb=0.21, tier_description="Tier 2: 10 direct, 600 team"),
+        PresidentRewardTier(tier_number=3, direct_partners_required=10, global_team_required=800, reward_amount_usd=700.0, reward_amount_usdt=420.0, reward_amount_bnb=0.21, tier_description="Tier 3: 10 direct, 800 team"),
+        PresidentRewardTier(tier_number=4, direct_partners_required=10, global_team_required=1000, reward_amount_usd=700.0, reward_amount_usdt=420.0, reward_amount_bnb=0.21, tier_description="Tier 4: 10 direct, 1000 team"),
+        PresidentRewardTier(tier_number=5, direct_partners_required=10, global_team_required=1200, reward_amount_usd=700.0, reward_amount_usdt=420.0, reward_amount_bnb=0.21, tier_description="Tier 5: 10 direct, 1200 team"),
         
         # 15 direct partners tiers
-        PresidentRewardTier(tier_number=6, direct_partners_required=15, global_team_required=1500, reward_amount=800.0, tier_description="Tier 6: 15 direct, 1500 team - $800"),
-        PresidentRewardTier(tier_number=7, direct_partners_required=15, global_team_required=1800, reward_amount=800.0, tier_description="Tier 7: 15 direct, 1800 team - $800"),
-        PresidentRewardTier(tier_number=8, direct_partners_required=15, global_team_required=2100, reward_amount=800.0, tier_description="Tier 8: 15 direct, 2100 team - $800"),
-        PresidentRewardTier(tier_number=9, direct_partners_required=15, global_team_required=2400, reward_amount=800.0, tier_description="Tier 9: 15 direct, 2400 team - $800"),
+        PresidentRewardTier(tier_number=6, direct_partners_required=15, global_team_required=1500, reward_amount_usd=800.0, reward_amount_usdt=480.0, reward_amount_bnb=0.24, tier_description="Tier 6: 15 direct, 1500 team"),
+        PresidentRewardTier(tier_number=7, direct_partners_required=15, global_team_required=1800, reward_amount_usd=800.0, reward_amount_usdt=480.0, reward_amount_bnb=0.24, tier_description="Tier 7: 15 direct, 1800 team"),
+        PresidentRewardTier(tier_number=8, direct_partners_required=15, global_team_required=2100, reward_amount_usd=800.0, reward_amount_usdt=480.0, reward_amount_bnb=0.24, tier_description="Tier 8: 15 direct, 2100 team"),
+        PresidentRewardTier(tier_number=9, direct_partners_required=15, global_team_required=2400, reward_amount_usd=800.0, reward_amount_usdt=480.0, reward_amount_bnb=0.24, tier_description="Tier 9: 15 direct, 2400 team"),
         
         # 20 direct partners tiers
-        PresidentRewardTier(tier_number=10, direct_partners_required=20, global_team_required=2700, reward_amount=1500.0, tier_description="Tier 10: 20 direct, 2700 team - $1500"),
-        PresidentRewardTier(tier_number=11, direct_partners_required=20, global_team_required=3000, reward_amount=1500.0, tier_description="Tier 11: 20 direct, 3000 team - $1500"),
-        PresidentRewardTier(tier_number=12, direct_partners_required=20, global_team_required=3500, reward_amount=2000.0, tier_description="Tier 12: 20 direct, 3500 team - $2000"),
-        PresidentRewardTier(tier_number=13, direct_partners_required=20, global_team_required=4000, reward_amount=2500.0, tier_description="Tier 13: 20 direct, 4000 team - $2500"),
-        PresidentRewardTier(tier_number=14, direct_partners_required=20, global_team_required=5000, reward_amount=2500.0, tier_description="Tier 14: 20 direct, 5000 team - $2500"),
+        PresidentRewardTier(tier_number=10, direct_partners_required=20, global_team_required=2700, reward_amount_usd=1500.0, reward_amount_usdt=900.0, reward_amount_bnb=0.46, tier_description="Tier 10: 20 direct, 2700 team"),
+        PresidentRewardTier(tier_number=11, direct_partners_required=20, global_team_required=3000, reward_amount_usd=1500.0, reward_amount_usdt=900.0, reward_amount_bnb=0.46, tier_description="Tier 11: 20 direct, 3000 team"),
+        PresidentRewardTier(tier_number=12, direct_partners_required=20, global_team_required=3500, reward_amount_usd=2000.0, reward_amount_usdt=1200.0, reward_amount_bnb=0.61, tier_description="Tier 12: 20 direct, 3500 team"),
+        PresidentRewardTier(tier_number=13, direct_partners_required=20, global_team_required=4000, reward_amount_usd=2500.0, reward_amount_usdt=1500.0, reward_amount_bnb=0.76, tier_description="Tier 13: 20 direct, 4000 team"),
+        PresidentRewardTier(tier_number=14, direct_partners_required=20, global_team_required=5000, reward_amount_usd=2500.0, reward_amount_usdt=1500.0, reward_amount_bnb=0.76, tier_description="Tier 14: 20 direct, 5000 team"),
         
         # 25 direct partners tier
-        PresidentRewardTier(tier_number=15, direct_partners_required=25, global_team_required=6000, reward_amount=5000.0, tier_description="Tier 15: 25 direct, 6000 team - $5000")
+        PresidentRewardTier(tier_number=15, direct_partners_required=25, global_team_required=6000, reward_amount_usd=5000.0, reward_amount_usdt=3000.0, reward_amount_bnb=1.52, tier_description="Tier 15: 25 direct, 6000 team")
     ]
 
 def _check_direct_partners(user_id: str) -> Dict[str, int]:

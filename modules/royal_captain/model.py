@@ -11,12 +11,13 @@ class RoyalCaptainRequirement(EmbeddedDocument):
     is_met = BooleanField(default=False)
 
 class RoyalCaptainBonus(EmbeddedDocument):
-    """Embedded document for Royal Captain bonus details"""
-    bonus_tier = IntField(required=True)  # 1, 2, 3, 4, 5
+    """Embedded document for Royal Captain bonus details - 60% USDT + 40% BNB"""
+    bonus_tier = IntField(required=True)  # 1, 2, 3, 4, 5, 6
     direct_partners_required = IntField(required=True)
     global_team_required = IntField(required=True)
-    bonus_amount = FloatField(required=True)
-    currency = StringField(choices=['USD', 'USDT'], default='USDT')
+    bonus_amount_usd = FloatField(required=True)  # Total USD value
+    bonus_amount_usdt = FloatField(required=True)  # 60% in USDT
+    bonus_amount_bnb = FloatField(required=True)  # 40% in BNB
     bonus_description = StringField(required=True)
     is_achieved = BooleanField(default=False)
     achieved_at = DateTimeField()
@@ -112,14 +113,16 @@ class RoyalCaptainEligibility(Document):
     }
 
 class RoyalCaptainBonusPayment(Document):
-    """Track Royal Captain bonus payments"""
+    """Track Royal Captain bonus payments - 60% USDT + 40% BNB"""
     user_id = ObjectIdField(required=True)
     royal_captain_id = ObjectIdField(required=True)
     
     # Bonus details
-    bonus_tier = IntField(required=True)  # 1-5
-    bonus_amount = FloatField(required=True)
-    currency = StringField(choices=['USD', 'USDT'], default='USDT')
+    bonus_tier = IntField(required=True)  # 1-6
+    bonus_amount = FloatField(required=True)  # Total USD value
+    bonus_amount_usdt = FloatField(default=0.0)  # 60%
+    bonus_amount_bnb = FloatField(default=0.0)  # 40%
+    currency = StringField(choices=['USDT', 'BNB', 'BOTH'], default='BOTH')
     
     # Requirements met
     direct_partners_at_payment = IntField(required=True)

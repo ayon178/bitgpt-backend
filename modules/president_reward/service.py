@@ -295,12 +295,25 @@ class PresidentRewardService:
             highest_tier.is_achieved = True
             highest_tier.achieved_at = datetime.utcnow()
 
+            # Determine amounts based on currency
+            if currency == 'BOTH':
+                claim_usdt = highest_tier.reward_amount_usdt
+                claim_bnb = highest_tier.reward_amount_bnb
+            elif currency == 'BNB':
+                claim_usdt = 0.0
+                claim_bnb = highest_tier.reward_amount_bnb
+            else:  # USDT
+                claim_usdt = highest_tier.reward_amount_usdt
+                claim_bnb = 0.0
+
             # Create payment
             payment = PresidentRewardPayment(
                 user_id=ObjectId(user_id),
                 president_reward_id=pr.id,
                 tier_number=highest_tier.tier_number,
-                reward_amount=highest_tier.reward_amount,
+                reward_amount=highest_tier.reward_amount_usd,
+                reward_amount_usdt=claim_usdt,
+                reward_amount_bnb=claim_bnb,
                 currency=currency,
                 direct_partners_at_payment=pr.direct_partners_both,
                 global_team_at_payment=pr.global_team_size,
@@ -308,25 +321,27 @@ class PresidentRewardService:
             )
             payment.save()
 
-            # Auto-distribute
-            dist = self.distribute_reward_payment(str(payment.id), currency=currency)
+            # Auto-distribute - credit both USDT and BNB
+            dist = self.distribute_reward_payment(str(payment.id))
             if not dist.get('success'):
                 return {"success": False, "error": dist.get('error', 'Distribution failed')}
 
             # Update President Reward record
             pr.current_tier = highest_tier.tier_number
             pr.highest_tier_achieved = max(pr.highest_tier_achieved or 0, highest_tier.tier_number)
-            pr.total_rewards_earned += highest_tier.reward_amount
+            pr.total_rewards_earned += highest_tier.reward_amount_usd
             pr.last_updated = datetime.utcnow()
             pr.save()
 
-            self._log_action(user_id, "reward_claimed", f"Claimed tier {highest_tier.tier_number}: ${highest_tier.reward_amount} {currency}")
+            self._log_action(user_id, "reward_claimed", f"Claimed tier {highest_tier.tier_number}: {claim_usdt} USDT + {claim_bnb} BNB")
 
             return {
                 "success": True,
                 "user_id": user_id,
                 "tier": highest_tier.tier_number,
-                "amount": highest_tier.reward_amount,
+                "amount_usd": highest_tier.reward_amount_usd,
+                "amount_usdt": claim_usdt,
+                "amount_bnb": claim_bnb,
                 "currency": currency,
                 "payment_id": str(payment.id),
                 "message": f"President Reward tier {highest_tier.tier_number} claimed successfully"
@@ -334,8 +349,8 @@ class PresidentRewardService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def distribute_reward_payment(self, payment_id: str, currency: str = 'USDT') -> Dict[str, Any]:
-        """Distribute President Reward payment - supports USDT and BNB"""
+    def distribute_reward_payment(self, payment_id: str) -> Dict[str, Any]:
+        """Distribute President Reward payment - credits both USDT and BNB"""
         try:
             payment = PresidentRewardPayment.objects(id=ObjectId(payment_id)).first()
             if not payment:
@@ -349,46 +364,53 @@ class PresidentRewardService:
             if not fund:
                 return {"success": False, "error": "President Reward fund not found"}
             
-            # Check currency-specific balance
-            if currency == 'BNB':
-                available = fund.available_amount_bnb or fund.available_amount
-            else:
-                available = fund.available_amount_usdt or fund.available_amount
+            # Check both currency balances
+            usdt_available = fund.available_amount_usdt or fund.available_amount or 0
+            bnb_available = fund.available_amount_bnb or 0
             
-            if available < payment.reward_amount:
-                return {"success": False, "error": f"Insufficient {currency} fund balance"}
+            if payment.reward_amount_usdt > usdt_available or payment.reward_amount_bnb > bnb_available:
+                return {"success": False, "error": "Insufficient fund balance"}
             
             # Process payment
             payment.payment_status = "processing"
             payment.processed_at = datetime.utcnow()
             payment.save()
             
-            # Update fund - currency specific
-            if currency == 'BNB':
-                fund.available_amount_bnb -= payment.reward_amount
-                fund.distributed_amount_bnb += payment.reward_amount
-            else:
-                fund.available_amount_usdt -= payment.reward_amount
-                fund.distributed_amount_usdt += payment.reward_amount
+            # Update fund - both currencies
+            fund.available_amount_usdt -= payment.reward_amount_usdt
+            fund.distributed_amount_usdt += payment.reward_amount_usdt
+            fund.available_amount_bnb -= payment.reward_amount_bnb
+            fund.distributed_amount_bnb += payment.reward_amount_bnb
             
             fund.total_rewards_paid += 1
             fund.total_amount_distributed += payment.reward_amount
             fund.last_updated = datetime.utcnow()
             fund.save()
             
-            # Credit wallet
+            # Credit wallet - both USDT and BNB
             try:
                 from modules.wallet.service import WalletService
                 ws = WalletService()
-                ws.credit_main_wallet(
-                    user_id=str(payment.user_id),
-                    amount=payment.reward_amount,
-                    currency=currency,
-                    reason='president_reward',
-                    tx_hash=f'PR-PAY-{payment_id}'
-                )
-            except Exception:
-                pass
+                
+                if payment.reward_amount_usdt > 0:
+                    ws.credit_main_wallet(
+                        user_id=str(payment.user_id),
+                        amount=payment.reward_amount_usdt,
+                        currency='USDT',
+                        reason='president_reward',
+                        tx_hash=f'PR-PAY-{payment_id}-USDT'
+                    )
+                
+                if payment.reward_amount_bnb > 0:
+                    ws.credit_main_wallet(
+                        user_id=str(payment.user_id),
+                        amount=payment.reward_amount_bnb,
+                        currency='BNB',
+                        reason='president_reward',
+                        tx_hash=f'PR-PAY-{payment_id}-BNB'
+                    )
+            except Exception as e:
+                print(f"Wallet credit failed: {str(e)}")
             
             # Update President Reward record
             president_reward = PresidentReward.objects(id=payment.president_reward_id).first()

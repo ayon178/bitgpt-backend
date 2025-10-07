@@ -2,12 +2,13 @@ from mongoengine import Document, StringField, ObjectIdField, IntField, BooleanF
 from datetime import datetime
 
 class PresidentRewardTier(EmbeddedDocument):
-    """Embedded document for President Reward tiers"""
+    """Embedded document for President Reward tiers - 60% USDT + 40% BNB"""
     tier_number = IntField(required=True)  # 1-15
     direct_partners_required = IntField(required=True)
     global_team_required = IntField(required=True)
-    reward_amount = FloatField(required=True)
-    currency = StringField(choices=['USD', 'USDT'], default='USDT')
+    reward_amount_usd = FloatField(required=True)  # Total USD value
+    reward_amount_usdt = FloatField(required=True)  # 60%
+    reward_amount_bnb = FloatField(required=True)  # 40%
     tier_description = StringField(required=True)
     is_achieved = BooleanField(default=False)
     achieved_at = DateTimeField()
@@ -103,14 +104,16 @@ class PresidentRewardEligibility(Document):
     }
 
 class PresidentRewardPayment(Document):
-    """Track President Reward payments"""
+    """Track President Reward payments - 60% USDT + 40% BNB"""
     user_id = ObjectIdField(required=True)
     president_reward_id = ObjectIdField(required=True)
     
     # Reward details
     tier_number = IntField(required=True)  # 1-15
-    reward_amount = FloatField(required=True)
-    currency = StringField(choices=['USDT', 'BNB'], default='USDT')
+    reward_amount = FloatField(required=True)  # Total USD value
+    reward_amount_usdt = FloatField(default=0.0)  # 60%
+    reward_amount_bnb = FloatField(default=0.0)  # 40%
+    currency = StringField(choices=['USDT', 'BNB', 'BOTH'], default='BOTH')
     
     # Requirements met at payment
     direct_partners_at_payment = IntField(required=True)

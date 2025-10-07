@@ -304,12 +304,25 @@ class RoyalCaptainService:
             highest_tier.is_achieved = True
             highest_tier.achieved_at = datetime.utcnow()
 
+            # Determine amounts based on currency (BOTH = USDT + BNB)
+            if currency == 'BOTH':
+                claim_usdt = highest_tier.bonus_amount_usdt
+                claim_bnb = highest_tier.bonus_amount_bnb
+            elif currency == 'BNB':
+                claim_usdt = 0.0
+                claim_bnb = highest_tier.bonus_amount_bnb
+            else:  # USDT
+                claim_usdt = highest_tier.bonus_amount_usdt
+                claim_bnb = 0.0
+            
             # Create payment
             payment = RoyalCaptainBonusPayment(
                 user_id=ObjectId(user_id),
                 royal_captain_id=rc.id,
                 bonus_tier=highest_tier.bonus_tier,
-                bonus_amount=highest_tier.bonus_amount,
+                bonus_amount=highest_tier.bonus_amount_usd,
+                bonus_amount_usdt=claim_usdt,
+                bonus_amount_bnb=claim_bnb,
                 currency=currency,
                 direct_partners_at_payment=rc.direct_partners_with_both_packages,
                 global_team_at_payment=rc.total_global_team,
@@ -317,24 +330,26 @@ class RoyalCaptainService:
             )
             payment.save()
 
-            # Auto-distribute (credit wallet)
-            dist = self.distribute_bonus_payment(str(payment.id), currency=currency)
+            # Auto-distribute (credit wallet) - credit both USDT and BNB
+            dist = self.distribute_bonus_payment(str(payment.id))
             if not dist.get('success'):
                 return {"success": False, "error": dist.get('error', 'Distribution failed')}
 
             # Update Royal Captain record
             rc.current_tier = highest_tier.bonus_tier
-            rc.total_bonus_earned += highest_tier.bonus_amount
+            rc.total_bonus_earned += highest_tier.bonus_amount_usd
             rc.last_updated = datetime.utcnow()
             rc.save()
 
-            self._log_action(user_id, "bonus_earned", f"Claimed tier {highest_tier.bonus_tier}: ${highest_tier.bonus_amount} {currency}")
+            self._log_action(user_id, "bonus_earned", f"Claimed tier {highest_tier.bonus_tier}: {claim_usdt} USDT + {claim_bnb} BNB")
 
             return {
                 "success": True,
                 "user_id": user_id,
                 "tier": highest_tier.bonus_tier,
-                "amount": highest_tier.bonus_amount,
+                "amount_usd": highest_tier.bonus_amount_usd,
+                "amount_usdt": claim_usdt,
+                "amount_bnb": claim_bnb,
                 "currency": currency,
                 "payment_id": str(payment.id),
                 "message": f"Royal Captain bonus tier {highest_tier.bonus_tier} claimed successfully"
@@ -342,8 +357,8 @@ class RoyalCaptainService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    def distribute_bonus_payment(self, bonus_payment_id: str, currency: str = 'USDT') -> Dict[str, Any]:
-        """Distribute Royal Captain bonus payment"""
+    def distribute_bonus_payment(self, bonus_payment_id: str) -> Dict[str, Any]:
+        """Distribute Royal Captain bonus payment - credits both USDT and BNB to wallet"""
         try:
             bonus_payment = RoyalCaptainBonusPayment.objects(id=ObjectId(bonus_payment_id)).first()
             if not bonus_payment:
@@ -373,19 +388,32 @@ class RoyalCaptainService:
             fund.last_updated = datetime.utcnow()
             fund.save()
             
-            # Credit wallet
+            # Credit wallet - both USDT and BNB
             try:
                 from modules.wallet.service import WalletService
                 ws = WalletService()
-                ws.credit_main_wallet(
-                    user_id=str(bonus_payment.user_id),
-                    amount=bonus_payment.bonus_amount,
-                    currency=currency,
-                    reason='royal_captain_bonus',
-                    tx_hash=f'RC-PAY-{bonus_payment_id}'
-                )
-            except Exception:
-                pass
+                
+                # Credit USDT if amount > 0
+                if bonus_payment.bonus_amount_usdt > 0:
+                    ws.credit_main_wallet(
+                        user_id=str(bonus_payment.user_id),
+                        amount=bonus_payment.bonus_amount_usdt,
+                        currency='USDT',
+                        reason='royal_captain_bonus',
+                        tx_hash=f'RC-PAY-{bonus_payment_id}-USDT'
+                    )
+                
+                # Credit BNB if amount > 0
+                if bonus_payment.bonus_amount_bnb > 0:
+                    ws.credit_main_wallet(
+                        user_id=str(bonus_payment.user_id),
+                        amount=bonus_payment.bonus_amount_bnb,
+                        currency='BNB',
+                        reason='royal_captain_bonus',
+                        tx_hash=f'RC-PAY-{bonus_payment_id}-BNB'
+                    )
+            except Exception as e:
+                print(f"Wallet credit failed: {str(e)}")
             
             # Complete payment
             bonus_payment.payment_status = "paid"
@@ -516,55 +544,61 @@ class RoyalCaptainService:
         ]
     
     def _initialize_bonus_tiers(self) -> List[RoyalCaptainBonus]:
-        """Initialize Royal Captain bonus tiers according to PROJECT_DOCUMENTATION.md"""
+        """Initialize Royal Captain bonus tiers - 60% USDT + 40% BNB"""
         return [
             RoyalCaptainBonus(
                 bonus_tier=1,
                 direct_partners_required=5,
                 global_team_required=0,
-                bonus_amount=200.0,
-                currency='USDT',
-                bonus_description="Royal Captain Bonus - 5 direct partners (Binary+Matrix+Global)"
+                bonus_amount_usd=200.0,
+                bonus_amount_usdt=120.0,  # 60%
+                bonus_amount_bnb=0.061,  # 40%
+                bonus_description="Royal Captain Tier 1 - 5 direct, 0 team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=2,
                 direct_partners_required=5,
                 global_team_required=10,
-                bonus_amount=200.0,
-                currency='USDT',
-                bonus_description="Royal Captain Bonus - 5 direct partners, 10 global team"
+                bonus_amount_usd=200.0,
+                bonus_amount_usdt=120.0,  # 60%
+                bonus_amount_bnb=0.061,  # 40%
+                bonus_description="Royal Captain Tier 2 - 5 direct, 10 team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=3,
                 direct_partners_required=5,
                 global_team_required=50,
-                bonus_amount=200.0,
-                currency='USDT',
-                bonus_description="Royal Captain Bonus - 5 direct partners, 50 global team"
+                bonus_amount_usd=200.0,
+                bonus_amount_usdt=120.0,  # 60%
+                bonus_amount_bnb=0.061,  # 40%
+                bonus_description="Royal Captain Tier 3 - 5 direct, 50 team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=4,
                 direct_partners_required=5,
                 global_team_required=100,
-                bonus_amount=200.0,
-                currency='USDT',
-                bonus_description="Royal Captain Bonus - 5 direct partners, 100 global team"
+                bonus_amount_usd=200.0,
+                bonus_amount_usdt=120.0,  # 60%
+                bonus_amount_bnb=0.061,  # 40%
+                bonus_description="Royal Captain Tier 4 - 5 direct, 100 team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=5,
                 direct_partners_required=5,
                 global_team_required=200,
-                bonus_amount=250.0,
-                currency='USDT',
-                bonus_description="Royal Captain Bonus - 5 direct partners, 200 global team"
+                bonus_amount_usd=250.0,
+                bonus_amount_usdt=150.0,  # 60%
+                bonus_amount_bnb=0.076,  # 40%
+                bonus_description="Royal Captain Tier 5 - 5 direct, 200 team"
             ),
             RoyalCaptainBonus(
                 bonus_tier=6,
                 direct_partners_required=5,
                 global_team_required=300,
-                bonus_amount=250.0,
-                currency='USDT',
-                bonus_description="Royal Captain Bonus - 5 direct partners, 300 global team"
+                bonus_amount_usd=250.0,
+                bonus_amount_usdt=150.0,  # 60%
+                bonus_amount_bnb=0.076,  # 40%
+                bonus_description="Royal Captain Tier 6 - 5 direct, 300 team"
             )
         ]
     
