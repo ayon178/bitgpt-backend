@@ -110,7 +110,7 @@ class PresidentRewardPayment(Document):
     # Reward details
     tier_number = IntField(required=True)  # 1-15
     reward_amount = FloatField(required=True)
-    currency = StringField(choices=['USD', 'USDT'], default='USDT')
+    currency = StringField(choices=['USDT', 'BNB'], default='USDT')
     
     # Requirements met at payment
     direct_partners_at_payment = IntField(required=True)
@@ -142,14 +142,24 @@ class PresidentRewardPayment(Document):
     }
 
 class PresidentRewardFund(Document):
-    """President Reward Fund management"""
+    """President Reward Fund management - supports both USDT and BNB"""
     fund_name = StringField(default='President Reward Fund', unique=True)
     
-    # Fund details
+    # Fund details - USDT
+    total_fund_amount_usdt = FloatField(default=0.0)
+    available_amount_usdt = FloatField(default=0.0)
+    distributed_amount_usdt = FloatField(default=0.0)
+    
+    # Fund details - BNB
+    total_fund_amount_bnb = FloatField(default=0.0)
+    available_amount_bnb = FloatField(default=0.0)
+    distributed_amount_bnb = FloatField(default=0.0)
+    
+    # Legacy fields (kept for backward compatibility)
     total_fund_amount = FloatField(default=0.0)
     available_amount = FloatField(default=0.0)
     distributed_amount = FloatField(default=0.0)
-    currency = StringField(choices=['USD', 'USDT'], default='USDT')
+    currency = StringField(choices=['USDT', 'BNB'], default='USDT')
     
     # Fund sources
     fund_sources = DictField(default={

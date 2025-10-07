@@ -10,6 +10,7 @@ from .model import (
     PresidentRewardFund, PresidentRewardSettings, PresidentRewardLog, 
     PresidentRewardStatistics, PresidentRewardMilestone, PresidentRewardTier
 )
+from .service import PresidentRewardService
 from utils.response import success_response, error_response
 
 router = APIRouter(prefix="/president-reward", tags=["President Reward"])
@@ -613,30 +614,30 @@ async def get_president_reward_milestones(user_id: str):
 
 # Helper functions
 def _initialize_president_reward_tiers() -> List[PresidentRewardTier]:
-    """Initialize President Reward tiers based on PROJECT_DOCUMENTATION.md"""
+    """Initialize President Reward tiers based on user requirements"""
     return [
-        # Tier 1-5: $500-$700
-        PresidentRewardTier(tier_number=1, direct_partners_required=10, global_team_required=80, reward_amount=500.0, tier_description="Tier 1: 10 direct partners, 80 global team"),
-        PresidentRewardTier(tier_number=2, direct_partners_required=10, global_team_required=150, reward_amount=700.0, tier_description="Tier 2: 10 direct partners, 150 global team"),
-        PresidentRewardTier(tier_number=3, direct_partners_required=10, global_team_required=200, reward_amount=700.0, tier_description="Tier 3: 10 direct partners, 200 global team"),
-        PresidentRewardTier(tier_number=4, direct_partners_required=10, global_team_required=250, reward_amount=700.0, tier_description="Tier 4: 10 direct partners, 250 global team"),
-        PresidentRewardTier(tier_number=5, direct_partners_required=10, global_team_required=300, reward_amount=700.0, tier_description="Tier 5: 10 direct partners, 300 global team"),
+        # 10 direct partners tiers
+        PresidentRewardTier(tier_number=1, direct_partners_required=10, global_team_required=400, reward_amount=500.0, tier_description="Tier 1: 10 direct, 400 team - $500"),
+        PresidentRewardTier(tier_number=2, direct_partners_required=10, global_team_required=600, reward_amount=700.0, tier_description="Tier 2: 10 direct, 600 team - $700"),
+        PresidentRewardTier(tier_number=3, direct_partners_required=10, global_team_required=800, reward_amount=700.0, tier_description="Tier 3: 10 direct, 800 team - $700"),
+        PresidentRewardTier(tier_number=4, direct_partners_required=10, global_team_required=1000, reward_amount=700.0, tier_description="Tier 4: 10 direct, 1000 team - $700"),
+        PresidentRewardTier(tier_number=5, direct_partners_required=10, global_team_required=1200, reward_amount=700.0, tier_description="Tier 5: 10 direct, 1200 team - $700"),
         
-        # Tier 6-9: $800
-        PresidentRewardTier(tier_number=6, direct_partners_required=15, global_team_required=400, reward_amount=800.0, tier_description="Tier 6: 15 direct partners, 400 global team"),
-        PresidentRewardTier(tier_number=7, direct_partners_required=15, global_team_required=500, reward_amount=800.0, tier_description="Tier 7: 15 direct partners, 500 global team"),
-        PresidentRewardTier(tier_number=8, direct_partners_required=15, global_team_required=600, reward_amount=800.0, tier_description="Tier 8: 15 direct partners, 600 global team"),
-        PresidentRewardTier(tier_number=9, direct_partners_required=15, global_team_required=700, reward_amount=800.0, tier_description="Tier 9: 15 direct partners, 700 global team"),
+        # 15 direct partners tiers
+        PresidentRewardTier(tier_number=6, direct_partners_required=15, global_team_required=1500, reward_amount=800.0, tier_description="Tier 6: 15 direct, 1500 team - $800"),
+        PresidentRewardTier(tier_number=7, direct_partners_required=15, global_team_required=1800, reward_amount=800.0, tier_description="Tier 7: 15 direct, 1800 team - $800"),
+        PresidentRewardTier(tier_number=8, direct_partners_required=15, global_team_required=2100, reward_amount=800.0, tier_description="Tier 8: 15 direct, 2100 team - $800"),
+        PresidentRewardTier(tier_number=9, direct_partners_required=15, global_team_required=2400, reward_amount=800.0, tier_description="Tier 9: 15 direct, 2400 team - $800"),
         
-        # Tier 10-14: $1500
-        PresidentRewardTier(tier_number=10, direct_partners_required=20, global_team_required=1000, reward_amount=1500.0, tier_description="Tier 10: 20 direct partners, 1000 global team"),
-        PresidentRewardTier(tier_number=11, direct_partners_required=20, global_team_required=1500, reward_amount=1500.0, tier_description="Tier 11: 20 direct partners, 1500 global team"),
-        PresidentRewardTier(tier_number=12, direct_partners_required=20, global_team_required=2000, reward_amount=1500.0, tier_description="Tier 12: 20 direct partners, 2000 global team"),
-        PresidentRewardTier(tier_number=13, direct_partners_required=20, global_team_required=2500, reward_amount=1500.0, tier_description="Tier 13: 20 direct partners, 2500 global team"),
-        PresidentRewardTier(tier_number=14, direct_partners_required=20, global_team_required=3000, reward_amount=2000.0, tier_description="Tier 14: 20 direct partners, 3000 global team"),
+        # 20 direct partners tiers
+        PresidentRewardTier(tier_number=10, direct_partners_required=20, global_team_required=2700, reward_amount=1500.0, tier_description="Tier 10: 20 direct, 2700 team - $1500"),
+        PresidentRewardTier(tier_number=11, direct_partners_required=20, global_team_required=3000, reward_amount=1500.0, tier_description="Tier 11: 20 direct, 3000 team - $1500"),
+        PresidentRewardTier(tier_number=12, direct_partners_required=20, global_team_required=3500, reward_amount=2000.0, tier_description="Tier 12: 20 direct, 3500 team - $2000"),
+        PresidentRewardTier(tier_number=13, direct_partners_required=20, global_team_required=4000, reward_amount=2500.0, tier_description="Tier 13: 20 direct, 4000 team - $2500"),
+        PresidentRewardTier(tier_number=14, direct_partners_required=20, global_team_required=5000, reward_amount=2500.0, tier_description="Tier 14: 20 direct, 5000 team - $2500"),
         
-        # Tier 15: $3000
-        PresidentRewardTier(tier_number=15, direct_partners_required=30, global_team_required=40000, reward_amount=3000.0, tier_description="Tier 15: 30 direct partners, 40000 global team")
+        # 25 direct partners tier
+        PresidentRewardTier(tier_number=15, direct_partners_required=25, global_team_required=6000, reward_amount=5000.0, tier_description="Tier 15: 25 direct, 6000 team - $5000")
     ]
 
 def _check_direct_partners(user_id: str) -> Dict[str, int]:
@@ -680,3 +681,97 @@ def _get_eligibility_reasons(eligibility: PresidentRewardEligibility) -> List[st
         reasons.append(f"Need {needed} more direct partners with both Matrix and Global packages")
     
     return reasons
+
+@router.post("/claim")
+async def claim_president_reward(
+    user_id: str = Query(..., description="User ID"),
+    currency: str = Query('USDT', description="Currency (USDT or BNB)")
+):
+    """Claim President Reward for eligible user"""
+    try:
+        svc = PresidentRewardService()
+        result = svc.claim_president_reward(user_id=user_id, currency=currency)
+        
+        if not result.get('success'):
+            return error_response(result.get('error', 'Claim failed'))
+        
+        return success_response(
+            data={
+                "user_id": result.get('user_id'),
+                "tier": result.get('tier'),
+                "amount": result.get('amount'),
+                "currency": result.get('currency'),
+                "payment_id": result.get('payment_id')
+            },
+            message=result.get('message', 'President Reward claimed successfully')
+        )
+    except Exception as e:
+        return error_response(str(e))
+
+@router.get("/claim/history")
+async def get_president_reward_claim_history(
+    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    currency: Optional[str] = Query(None, description="Filter by currency (USDT or BNB)"),
+    tier_number: Optional[int] = Query(None, description="Filter by tier number"),
+    status: Optional[str] = Query(None, description="Filter by payment status"),
+    start_date: Optional[str] = Query(None, description="Filter by start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Filter by end date (YYYY-MM-DD)"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=100, description="Items per page")
+):
+    """Get President Reward claim history"""
+    try:
+        # Build query
+        query_filter = {}
+        
+        if user_id:
+            query_filter['user_id'] = ObjectId(user_id)
+        if currency:
+            query_filter['currency'] = currency.upper()
+        if tier_number:
+            query_filter['tier_number'] = tier_number
+        if status:
+            query_filter['payment_status'] = status
+        
+        # Date range
+        if start_date or end_date:
+            date_filter = {}
+            if start_date:
+                date_filter['$gte'] = datetime.strptime(start_date, '%Y-%m-%d')
+            if end_date:
+                date_filter['$lte'] = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+            query_filter['created_at'] = date_filter
+        
+        # Pagination
+        skip = (page - 1) * limit
+        total = PresidentRewardPayment.objects(**query_filter).count()
+        
+        claims = PresidentRewardPayment.objects(**query_filter).order_by('-created_at').skip(skip).limit(limit)
+        
+        claims_list = []
+        for c in claims:
+            claims_list.append({
+                "id": str(c.id),
+                "user_id": str(c.user_id),
+                "tier": c.tier_number,
+                "amount": c.reward_amount,
+                "currency": getattr(c, 'currency', 'USDT'),
+                "status": c.payment_status,
+                "paid_at": c.paid_at,
+                "created_at": c.created_at
+            })
+        
+        return success_response(
+            data={
+                "claims": claims_list,
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "total_pages": (total + limit - 1) // limit
+                }
+            },
+            message="President Reward claim history fetched"
+        )
+    except Exception as e:
+        return error_response(str(e))

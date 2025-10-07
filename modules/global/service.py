@@ -730,6 +730,34 @@ class GlobalService:
                     print(f"User {user.id} eligible for Triple Entry Reward - has Binary + Matrix + Global")
                     triple_entry_result = SparkService.compute_triple_entry_eligibles(datetime.utcnow())
                     print(f"Triple Entry eligibility computed: {triple_entry_result}")
+                    
+                    # Auto-join President Reward program when user has all 3 programs
+                    try:
+                        from modules.president_reward.service import PresidentRewardService
+                        from modules.president_reward.model import PresidentReward
+                        pr_existing = PresidentReward.objects(user_id=user.id).first()
+                        if not pr_existing:
+                            pr_svc = PresidentRewardService()
+                            pr_result = pr_svc.join_president_reward_program(str(user.id))
+                            print(f"President Reward auto-join for user {user.id}: {pr_result}")
+                        else:
+                            print(f"User {user.id} already in President Reward program")
+                    except Exception as pr_e:
+                        print(f"President Reward auto-join failed for user {user.id}: {str(pr_e)}")
+                    
+                    # Auto-join Royal Captain Bonus program when user has all 3 programs
+                    try:
+                        from modules.royal_captain.service import RoyalCaptainService
+                        from modules.royal_captain.model import RoyalCaptain
+                        rc_existing = RoyalCaptain.objects(user_id=user.id).first()
+                        if not rc_existing:
+                            rc_svc = RoyalCaptainService()
+                            rc_result = rc_svc.join_royal_captain_program(str(user.id))
+                            print(f"Royal Captain auto-join for user {user.id}: {rc_result}")
+                        else:
+                            print(f"User {user.id} already in Royal Captain program")
+                    except Exception as rc_e:
+                        print(f"Royal Captain auto-join failed for user {user.id}: {str(rc_e)}")
                 else:
                     print(f"User {user.id} not yet eligible for Triple Entry Reward - missing programs")
             except Exception as e:

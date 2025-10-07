@@ -118,8 +118,16 @@ class BinaryService:
                     slot_no=slot_no
                 )
             
-            # 6. Check leadership stipend eligibility (slots 10-16)
+            # 6. Auto-join Leadership Stipend and check eligibility (slots 10-17)
             if slot_no >= 10:
+                # Auto-join if not already joined
+                from modules.leadership_stipend.model import LeadershipStipend
+                ls_existing = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+                if not ls_existing:
+                    join_result = self.leadership_stipend_service.join_leadership_stipend_program(user_id)
+                    print(f"Leadership Stipend auto-join for user {user_id} slot {slot_no}: {join_result}")
+                
+                # Check eligibility
                 stipend_result = self.leadership_stipend_service.check_eligibility(
                     user_id=user_id, 
                     force_check=True

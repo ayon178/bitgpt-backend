@@ -250,8 +250,92 @@ class PresidentRewardService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    def distribute_reward_payment(self, payment_id: str) -> Dict[str, Any]:
-        """Distribute President Reward payment"""
+    def claim_president_reward(self, user_id: str, currency: str = 'USDT') -> Dict[str, Any]:
+        """Claim President Reward for the user's current eligible tier.
+        - Checks eligibility (10 direct + 400 team minimum)
+        - Prevents claims within 24 hours
+        - Tier progression stops lower tiers when higher tier is eligible
+        - Credits wallet in USDT or BNB
+        """
+        try:
+            currency = (currency or 'USDT').upper()
+            if currency not in ('USDT', 'BNB'):
+                return {"success": False, "error": "Invalid currency; must be USDT or BNB"}
+
+            # Get President Reward record directly
+            pr = PresidentReward.objects(user_id=ObjectId(user_id)).first()
+            if not pr:
+                return {"success": False, "error": "User not in President Reward program"}
+            
+            # Check eligibility from PR record (not from check_eligibility method)
+            if not pr.is_eligible:
+                return {"success": False, "error": "You are not eligible to claim President Reward"}
+
+            # Prevent claims within 24h
+            last_payment = PresidentRewardPayment.objects(user_id=ObjectId(user_id)).order_by('-created_at').first()
+            if last_payment:
+                hours_since = (datetime.utcnow() - last_payment.created_at).total_seconds() / 3600
+                if hours_since < 24:
+                    return {"success": False, "error": f"You can claim again in {int(24 - hours_since)} hours"}
+
+            # Determine the highest tier the user qualifies for
+            highest_tier = None
+            for t in sorted(pr.tiers, key=lambda x: x.tier_number, reverse=True):
+                if self._check_tier_requirements(pr, t):
+                    highest_tier = t
+                    break
+            if not highest_tier:
+                return {"success": False, "error": "Not eligible for any tier"}
+
+            # Check if already achieved
+            if highest_tier.is_achieved:
+                return {"success": False, "error": f"Tier {highest_tier.tier_number} already claimed"}
+
+            # Mark achieved
+            highest_tier.is_achieved = True
+            highest_tier.achieved_at = datetime.utcnow()
+
+            # Create payment
+            payment = PresidentRewardPayment(
+                user_id=ObjectId(user_id),
+                president_reward_id=pr.id,
+                tier_number=highest_tier.tier_number,
+                reward_amount=highest_tier.reward_amount,
+                currency=currency,
+                direct_partners_at_payment=pr.direct_partners_both,
+                global_team_at_payment=pr.global_team_size,
+                payment_status='pending'
+            )
+            payment.save()
+
+            # Auto-distribute
+            dist = self.distribute_reward_payment(str(payment.id), currency=currency)
+            if not dist.get('success'):
+                return {"success": False, "error": dist.get('error', 'Distribution failed')}
+
+            # Update President Reward record
+            pr.current_tier = highest_tier.tier_number
+            pr.highest_tier_achieved = max(pr.highest_tier_achieved or 0, highest_tier.tier_number)
+            pr.total_rewards_earned += highest_tier.reward_amount
+            pr.last_updated = datetime.utcnow()
+            pr.save()
+
+            self._log_action(user_id, "reward_claimed", f"Claimed tier {highest_tier.tier_number}: ${highest_tier.reward_amount} {currency}")
+
+            return {
+                "success": True,
+                "user_id": user_id,
+                "tier": highest_tier.tier_number,
+                "amount": highest_tier.reward_amount,
+                "currency": currency,
+                "payment_id": str(payment.id),
+                "message": f"President Reward tier {highest_tier.tier_number} claimed successfully"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def distribute_reward_payment(self, payment_id: str, currency: str = 'USDT') -> Dict[str, Any]:
+        """Distribute President Reward payment - supports USDT and BNB"""
         try:
             payment = PresidentRewardPayment.objects(id=ObjectId(payment_id)).first()
             if not payment:
@@ -265,21 +349,46 @@ class PresidentRewardService:
             if not fund:
                 return {"success": False, "error": "President Reward fund not found"}
             
-            if fund.available_amount < payment.reward_amount:
-                return {"success": False, "error": "Insufficient fund balance"}
+            # Check currency-specific balance
+            if currency == 'BNB':
+                available = fund.available_amount_bnb or fund.available_amount
+            else:
+                available = fund.available_amount_usdt or fund.available_amount
+            
+            if available < payment.reward_amount:
+                return {"success": False, "error": f"Insufficient {currency} fund balance"}
             
             # Process payment
             payment.payment_status = "processing"
             payment.processed_at = datetime.utcnow()
             payment.save()
             
-            # Update fund
-            fund.available_amount -= payment.reward_amount
-            fund.distributed_amount += payment.reward_amount
+            # Update fund - currency specific
+            if currency == 'BNB':
+                fund.available_amount_bnb -= payment.reward_amount
+                fund.distributed_amount_bnb += payment.reward_amount
+            else:
+                fund.available_amount_usdt -= payment.reward_amount
+                fund.distributed_amount_usdt += payment.reward_amount
+            
             fund.total_rewards_paid += 1
             fund.total_amount_distributed += payment.reward_amount
             fund.last_updated = datetime.utcnow()
             fund.save()
+            
+            # Credit wallet
+            try:
+                from modules.wallet.service import WalletService
+                ws = WalletService()
+                ws.credit_main_wallet(
+                    user_id=str(payment.user_id),
+                    amount=payment.reward_amount,
+                    currency=currency,
+                    reason='president_reward',
+                    tx_hash=f'PR-PAY-{payment_id}'
+                )
+            except Exception:
+                pass
             
             # Update President Reward record
             president_reward = PresidentReward.objects(id=payment.president_reward_id).first()
