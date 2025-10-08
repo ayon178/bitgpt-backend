@@ -744,3 +744,145 @@ class JackpotService:
                 "success": False,
                 "error": f"Failed to get distribution history: {str(e)}"
             }
+    
+    def get_current_jackpot_stats(self) -> Dict[str, Any]:
+        """Get current jackpot session statistics (total entries and total fund)"""
+        try:
+            week_start, week_end = self._get_current_week_dates()
+            current_date = datetime.utcnow()
+            
+            # Check if current date is within the jackpot session
+            is_active = week_start <= current_date <= week_end
+            
+            if not is_active:
+                return {
+                    "success": True,
+                    "is_active": False,
+                    "message": "No active jackpot session",
+                    "total_entries": 0,
+                    "total_fund": Decimal('0.0'),
+                    "week_start": week_start,
+                    "week_end": week_end
+                }
+            
+            # Get jackpot fund for current week
+            fund = JackpotFund.objects(
+                week_start_date=week_start,
+                week_end_date=week_end
+            ).first()
+            
+            # Get all user entries for current week
+            user_entries = JackpotUserEntry.objects(
+                week_start_date=week_start,
+                week_end_date=week_end
+            )
+            
+            # Calculate total entries across all users
+            total_entries = 0
+            for entry in user_entries:
+                total_entries += entry.total_entries_count
+            
+            total_fund = fund.total_fund if fund else Decimal('0.0')
+            
+            return {
+                "success": True,
+                "is_active": True,
+                "total_entries": total_entries,
+                "total_fund": total_fund,
+                "week_start": week_start,
+                "week_end": week_end,
+                "entry_fees_total": fund.entry_fees_total if fund else Decimal('0.0'),
+                "binary_contributions_total": fund.binary_contributions_total if fund else Decimal('0.0'),
+                "rollover_from_previous": fund.rollover_from_previous if fund else Decimal('0.0')
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get current jackpot stats: {str(e)}"
+            }
+    
+    def get_user_entry_history(self, user_id: str, limit: int = 20) -> Dict[str, Any]:
+        """Get user's jackpot entry history"""
+        try:
+            # Get user's entries from all weeks, ordered by creation date
+            user_entries = JackpotUserEntry.objects(
+                user_id=ObjectId(user_id)
+            ).order_by('-created_at').limit(limit)
+            
+            entry_history = []
+            entry_counter = 1
+            
+            for user_entry in user_entries:
+                for entry in user_entry.entries:
+                    entry_history.append({
+                        "entry_no": entry_counter,
+                        "entry_price": float(entry.entry_fee),
+                        "entry_type": entry.entry_type,
+                        "time_date": entry.created_at.strftime("%d%b,%Y (%H:%M)"),
+                        "week_start": user_entry.week_start_date.strftime("%d%b,%Y"),
+                        "week_end": user_entry.week_end_date.strftime("%d%b,%Y"),
+                        "tx_hash": entry.tx_hash
+                    })
+                    entry_counter += 1
+            
+            return {
+                "success": True,
+                "entry_history": entry_history,
+                "total_entries": len(entry_history)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get user entry history: {str(e)}"
+            }
+    
+    def get_user_claim_history(self, user_id: str, limit: int = 20) -> Dict[str, Any]:
+        """Get user's jackpot claim/winning history"""
+        try:
+            # Get jackpot distributions where user was a winner
+            distributions = JackpotDistribution.objects(
+                winners__user_id=ObjectId(user_id)
+            ).order_by('-created_at').limit(limit)
+            
+            claim_history = []
+            
+            for distribution in distributions:
+                # Find user's winning entries in this distribution
+                user_winnings = [winner for winner in distribution.winners 
+                               if winner.user_id == ObjectId(user_id)]
+                
+                for winning in user_winnings:
+                    # Map pool type to display name
+                    pool_type_mapping = {
+                        'open_pool': 'OPEN POOL',
+                        'top_promoters': 'TOP DIRECT PROMOTERS',
+                        'top_buyers': 'TOP BUYERS POOL',
+                        'new_joiners': 'NEW JOINERS POOL'
+                    }
+                    
+                    claim_history.append({
+                        "type": pool_type_mapping.get(winning.pool_type, winning.pool_type),
+                        "win_price": float(winning.amount_won),
+                        "time_date": distribution.distribution_date.strftime("%d%b,%Y (%H:%M)") if distribution.distribution_date else distribution.created_at.strftime("%d%b,%Y (%H:%M)"),
+                        "rank": winning.rank,
+                        "entries_count": winning.entries_count,
+                        "week_start": distribution.week_start_date.strftime("%d%b,%Y"),
+                        "week_end": distribution.week_end_date.strftime("%d%b,%Y")
+                    })
+            
+            # Sort by date descending
+            claim_history.sort(key=lambda x: x["time_date"], reverse=True)
+            
+            return {
+                "success": True,
+                "claim_history": claim_history,
+                "total_claims": len(claim_history)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get user claim history: {str(e)}"
+            }

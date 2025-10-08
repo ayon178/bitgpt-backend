@@ -177,3 +177,43 @@ async def get_pool_percentages():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get pool percentages: {str(e)}")
+
+@router.get("/current-stats")
+async def get_current_jackpot_stats():
+    """Get current jackpot session statistics (total entries and total fund)"""
+    try:
+        jackpot_service = JackpotService()
+        result = jackpot_service.get_current_jackpot_stats()
+        
+        if result.get("success"):
+            return result
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get current jackpot stats: {str(e)}")
+
+@router.get("/history/{user_id}")
+async def get_user_jackpot_history(
+    user_id: str, 
+    history_type: str = Query(..., regex="^(entry|claim)$"),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Get user's jackpot history - entry or claim based on query parameter"""
+    try:
+        jackpot_service = JackpotService()
+        
+        if history_type == "entry":
+            result = jackpot_service.get_user_entry_history(user_id, limit)
+        elif history_type == "claim":
+            result = jackpot_service.get_user_claim_history(user_id, limit)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid history_type. Must be 'entry' or 'claim'")
+        
+        if result.get("success"):
+            return result
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error"))
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get user jackpot history: {str(e)}")
