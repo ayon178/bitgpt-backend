@@ -21,16 +21,303 @@ from datetime import datetime
 from modules.tree.model import TreePlacement
 
 
+class UserService:
+    """Service class for user-related operations"""
+    
+    def get_user_by_uid(self, uid: str) -> Dict[str, Any]:
+        """Get user details by UID"""
+        try:
+            # Get user by UID
+            user = User.objects(uid=uid).first()
+            if not user:
+                return {
+                    "success": False,
+                    "error": "User not found"
+                }
+            
+            # Return user data in the exact format as shown in the collection
+            user_data = {
+                "success": True,
+                "user": {
+                    "_id": str(user.id),
+                    "uid": user.uid,
+                    "refer_code": user.refer_code,
+                    "refered_by": str(user.refered_by) if user.refered_by else None,
+                    "wallet_address": user.wallet_address,
+                    "name": user.name,
+                    "role": user.role,
+                    "email": user.email,
+                    "status": user.status if hasattr(user, 'status') else "active",
+                    "current_rank": user.current_rank if hasattr(user, 'current_rank') else "Bitron",
+                    "is_activated": user.is_activated if hasattr(user, 'is_activated') else False,
+                    "partners_required": user.partners_required if hasattr(user, 'partners_required') else 2,
+                    "partners_count": user.partners_count if hasattr(user, 'partners_count') else 0,
+                    "binary_joined": user.binary_joined,
+                    "matrix_joined": user.matrix_joined,
+                    "global_joined": user.global_joined,
+                    
+                    # Binary program data
+                    "binary_slots": user.binary_slots if hasattr(user, 'binary_slots') else [],
+                    "binary_total_earnings": user.binary_total_earnings if hasattr(user, 'binary_total_earnings') else 0,
+                    "binary_total_spent": user.binary_total_spent if hasattr(user, 'binary_total_spent') else 0,
+                    
+                    # Matrix program data
+                    "matrix_slots": user.matrix_slots if hasattr(user, 'matrix_slots') else [],
+                    "matrix_total_earnings": user.matrix_total_earnings if hasattr(user, 'matrix_total_earnings') else 0,
+                    "matrix_total_spent": user.matrix_total_spent if hasattr(user, 'matrix_total_spent') else 0,
+                    
+                    # Global program data
+                    "global_slots": user.global_slots if hasattr(user, 'global_slots') else [],
+                    "global_total_earnings": user.global_total_earnings if hasattr(user, 'global_total_earnings') else 0,
+                    "global_total_spent": user.global_total_spent if hasattr(user, 'global_total_spent') else 0,
+                    
+                    # Commission and bonus data
+                    "total_commissions_earned": user.total_commissions_earned if hasattr(user, 'total_commissions_earned') else 0,
+                    "total_commissions_paid": user.total_commissions_paid if hasattr(user, 'total_commissions_paid') else 0,
+                    "missed_profits": user.missed_profits if hasattr(user, 'missed_profits') else 0,
+                    "royal_captain_qualifications": user.royal_captain_qualifications if hasattr(user, 'royal_captain_qualifications') else 0,
+                    "president_reward_qualifications": user.president_reward_qualifications if hasattr(user, 'president_reward_qualifications') else 0,
+                    "leadership_stipend_eligible": user.leadership_stipend_eligible if hasattr(user, 'leadership_stipend_eligible') else False,
+                    
+                    # Auto upgrade settings
+                    "binary_auto_upgrade_enabled": user.binary_auto_upgrade_enabled if hasattr(user, 'binary_auto_upgrade_enabled') else True,
+                    "matrix_auto_upgrade_enabled": user.matrix_auto_upgrade_enabled if hasattr(user, 'matrix_auto_upgrade_enabled') else True,
+                    "global_auto_upgrade_enabled": user.global_auto_upgrade_enabled if hasattr(user, 'global_auto_upgrade_enabled') else True,
+                    
+                    # Timestamps
+                    "created_at": user.created_at,
+                    "updated_at": user.updated_at
+                }
+            }
+            
+            return user_data
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get user by UID: {str(e)}"
+            }
+    
+    def get_user_full_details(self, user_id: str) -> Dict[str, Any]:
+        """Get complete user details including all related information"""
+        try:
+            # Get basic user info
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {
+                    "success": False,
+                    "error": "User not found"
+                }
+            
+            # Get user's slot activations
+            slot_activations = SlotActivation.objects(user_id=ObjectId(user_id)).order_by('-activated_at')
+            
+            # Get user's tree placements
+            tree_placements = TreePlacement.objects(user_id=ObjectId(user_id)).order_by('-created_at')
+            
+            # Get user's earning history
+            earning_history = EarningHistory.objects(user_id=ObjectId(user_id)).order_by('-created_at').limit(10)
+            
+            # Get user's wallet information
+            from modules.wallet.model import UserWallet
+            user_wallets = UserWallet.objects(user_id=ObjectId(user_id))
+            
+            # Get user's rank information
+            from modules.rank.service import RankService
+            rank_service = RankService()
+            rank_info = rank_service.get_user_rank_info(user_id)
+            
+            # Get user's jackpot status
+            jackpot_service = JackpotService()
+            jackpot_status = jackpot_service.get_user_jackpot_status(user_id)
+            
+            # Get user's leadership stipend info
+            from modules.leadership_stipend.model import LeadershipStipend
+            leadership_stipend = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+            
+            # Get user's newcomer support info
+            newcomer_support = NewcomerSupport.objects(user_id=ObjectId(user_id)).first()
+            
+            # Get user's commission summary
+            from modules.commission.service import CommissionService
+            commission_service = CommissionService()
+            commission_summary = commission_service.get_user_commission_summary(user_id)
+            
+            # Get user's referral statistics
+            total_referrals = User.objects(refered_by=ObjectId(user_id)).count()
+            direct_referrals = User.objects(refered_by=ObjectId(user_id)).only('_id', 'uid', 'name', 'created_at').order_by('-created_at').limit(10)
+            
+            # Format response
+            user_details = {
+                "success": True,
+                "user_info": {
+                    "id": str(user.id),
+                    "uid": user.uid,
+                    "refer_code": user.refer_code,
+                    "name": user.name,
+                    "email": user.email,
+                    "role": user.role,
+                    "wallet_address": user.wallet_address,
+                    "refered_by": str(user.refered_by) if user.refered_by else None,
+                    "created_at": user.created_at,
+                    "updated_at": user.updated_at,
+                    "is_active": user.is_active,
+                    "binary_joined": user.binary_joined,
+                    "binary_joined_at": user.binary_joined_at,
+                    "matrix_joined": user.matrix_joined,
+                    "matrix_joined_at": user.matrix_joined_at,
+                    "global_joined": user.global_joined,
+                    "global_joined_at": user.global_joined_at
+                },
+                "slot_activations": [
+                    {
+                        "id": str(slot.id),
+                        "program": slot.program,
+                        "slot_no": slot.slot_no,
+                        "status": slot.status,
+                        "activated_at": slot.activated_at,
+                        "completed_at": slot.completed_at,
+                        "tx_hash": slot.tx_hash
+                    } for slot in slot_activations
+                ],
+                "tree_placements": [
+                    {
+                        "id": str(tree.id),
+                        "program": tree.program,
+                        "slot_no": tree.slot_no,
+                        "referrer_id": str(tree.referrer_id),
+                        "position": tree.position,
+                        "level": tree.level,
+                        "created_at": tree.created_at
+                    } for tree in tree_placements
+                ],
+                "earning_history": [
+                    {
+                        "id": str(earning.id),
+                        "program": earning.program,
+                        "income_type": earning.income_type,
+                        "amount": float(earning.amount),
+                        "currency": earning.currency,
+                        "created_at": earning.created_at,
+                        "description": earning.description
+                    } for earning in earning_history
+                ],
+                "wallets": [
+                    {
+                        "id": str(wallet.id),
+                        "wallet_type": wallet.wallet_type,
+                        "balance": float(wallet.balance),
+                        "currency": wallet.currency,
+                        "last_updated": wallet.last_updated
+                    } for wallet in user_wallets
+                ],
+                "rank_info": rank_info.get("data", {}) if rank_info.get("success") else {},
+                "jackpot_status": jackpot_status.get("data", {}) if jackpot_status.get("success") else {},
+                "leadership_stipend": {
+                    "id": str(leadership_stipend.id),
+                    "is_active": leadership_stipend.is_active if leadership_stipend else False,
+                    "total_earned": float(leadership_stipend.total_earned) if leadership_stipend else 0.0,
+                    "last_payment_date": leadership_stipend.last_payment_date if leadership_stipend else None
+                } if leadership_stipend else None,
+                "newcomer_support": {
+                    "id": str(newcomer_support.id),
+                    "total_support": float(newcomer_support.total_support) if newcomer_support else 0.0,
+                    "support_claimed": float(newcomer_support.support_claimed) if newcomer_support else 0.0,
+                    "last_claim_date": newcomer_support.last_claim_date if newcomer_support else None
+                } if newcomer_support else None,
+                "commission_summary": commission_summary.get("data", {}) if commission_summary.get("success") else {},
+                "referral_stats": {
+                    "total_referrals": total_referrals,
+                    "direct_referrals": [
+                        {
+                            "id": str(ref.id),
+                            "uid": ref.uid,
+                            "name": ref.name,
+                            "created_at": ref.created_at
+                        } for ref in direct_referrals
+                    ]
+                }
+            }
+            
+            return user_details
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get user details: {str(e)}"
+            }
+    
+    def get_my_community(self, user_id: str, program_type: str = "binary", slot_number: Optional[int] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get community members (referred users) for a user"""
+        try:
+            # Validate program type
+            if program_type not in ["binary", "matrix"]:
+                return {"success": False, "error": "Invalid program type. Must be 'binary' or 'matrix'"}
+            
+            # Get the user
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Build query for referred users
+            query = {"refered_by": ObjectId(user_id)}
+            
+            # Get referred users with pagination
+            skip = (page - 1) * limit
+            referred_users = User.objects(**query).skip(skip).limit(limit).order_by('-created_at')
+            
+            # Get total count for pagination
+            total_count = User.objects(**query).count()
+            
+            # Format response
+            community_members = []
+            for member in referred_users:
+                community_members.append({
+                    "id": str(member.id),
+                    "uid": member.uid,
+                    "refer_code": member.refer_code,
+                    "name": member.name,
+                    "email": member.email,
+                    "role": member.role,
+                    "wallet_address": member.wallet_address,
+                    "created_at": member.created_at,
+                    "binary_joined": member.binary_joined,
+                    "matrix_joined": member.matrix_joined,
+                    "global_joined": member.global_joined,
+                    "current_rank": getattr(member, 'current_rank', 'Bitron')
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "community_members": community_members,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total_count": total_count,
+                        "total_pages": (total_count + limit - 1) // limit
+                    }
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get community members: {str(e)}"
+            }
+
+
 def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Create a new user if wallet_address is unique.
-    Enforces mandatory Binary program join requirement.
+    Auto-generates uid and refer_code.
+    Looks up refered_by code to get upline_id.
 
     Returns (result, error):
       - result: {"_id": str, "token": str, "token_type": "bearer"}
       - error: error message string if any
     """
-    required_fields = ["uid", "refer_code", "refered_by", "wallet_address", "name"]
+    required_fields = ["email", "name", "password", "refered_by", "wallet_address"]
 
     missing = [f for f in required_fields if not payload.get(f)]
     if missing:
@@ -43,6 +330,30 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
     if existing:
         return None, "User with this wallet_address already exists"
     
+    # Look up refered_by code to get upline_id
+    refered_by_code = payload.get("refered_by")
+    upline_user = User.objects(refer_code=refered_by_code).first()
+    if not upline_user:
+        return None, f"Referral code '{refered_by_code}' not found"
+    
+    upline_id = str(upline_user.id)
+    
+    # Auto-generate unique uid
+    import time
+    import random
+    uid = f"user{int(time.time() * 1000)}{random.randint(1000, 9999)}"
+    
+    # Ensure uid is unique
+    while User.objects(uid=uid).first():
+        uid = f"user{int(time.time() * 1000)}{random.randint(1000, 9999)}"
+    
+    # Auto-generate unique refer_code
+    refer_code = f"RC{int(time.time() * 1000)}{random.randint(100, 999)}"
+    
+    # Ensure refer_code is unique
+    while User.objects(refer_code=refer_code).first():
+        refer_code = f"RC{int(time.time() * 1000)}{random.randint(100, 999)}"
+    
     # MANDATORY BINARY JOIN ENFORCEMENT
     # According to PROJECT_DOCUMENTATION.md Section 5: "Users MUST follow this exact sequence: Binary → Matrix → Global"
     binary_payment_tx = payload.get("binary_payment_tx")
@@ -51,13 +362,9 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
 
     try:
         # Step 0: Preconditions - Validate referrer exists
-        referrer_id = payload.get("refered_by")
-        try:
-            referrer = User.objects(id=ObjectId(referrer_id)).first()
-        except Exception:
-            referrer = None
-        if not referrer:
-            return None, "Invalid referrer/upline provided"
+        # Note: refered_by is now a referral code, not ObjectId
+        # The upline_id was already validated and set above
+        pass  # Validation already done above when looking up upline_user
 
         # Step 0: Record blockchain payments (frontend passes tx hashes)
         binary_payment_tx = payload.get("binary_payment_tx")
@@ -71,12 +378,12 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             hashed_password = authentication_service.get_password_hash(raw_password)
 
         user = User(
-            uid=payload.get("uid"),
-            refer_code=payload.get("refer_code"),
-            refered_by=payload.get("refered_by"),
+            uid=uid,
+            refer_code=refer_code,
+            refered_by=upline_id,
             wallet_address=wallet_address,
             name=payload.get("name"),
-            role=payload.get("role") or "user",
+            role="user",  # Always set to user
             email=payload.get("email"),
             password=hashed_password,
         )
@@ -111,9 +418,9 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
 
         # Update referrer's PartnerGraph to add this user as a direct
         try:
-            ref_pg = PartnerGraph.objects(user_id=ObjectId(referrer.id)).first()
+            ref_pg = PartnerGraph.objects(user_id=ObjectId(upline_user.id)).first()
             if not ref_pg:
-                ref_pg = PartnerGraph(user_id=ObjectId(referrer.id))
+                ref_pg = PartnerGraph(user_id=ObjectId(upline_user.id))
             directs = ref_pg.directs or []
             if ObjectId(user.id) not in [ObjectId(d) for d in directs]:
                 directs.append(ObjectId(user.id))
@@ -132,13 +439,13 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 # Royal Captain Bonus Tracking
                 if user.matrix_joined and user.global_joined:
                     # Increment referrer's direct Matrix+Global referral count
-                    if hasattr(referrer, 'royal_captain_qualifications'):
-                        referrer.royal_captain_qualifications = int(getattr(referrer, 'royal_captain_qualifications', 0) or 0) + 1
+                    if hasattr(upline_user, 'royal_captain_qualifications'):
+                        upline_user.royal_captain_qualifications = int(getattr(upline_user, 'royal_captain_qualifications', 0) or 0) + 1
                     
                     # Check if referrer maintains 5 direct Matrix+Global referrals
-                    if referrer.royal_captain_qualifications >= 5:
+                    if upline_user.royal_captain_qualifications >= 5:
                         # Get referrer's global team size
-                        ref_pg = PartnerGraph.objects(user_id=ObjectId(referrer.id)).first()
+                        ref_pg = PartnerGraph.objects(user_id=ObjectId(upline_user.id)).first()
                         global_team_size = len(ref_pg.global_team_members) if ref_pg and ref_pg.global_team_members else 0
                         
                         # Check global team size thresholds: 0/10/20/30/40/50
@@ -162,10 +469,10 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                             try:
                                 from modules.royal_captain.model import RoyalCaptainBonus
                                 RoyalCaptainBonus(
-                                    user_id=ObjectId(referrer.id),
+                                    user_id=ObjectId(upline_user.id),
                                     award_amount=award_amount,
                                     global_team_size=global_team_size,
-                                    matrix_global_referrals=referrer.royal_captain_qualifications,
+                                    matrix_global_referrals=upline_user.royal_captain_qualifications,
                                     status='pending',
                                     created_at=datetime.utcnow()
                                 ).save()
@@ -173,13 +480,13 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                                 pass
                 
                 # President Reward Tracking
-                if hasattr(referrer, 'president_reward_qualifications'):
-                    referrer.president_reward_qualifications = int(getattr(referrer, 'president_reward_qualifications', 0) or 0) + 1
+                if hasattr(upline_user, 'president_reward_qualifications'):
+                    upline_user.president_reward_qualifications = int(getattr(upline_user, 'president_reward_qualifications', 0) or 0) + 1
                 
                 # Get referrer's global team size for President Reward
-                ref_pg = PartnerGraph.objects(user_id=ObjectId(referrer.id)).first()
+                ref_pg = PartnerGraph.objects(user_id=ObjectId(upline_user.id)).first()
                 global_team_size = len(ref_pg.global_team_members) if ref_pg and ref_pg.global_team_members else 0
-                direct_invites = referrer.president_reward_qualifications
+                direct_invites = upline_user.president_reward_qualifications
                 
                 # Evaluate qualification tiers
                 award_amount = 0
@@ -219,7 +526,7 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                     try:
                         from modules.president_reward.model import PresidentReward
                         PresidentReward(
-                            user_id=ObjectId(referrer.id),
+                            user_id=ObjectId(upline_user.id),
                             award_amount=award_amount,
                             global_team_size=global_team_size,
                             direct_invites=direct_invites,
@@ -229,8 +536,8 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                     except Exception:
                         pass
                 
-                referrer.updated_at = datetime.utcnow()
-                referrer.save()
+                upline_user.updated_at = datetime.utcnow()
+                upline_user.save()
             except Exception:
                 pass
         except Exception:
@@ -248,7 +555,7 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                         'currency': 'BNB',
                         'network': network,
                         'user_id': str(user.id),
-                        'referrer_id': str(referrer.id)
+                        'referrer_id': str(upline_user.id)
                     },
                     status='processed',
                     processed_at=datetime.utcnow()
@@ -266,7 +573,7 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                         'currency': 'USDT',
                         'network': network,
                         'user_id': str(user.id),
-                        'referrer_id': str(referrer.id)
+                        'referrer_id': str(upline_user.id)
                     },
                     status='processed',
                     processed_at=datetime.utcnow()
@@ -284,7 +591,7 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                         'currency': 'USD',
                         'network': network,
                         'user_id': str(user.id),
-                        'referrer_id': str(referrer.id)
+                        'referrer_id': str(upline_user.id)
                     },
                     status='processed',
                     processed_at=datetime.utcnow()
@@ -870,165 +1177,4 @@ def create_root_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
     except Exception as e:
         return None, str(e)
 
-
-class UserService:
-    """Service class for user-related operations"""
-    
-    def get_my_community(self, user_id: str, program_type: str = "binary", slot_number: Optional[int] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get community members (referred users) for a user - SINGLE QUERY VERSION"""
-        try:
-            # Validate program type
-            if program_type not in ["binary", "matrix"]:
-                return {"success": False, "error": "Invalid program type. Must be 'binary' or 'matrix'"}
-            
-            # Get the user
-            user = User.objects(id=ObjectId(user_id)).first()
-            if not user:
-                return {"success": False, "error": "User not found"}
-            
-            # SINGLE QUERY: Use aggregation pipeline for everything
-            pipeline = []
-            
-            # Match referred users
-            pipeline.append({
-                "$match": {
-                    "refered_by": ObjectId(user_id)
-                }
-            })
-            
-            # If slot filtering is needed
-            if slot_number is not None:
-                # Lookup slot activations
-                pipeline.append({
-                    "$lookup": {
-                        "from": "slot_activation",
-                        "let": {"userId": "$_id"},
-                        "pipeline": [
-                            {
-                                "$match": {
-                                    "$expr": {
-                                        "$and": [
-                                            {"$eq": ["$user_id", "$$userId"]},
-                                            {"$eq": ["$program", program_type]},
-                                            {"$eq": ["$slot_no", slot_number]}
-                                        ]
-                                    }
-                                }
-                            }
-                        ],
-                        "as": "slot_activations"
-                    }
-                })
-                
-                # Filter only users with matching slot activations
-                pipeline.append({
-                    "$match": {
-                        "slot_activations": {"$ne": []}
-                    }
-                })
-            
-            # Add direct partner count
-            pipeline.append({
-                "$lookup": {
-                    "from": "user",
-                    "let": {"userId": "$_id"},
-                    "pipeline": [
-                        {
-                            "$match": {
-                                "$expr": {"$eq": ["$refered_by", "$$userId"]}
-                            }
-                        },
-                        {"$count": "count"}
-                    ],
-                    "as": "direct_partners"
-                }
-            })
-            
-            # Add computed fields
-            pipeline.append({
-                "$addFields": {
-                    "direct_partner_count": {
-                        "$ifNull": [{"$arrayElemAt": ["$direct_partners.count", 0]}, 0]
-                    },
-                    "rank": {
-                        "$add": [
-                            {"$ifNull": [{"$arrayElemAt": ["$direct_partners.count", 0]}, 0]},
-                            1
-                        ]
-                    }
-                }
-            })
-            
-            # Sort by creation date
-            pipeline.append({
-                "$sort": {"created_at": -1}
-            })
-            
-            # Count total
-            count_pipeline = pipeline + [{"$count": "total"}]
-            total_result = list(User.objects.aggregate(count_pipeline))
-            total_users = total_result[0]["total"] if total_result else 0
-            
-            # Add pagination
-            page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 10)))
-            skip = (page - 1) * limit
-            
-            pipeline.extend([
-                {"$skip": skip},
-                {"$limit": limit}
-            ])
-            
-            # Execute aggregation
-            results = list(User.objects.aggregate(pipeline))
-            
-            # Format data
-            items = []
-            for i, result in enumerate(results):
-                # Format wallet address
-                wallet_address = result.get("wallet_address", "")
-                if len(wallet_address) > 8:
-                    masked_address = f"{wallet_address[:4]}...{wallet_address[-4:]}"
-                else:
-                    masked_address = wallet_address
-                
-                # Format date
-                created_at = result.get("created_at")
-                if created_at:
-                    activation_date = created_at.strftime("%d %b,%Y")
-                    activation_time = created_at.strftime("(%H:%M)")
-                    formatted_date = f"{activation_date} {activation_time}"
-                else:
-                    formatted_date = "Unknown"
-                
-                # Slot info
-                slot_info = str(slot_number) if slot_number is not None else "--"
-                
-                items.append({
-                    "sl_no": skip + i + 1,
-                    "id": result.get("uid", "Unknown"),
-                    "_id": str(result["_id"]),
-                    "address": masked_address,
-                    "inviter_id": user.uid,
-                    "activation_date": formatted_date,
-                    "slot": slot_info,
-                    "rank": result.get("rank", 1),
-                    "direct_partner": result.get("direct_partner_count", 0),
-                    "created_at": created_at.isoformat() if created_at else None
-                })
-            
-            return {
-                "success": True,
-                "data": {
-                    "program_type": program_type,
-                    "slot_number": slot_number,
-                    "page": page,
-                    "limit": limit,
-                    "total": total_users,
-                    "items": items
-                }
-            }
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
 

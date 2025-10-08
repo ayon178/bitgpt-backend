@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, Request, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 from typing import Optional
 from utils.response import create_response, success_response, error_response
-from modules.user.service import create_user_service
+from modules.user.service import create_user_service, UserService
 import asyncio
 from modules.tree.service import TreeService
 from modules.rank.service import RankService
@@ -13,16 +13,11 @@ from auth.service import authentication_service
 
 
 class CreateUserRequest(BaseModel):
-    uid: str = Field(..., description="Unique user identifier")
-    refer_code: str = Field(..., description="Unique referral code for the user")
-    # Accept both for backward compatibility; prefer upline_id per docs
-    upline_id: Optional[str] = Field(None, description="Mongo ObjectId string of the upline (docs preferred)")
-    refered_by: Optional[str] = Field(None, description="Mongo ObjectId string of the referrer (legacy)")
-    wallet_address: str = Field(..., description="Unique blockchain wallet address")
+    email: str = Field(..., description="Email address")
     name: str = Field(..., description="Full name of the user")
-    role: Optional[str] = Field(None, description="Role: user | admin | shareholder")
-    email: Optional[str] = Field(None, description="Email address")
-    password: Optional[str] = Field(None, description="Plain password if applicable")
+    password: str = Field(..., description="Plain password")
+    refered_by: str = Field(..., description="Referral code of the user who referred this user")
+    wallet_address: str = Field(..., description="Unique blockchain wallet address")
     # Blockchain payment proofs (frontend passes on-chain tx proofs)
     binary_payment_tx: Optional[str] = Field(None, description="On-chain tx hash for 0.0066 BNB binary join")
     matrix_payment_tx: Optional[str] = Field(None, description="On-chain tx hash for $11 matrix join (optional)")
@@ -32,14 +27,12 @@ class CreateUserRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "uid": "user123",
-                "refer_code": "RC12345",
-                "upline_id": "66f1aab2c1f3a2a9c0b4e123",
-                "wallet_address": "0xABCDEF0123456789",
-                "name": "John Doe",
-                "role": "user",
                 "email": "john@example.com",
-                "password": "secret123"
+                "name": "John Doe",
+                "password": "secret123",
+                "refered_by": "RC12345",
+                "wallet_address": "0xABCDEF0123456789",
+                "binary_payment_tx": "0x1234567890abcdef"
             }
         }
 
@@ -85,10 +78,7 @@ def _post_create_background(user_id: str, referrer_id: str):
 
 @user_router.post("/create")
 async def create_user(payload: CreateUserRequest, background_tasks: BackgroundTasks):
-    # Map upline_id -> refered_by (Option B)
     payload_dict = payload.dict()
-    if payload_dict.get("upline_id") and not payload_dict.get("refered_by"):
-        payload_dict["refered_by"] = payload_dict["upline_id"]
     result, error = create_user_service(payload_dict)
 
     if error:
@@ -101,7 +91,12 @@ async def create_user(payload: CreateUserRequest, background_tasks: BackgroundTa
 
     # Schedule background placement (non-blocking)
     try:
-        background_tasks.add_task(_post_create_background, result.get("_id"), payload_dict.get("refered_by"))
+        # Get upline_id from the created user's refered_by field
+        from modules.user.model import User
+        created_user = User.objects(id=result.get("_id")).first()
+        upline_id = str(created_user.refered_by) if created_user and created_user.refered_by else None
+        if upline_id:
+            background_tasks.add_task(_post_create_background, result.get("_id"), upline_id)
     except Exception:
         pass
 
@@ -583,6 +578,56 @@ async def get_leadership_stipend_income(
             }
         }, "Leadership Stipend income fetched successfully")
 
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.get("/details/{user_id}")
+async def get_user_full_details(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Get complete user details including all related information"""
+    try:
+        # Authorization check - users can only access their own data or admin can access any
+        authenticated_user_id = None
+        user_id_keys = ["user_id", "_id", "id", "uid"]
+        
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                authenticated_user_id = str(current_user[key])
+                break
+        
+        # Allow admin to access any user's details
+        is_admin = current_user.get("role") == "admin"
+        
+        if not is_admin and authenticated_user_id and authenticated_user_id != user_id:
+            return error_response("Unauthorized to view this user's details", status_code=403)
+        
+        user_service = UserService()
+        result = user_service.get_user_full_details(user_id)
+        
+        if result.get("success"):
+            return success_response(result, "User details fetched successfully")
+        else:
+            return error_response(result.get("error"))
+            
+    except Exception as e:
+        return error_response(str(e))
+
+
+@user_router.get("/uid/{uid}")
+async def get_user_by_uid(uid: str):
+    """Get user details by UID (No authentication required)"""
+    try:
+        user_service = UserService()
+        result = user_service.get_user_by_uid(uid)
+        
+        if result.get("success"):
+            return success_response(result["user"], "User details fetched successfully")
+        else:
+            return error_response(result.get("error"), status_code=404)
+            
     except Exception as e:
         return error_response(str(e))
 
