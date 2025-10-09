@@ -122,10 +122,10 @@ async def get_earning_statistics(user_id: str, current_user: dict = Depends(_aut
 
 
 @router.get("/pools-summary")
-async def get_pools_summary():
+async def get_pools_summary(user_id: str = Query(..., description="User ID for pools summary")):
     try:
         service = WalletService()
-        result = service.get_pools_summary()
+        result = service.get_pools_summary(user_id=user_id)
         if result.get("success"):
             return success_response(result["data"], "Pools summary fetched successfully")
         else:

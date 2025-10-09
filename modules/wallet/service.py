@@ -340,14 +340,15 @@ class WalletService:
             print(f"Error getting highest matrix slot: {e}")
             return {}
 
-    def get_pools_summary(self) -> Dict[str, Any]:
+    def get_pools_summary(self, user_id: str = None) -> Dict[str, Any]:
         """
-        Fast global totals for pools. Combines:
-        - WalletLedger credit reasons (BNB/USDT exact)
-        - Program-specific collections (maps USD -> USDT for reporting)
+        User-specific pools summary. Combines:
+        - WalletLedger credit reasons (BNB/USDT exact) for the specific user
+        - Program-specific collections (maps USD -> USDT for reporting) for the specific user
         """
         try:
             from decimal import Decimal as _D
+            from bson import ObjectId
 
             def _zero():
                 return {"USDT": 0.0, "BNB": 0.0}
@@ -371,9 +372,9 @@ class WalletService:
                 "jackpot_programme": _zero(),
             }
 
-            # 1) Single aggregation over wallet_ledger credits
+            # 1) Single aggregation over wallet_ledger credits for specific user
             pipeline = [
-                {"$match": {"type": "credit"}},
+                {"$match": {"type": "credit", "user_id": ObjectId(user_id)}},
                 {"$group": {"_id": {"reason": "$reason", "currency": "$currency"}, "total": {"$sum": "$amount"}}}
             ]
             results = list(WalletLedger.objects.aggregate(pipeline))
@@ -457,12 +458,12 @@ class WalletService:
             except Exception:
                 JackpotFund = None
 
-            # IncomeEvent-driven pools (report as USDT)
+            # IncomeEvent-driven pools (report as USDT) - user specific
             if IncomeEvent:
                 try:
                     def _sum_income(types: list[str]) -> float:
                         agg = [
-                            {"$match": {"income_type": {"$in": types}, "status": {"$in": ["pending", "completed"]}}},
+                            {"$match": {"user_id": ObjectId(user_id), "income_type": {"$in": types}, "status": {"$in": ["pending", "completed"]}}},
                             {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
                         ]
                         res = list(IncomeEvent.objects.aggregate(agg))
@@ -475,11 +476,11 @@ class WalletService:
                 except Exception:
                     pass
 
-            # Leadership stipend (BNB)
+            # Leadership stipend (BNB) - user specific
             if LeadershipStipendPayment:
                 try:
                     agg = [
-                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$match": {"user_id": ObjectId(user_id), "payment_status": {"$in": ["pending", "processing", "paid"]}}},
                         {"$group": {"_id": None, "total": {"$sum": "$daily_return_amount"}}}
                     ]
                     res = list(LeadershipStipendPayment.objects.aggregate(agg))
@@ -487,11 +488,11 @@ class WalletService:
                 except Exception:
                     pass
 
-            # Spark bonus and Triple Entry (currency stored on document)
+            # Spark bonus and Triple Entry (currency stored on document) - user specific
             if SparkBonusDistribution:
                 try:
                     agg = [
-                        {"$match": {"status": {"$in": ["pending", "completed"]}}},
+                        {"$match": {"user_id": ObjectId(user_id), "status": {"$in": ["pending", "completed"]}}},
                         {"$group": {"_id": "$currency", "total": {"$sum": "$distribution_amount"}}}
                     ]
                     for r in SparkBonusDistribution.objects.aggregate(agg):
@@ -501,17 +502,21 @@ class WalletService:
                     pass
             if TripleEntryReward:
                 try:
-                    agg = [{"$group": {"_id": None, "total": {"$sum": "$distribution_amount"}}}]
+                    # Triple Entry Reward doesn't have user_id, check eligible_users list
+                    agg = [
+                        {"$match": {"eligible_users": ObjectId(user_id)}},
+                        {"$group": {"_id": None, "total": {"$sum": "$distribution_amount"}}}
+                    ]
                     res = list(TripleEntryReward.objects.aggregate(agg))
                     totals["triple_entry_reward"]["USDT"] += float(res[0]["total"]) if res else 0.0
                 except Exception:
                     pass
 
-            # Dream Matrix commissions (field is commission_amount)
+            # Dream Matrix commissions (field is commission_amount) - user specific
             if DreamMatrixCommission:
                 try:
                     agg = [
-                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$match": {"user_id": ObjectId(user_id), "payment_status": {"$in": ["pending", "processing", "paid"]}}},
                         {"$group": {"_id": None, "total": {"$sum": "$commission_amount"}}}
                     ]
                     res = list(DreamMatrixCommission.objects.aggregate(agg))
@@ -519,11 +524,11 @@ class WalletService:
                 except Exception:
                     pass
 
-            # Royal Captain / President Reward (USD -> USDT)
+            # Royal Captain / President Reward (USD -> USDT) - user specific
             if RoyalCaptainBonusPayment:
                 try:
                     agg = [
-                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$match": {"user_id": ObjectId(user_id), "payment_status": {"$in": ["pending", "processing", "paid"]}}},
                         {"$group": {"_id": None, "total": {"$sum": "$bonus_amount"}}}
                     ]
                     res = list(RoyalCaptainBonusPayment.objects.aggregate(agg))
@@ -533,7 +538,7 @@ class WalletService:
             if PresidentRewardPayment:
                 try:
                     agg = [
-                        {"$match": {"payment_status": {"$in": ["pending", "processing", "paid"]}}},
+                        {"$match": {"user_id": ObjectId(user_id), "payment_status": {"$in": ["pending", "processing", "paid"]}}},
                         {"$group": {"_id": None, "total": {"$sum": "$reward_amount"}}}
                     ]
                     res = list(PresidentRewardPayment.objects.aggregate(agg))
@@ -541,23 +546,32 @@ class WalletService:
                 except Exception:
                     pass
 
-            # Top Leader's Gift (USD -> USDT)
+            # Top Leader's Gift (USD -> USDT) - user specific
             if TopLeaderGiftReward:
                 try:
-                    agg = [{"$group": {"_id": None, "total": {"$sum": "$gift_value_usd"}}}]
+                    agg = [
+                        {"$match": {"user_id": ObjectId(user_id)}},
+                        {"$group": {"_id": None, "total": {"$sum": "$gift_value_usd"}}}
+                    ]
                     res = list(TopLeaderGiftReward.objects.aggregate(agg))
                     totals["top_leader_gift"]["USDT"] += float(res[0]["total"]) if res else 0.0
                 except Exception:
                     pass
 
-            # Jackpot (assume USDT reporting)
-            if JackpotFund:
-                try:
-                    agg = [{"$group": {"_id": None, "total": {"$sum": "$total_pool"}}}]
-                    res = list(JackpotFund.objects.aggregate(agg))
-                    totals["jackpot_programme"]["USDT"] += float(res[0]["total"]) if res else 0.0
-                except Exception:
-                    pass
+            # Jackpot winnings - user specific (check JackpotWinner model)
+            try:
+                from ..jackpot.model import JackpotWinner
+                if JackpotWinner:
+                    agg = [
+                        {"$match": {"user_id": ObjectId(user_id)}},
+                        {"$group": {"_id": "$currency", "total": {"$sum": "$winning_amount"}}}
+                    ]
+                    for r in JackpotWinner.objects.aggregate(agg):
+                        curr = (r.get('_id') or 'BNB').upper()
+                        if curr in totals["jackpot_programme"]:
+                            totals["jackpot_programme"][curr] += float(r.get('total') or 0)
+            except Exception:
+                pass
 
             return {"success": True, "data": totals}
         except Exception as e:
