@@ -192,33 +192,53 @@ class SparkService:
             d = Decimal(str(val))
             return float((d / rate).quantize(Decimal('0.00000001')))
 
-        # Build a unified slots array with both currencies per slot, adjusted by claim ledger
+        # Build a unified slots array with both currencies per slot, showing per-user claimable amounts
         slots_combined: List[Dict[str, Any]] = []
-        # Fetch per-slot deductions
-        try:
-            from modules.spark.model import SparkSlotClaimLedger as _SSCL
-            from datetime import datetime as _DT
-            day_start = _DT.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-            ledgers = list(_SSCL.objects(created_at__gte=day_start))
-        except Exception:
-            ledgers = []
-        def deducted(slot_no: int, curr: str, base: float) -> float:
-            try:
-                from decimal import Decimal as _D
-                total = _D('0')
-                for l in ledgers:
-                    if int(getattr(l, 'slot_number', 0)) == int(slot_no) and str(getattr(l, 'currency','')).upper() == curr:
-                        total += _D(str(getattr(l, 'amount', 0) or 0))
-                val = _D(str(base)) - total
-                return float(max(_D('0'), val))
-            except Exception:
-                return base
+        
+        # Get today's start for claim check
+        from datetime import datetime as _DT
+        day_start = _DT.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        
         for s in slots_usdt:
+            slot_no = s["slot_number"]
+            total_usdt_alloc = s["allocated_amount"]
+            total_bnb_alloc = usdt_to_bnb(total_usdt_alloc)
+            
+            # Calculate per-user claimable amount
+            claimable_usdt = 0.0
+            claimable_bnb = 0.0
+            
+            # Only calculate if user is provided and eligible for this slot
+            if user_id and s.get("user_eligible"):
+                # Check if user already claimed today for this slot (either currency)
+                already_claimed = False
+                try:
+                    from modules.spark.model import SparkBonusDistribution as _SBD
+                    dup = _SBD.objects(
+                        user_id=ObjectId(user_id),
+                        slot_number=slot_no,
+                        created_at__gte=day_start
+                    ).first()
+                    if dup:
+                        already_claimed = True
+                except Exception:
+                    pass
+                
+                if not already_claimed:
+                    # Get eligible users count for this slot
+                    eligible_users = self.get_slot_eligible_user_ids(slot_no)
+                    eligible_count = len(eligible_users)
+                    
+                    if eligible_count > 0:
+                        # Calculate per-user share
+                        claimable_usdt = float(Decimal(str(total_usdt_alloc)) / Decimal(str(eligible_count)))
+                        claimable_bnb = float(Decimal(str(total_bnb_alloc)) / Decimal(str(eligible_count)))
+            
             slots_combined.append({
-                "slot_number": s["slot_number"],
+                "slot_number": slot_no,
                 "percentage": s["percentage"],
-                "allocated_amount_usdt": deducted(s["slot_number"], 'USDT', s["allocated_amount"]),
-                "allocated_amount_bnb": deducted(s["slot_number"], 'BNB', usdt_to_bnb(s["allocated_amount"])) ,
+                "allocated_amount_usdt": claimable_usdt,  # Now shows user's claimable amount
+                "allocated_amount_bnb": claimable_bnb,    # Now shows user's claimable amount
                 "user_eligible": s.get("user_eligible"),
             })
 
