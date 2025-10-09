@@ -414,16 +414,45 @@ async def get_leadership_stipend_income(
 
         # Build tier summaries
         tiers = []
+        day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        
         for t in ls.tiers:
             if t.slot_number < 10 or t.slot_number > 16:
                 continue
             if slot and t.slot_number != int(slot):
                 continue
+            
+            # Calculate user's claimable amount for this slot
+            claimable_amount = 0.0
+            
+            if t.is_active:
+                # Check if user has already claimed today
+                already_claimed = _LSP.objects(
+                    user_id=ObjectId(user_id),
+                    slot_number=t.slot_number,
+                    payment_date__gte=day_start,
+                    payment_status__in=["pending", "paid"]
+                ).first()
+                
+                if not already_claimed:
+                    # Count eligible users for this slot
+                    eligible_count = 0
+                    for rec in LeadershipStipend.objects(is_active=True).only('user_id', 'tiers'):
+                        try:
+                            if any(tier.slot_number == t.slot_number and tier.is_active for tier in rec.tiers):
+                                eligible_count += 1
+                        except Exception:
+                            continue
+                    
+                    # Calculate per-user share
+                    if eligible_count > 0:
+                        claimable_amount = float(t.daily_return) / eligible_count
+            
             tiers.append({
                 "slot_number": t.slot_number,
                 "tier_name": t.tier_name,
                 "slot_value": t.slot_value,
-                "daily_return": t.daily_return,
+                "daily_return": claimable_amount,  # Now shows user's claimable amount
                 "funded_amount": slot_paid.get(t.slot_number, 0.0),
                 "pending_amount": t.pending_amount or 0.0,
                 "progress_percent": 0,
@@ -431,12 +460,37 @@ async def get_leadership_stipend_income(
                 "activated_at": t.activated_at,
             })
 
+        # Calculate current tier's claimable amount for summary
+        summary_claimable = 0.0
+        if ls.current_tier >= 10:
+            # Check if user has already claimed today for current tier
+            already_claimed = _LSP.objects(
+                user_id=ObjectId(user_id),
+                slot_number=ls.current_tier,
+                payment_date__gte=day_start,
+                payment_status__in=["pending", "paid"]
+            ).first()
+            
+            if not already_claimed:
+                # Count eligible users for current tier
+                eligible_count = 0
+                for rec in LeadershipStipend.objects(is_active=True).only('user_id', 'tiers'):
+                    try:
+                        if any(tier.slot_number == ls.current_tier and tier.is_active for tier in rec.tiers):
+                            eligible_count += 1
+                    except Exception:
+                        continue
+                
+                # Calculate per-user share
+                if eligible_count > 0:
+                    summary_claimable = float(ls.current_daily_return) / eligible_count
+        
         data = {
             "user_id": user_id,
             "summary": {
                 "current_tier": ls.current_tier,
                 "current_tier_name": ls.current_tier_name,
-                "current_daily_return": ls.current_daily_return,
+                "current_daily_return": summary_claimable,  # Now shows user's claimable amount
                 "is_eligible": ls.is_eligible,
                 "is_active": ls.is_active,
                 "total_earned": ls.total_earned,
