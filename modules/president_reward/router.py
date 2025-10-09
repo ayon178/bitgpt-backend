@@ -761,9 +761,32 @@ async def get_president_reward_claim_history(
                 "created_at": c.created_at
             })
         
+        # Get claimable amounts if user_id is provided
+        claimable_amounts = {"USDT": 0, "BNB": 0}
+        eligibility = {}
+        
+        if user_id:
+            from .service import PresidentRewardService
+            service = PresidentRewardService()
+            claimable_info = service.get_claimable_amount(user_id)
+            
+            claimable_amounts = claimable_info.get("claimable_amounts", {"USDT": 0, "BNB": 0})
+            eligibility = {
+                "is_eligible": claimable_info.get("is_eligible", False),
+                "can_claim_now": claimable_info.get("can_claim_now", False),
+                "eligible_tier": claimable_info.get("eligible_tier"),
+                "message": claimable_info.get("message", "")
+            }
+            
+            # Add eligibility details if available
+            if "eligibility_details" in claimable_info:
+                eligibility["eligibility_details"] = claimable_info["eligibility_details"]
+        
         return success_response(
             data={
                 "claims": claims_list,
+                "claimable_amounts": claimable_amounts,
+                "eligibility": eligibility,
                 "pagination": {
                     "page": page,
                     "limit": limit,

@@ -311,22 +311,16 @@ class RoyalCaptainService:
             db = client['bitgpt']
             rc_exists = db['royal_captain'].find_one({"user_id": ObjectId(user_id)}) is not None
             
-            print(f"DEBUG: RoyalCaptain record exists: {rc_exists}")
-            
             rc = None
             if rc_exists:
                 try:
                     rc = RoyalCaptain.objects(user_id=ObjectId(user_id)).first()
-                    print(f"DEBUG: Successfully loaded existing RoyalCaptain record")
-                except Exception as e:
-                    print(f"DEBUG: Error loading RoyalCaptain record: {e}")
+                except Exception:
                     # If there's a field mismatch error, delete the old record and create new one
                     db['royal_captain'].delete_one({"user_id": ObjectId(user_id)})
                     rc = None
-                    print(f"DEBUG: Deleted old record with field mismatch")
             
             if not rc:
-                print(f"DEBUG: Creating new RoyalCaptain record")
                 
                 # Use upsert to avoid duplicate key error
                 rc_data = {
@@ -401,11 +395,8 @@ class RoyalCaptainService:
                     upsert=True
                 )
                 
-                print(f"DEBUG: Upsert result - matched: {result.matched_count}, modified: {result.modified_count}, upserted_id: {result.upserted_id}")
-                
                 # Load the record back without bonuses field to avoid field mismatch
                 rc = RoyalCaptain.objects(user_id=ObjectId(user_id)).exclude('bonuses').first()
-                print(f"DEBUG: Successfully loaded RoyalCaptain record with ID: {rc.id}")
 
             # Create payment
             payment = RoyalCaptainBonusPayment(

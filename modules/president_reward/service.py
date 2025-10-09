@@ -349,6 +349,106 @@ class PresidentRewardService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def get_claimable_amount(self, user_id: str) -> Dict[str, Any]:
+        """Get claimable President Reward amounts for user by tier and currency"""
+        try:
+            # Check if user has any past payments
+            past_payments = PresidentRewardPayment.objects(user_id=ObjectId(user_id))
+            has_past_payments = past_payments.count() > 0
+            
+            # Check direct partners with all 3 programs
+            direct_partners_both = self._count_direct_partners_with_all_programs(user_id)
+            
+            # Check global team size
+            global_team_size = self._count_global_team(user_id)
+            
+            # Determine if eligible (10 direct + 400 team minimum)
+            is_eligible = direct_partners_both >= 10 and global_team_size >= 400
+            
+            if not is_eligible:
+                return {
+                    "success": True,
+                    "is_eligible": False,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "message": "Not eligible for President Reward",
+                    "eligibility_details": {
+                        "direct_partners_with_all": direct_partners_both,
+                        "global_team_size": global_team_size,
+                        "requirements_met": {
+                            "min_partners": direct_partners_both >= 10,
+                            "min_team": global_team_size >= 400
+                        }
+                    }
+                }
+            
+            # Check 24h cooldown
+            last_payment = PresidentRewardPayment.objects(user_id=ObjectId(user_id)).order_by('-created_at').first()
+            can_claim_now = True
+            if last_payment:
+                hours_since = (datetime.utcnow() - last_payment.created_at).total_seconds() / 3600
+                if hours_since < 24:
+                    can_claim_now = False
+            
+            # Determine highest eligible tier based on requirements
+            eligible_tier = None
+            claimable_usdt = 0.0
+            claimable_bnb = 0.0
+            
+            # President Reward Tiers (from PROJECT_DOCUMENTATION.md)
+            tiers = [
+                {"tier": 11, "partners": 20, "team": 2500, "amount": 1000.0},
+                {"tier": 10, "partners": 20, "team": 2200, "amount": 1000.0},
+                {"tier": 9, "partners": 20, "team": 1900, "amount": 1000.0},
+                {"tier": 8, "partners": 15, "team": 2100, "amount": 800.0},
+                {"tier": 7, "partners": 15, "team": 1800, "amount": 800.0},
+                {"tier": 6, "partners": 15, "team": 1500, "amount": 800.0},
+                {"tier": 5, "partners": 10, "team": 1200, "amount": 700.0},
+                {"tier": 4, "partners": 10, "team": 1000, "amount": 700.0},
+                {"tier": 3, "partners": 10, "team": 800, "amount": 700.0},
+                {"tier": 2, "partners": 10, "team": 600, "amount": 700.0},
+                {"tier": 1, "partners": 10, "team": 400, "amount": 500.0},
+            ]
+            
+            for tier_info in tiers:
+                if direct_partners_both >= tier_info["partners"] and global_team_size >= tier_info["team"]:
+                    eligible_tier = tier_info["tier"]
+                    claimable_usdt = tier_info["amount"]
+                    claimable_bnb = 0.0  # President Reward is USDT only
+                    break
+            
+            if not eligible_tier:
+                return {
+                    "success": True,
+                    "is_eligible": True,
+                    "can_claim_now": can_claim_now,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "message": "No eligible tier found based on current requirements"
+                }
+            
+            return {
+                "success": True,
+                "is_eligible": True,
+                "can_claim_now": can_claim_now,
+                "eligible_tier": eligible_tier,
+                "claimable_amounts": {
+                    "USDT": claimable_usdt,
+                    "BNB": claimable_bnb
+                },
+                "total_usd": claimable_usdt + claimable_bnb,
+                "message": f"Eligible for tier {eligible_tier} reward" + ("" if can_claim_now else " (wait 24h)"),
+                "eligibility_details": {
+                    "direct_partners_with_all": direct_partners_both,
+                    "global_team_size": global_team_size,
+                    "requirements_met": {
+                        "min_partners": direct_partners_both >= 10,
+                        "min_team": global_team_size >= 400
+                    }
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def distribute_reward_payment(self, payment_id: str) -> Dict[str, Any]:
         """Distribute President Reward payment - credits both USDT and BNB"""
         try:
@@ -608,6 +708,37 @@ class PresidentRewardService:
             president_reward.direct_partners_both >= tier.direct_partners_required and
             president_reward.global_team_size >= tier.global_team_required
         )
+    
+    def _count_direct_partners_with_all_programs(self, user_id: str) -> int:
+        """Count direct partners who have joined Binary, Matrix AND Global"""
+        try:
+            direct_users = User.objects(refered_by=ObjectId(user_id))
+            count = 0
+            for user in direct_users:
+                # Check if user has all 3 programs active
+                binary_active = SlotActivation.objects(user_id=user.id, program="binary", status="completed").count() > 0
+                matrix_active = SlotActivation.objects(user_id=user.id, program="matrix", status="completed").count() > 0
+                global_active = SlotActivation.objects(user_id=user.id, program="global", status="completed").count() > 0
+                
+                if binary_active and matrix_active and global_active:
+                    count += 1
+            
+            return count
+        except Exception:
+            return 0
+    
+    def _count_global_team(self, user_id: str) -> int:
+        """Count total global team size"""
+        try:
+            # Get all team members from tree placement
+            team_members = TreePlacement.objects(
+                parent_id=ObjectId(user_id),
+                is_active=True
+            ).count()
+            
+            return team_members
+        except Exception:
+            return 0
     
     def _log_action(self, user_id: str, action_type: str, description: str):
         """Log President Reward action"""
