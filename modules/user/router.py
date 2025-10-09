@@ -631,3 +631,23 @@ async def get_user_by_uid(uid: str):
     except Exception as e:
         return error_response(str(e))
 
+
+@user_router.get("/my-team")
+async def get_my_team(
+    user_id: str = Query(..., description="User ID"),
+    program: str = Query(..., description="Program type: binary or matrix"),
+    level: int = Query(..., ge=1, le=16, description="Tree level (1-16)")
+):
+    """Get team members for a specific program and level"""
+    try:
+        service = UserService()
+        result = service.get_my_team(user_id, program, level)
+        
+        if result.get("success"):
+            return success_response(result["data"], "Team data fetched successfully")
+        else:
+            return error_response(result.get("error", "Failed to fetch team data"))
+            
+    except Exception as e:
+        return error_response(str(e))
+

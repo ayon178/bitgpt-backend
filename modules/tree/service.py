@@ -13,6 +13,80 @@ from modules.auto_upgrade.service import AutoUpgradeService
 
 class TreeService:
     
+    def place_user_in_tree(self, user_id: ObjectId, referrer_id: ObjectId, program: str, slot_no: int) -> bool:
+        """
+        Simplified tree placement method for user creation integration
+        Returns True if placement successful, False otherwise
+        """
+        try:
+            # Check if user already has placement in this program and slot
+            existing_placement = TreePlacement.objects(
+                user_id=user_id,
+                program=program,
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            if existing_placement:
+                print(f"User {user_id} already has placement in {program} slot {slot_no}")
+                return True
+            
+            # Calculate level based on referrer's level
+            referrer_placement = TreePlacement.objects(
+                user_id=referrer_id,
+                program=program,
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            level = 1
+            if referrer_placement:
+                level = referrer_placement.level + 1
+            
+            # Find available position under referrer
+            position = 'left'  # Default to left position
+            
+            # Check if referrer already has children
+            existing_children = TreePlacement.objects(
+                parent_id=referrer_id,
+                program=program,
+                slot_no=slot_no,
+                is_active=True
+            )
+            
+            if existing_children.count() > 0:
+                # Find next available position
+                if existing_children.count() == 1:
+                    position = 'right'
+                else:
+                    # Use spillover logic - find next available position
+                    position = 'left'
+            
+            # Create TreePlacement record
+            placement = TreePlacement(
+                user_id=user_id,
+                program=program,
+                parent_id=referrer_id,
+                position=position,
+                level=level,
+                slot_no=slot_no,
+                is_active=True,
+                created_at=datetime.utcnow()
+            )
+            placement.save()
+            
+            # Update referrer's children count
+            if referrer_placement:
+                referrer_placement.children_count = (referrer_placement.children_count or 0) + 1
+                referrer_placement.save()
+            
+            print(f"✅ Created {program} tree placement: User {user_id} at Level {level}, Position {position} under {referrer_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error creating tree placement: {e}")
+            return False
+    
     @staticmethod
     async def create_tree_placement(
         user_id: str,

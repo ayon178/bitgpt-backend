@@ -176,6 +176,34 @@ class MatrixService:
             # 10. Update user rank
             rank_result = self.rank_service.update_user_rank(user_id=user_id)
             
+            # 11. TREE PLACEMENT INTEGRATION - PROJECT_DOCUMENTATION.md Section 5
+            # "Matrix Program (Required second) - Cannot join Global without Matrix"
+            # Create Matrix tree placement for the user
+            tree_placement_result = None
+            try:
+                from modules.tree.service import TreeService
+                tree_service = TreeService()
+                
+                # Place user in matrix tree under their referrer
+                matrix_placement = tree_service.place_user_in_tree(
+                    user_id=ObjectId(user_id),
+                    referrer_id=ObjectId(referrer_id),
+                    program='matrix',
+                    slot_no=1  # First matrix slot
+                )
+                
+                if matrix_placement:
+                    tree_placement_result = {"success": True, "message": "Matrix tree placement created"}
+                    print(f"✅ Matrix tree placement created for user {user_id} under {referrer_id}")
+                else:
+                    tree_placement_result = {"success": False, "message": "Matrix tree placement failed"}
+                    print(f"⚠️ Matrix tree placement failed for user {user_id}")
+                    
+            except Exception as e:
+                tree_placement_result = {"success": False, "error": str(e)}
+                print(f"Error in matrix tree placement: {e}")
+                # Don't fail matrix join if tree placement fails
+            
             return {
                 "success": True,
                 "user_id": user_id,
@@ -189,6 +217,7 @@ class MatrixService:
                 "commission_results": commission_results,
                 "special_programs_results": special_programs_results,
                 "rank_result": rank_result,
+                "tree_placement_result": tree_placement_result,
                 "message": f"Successfully joined Matrix program with {self.MATRIX_SLOTS[1]['name']} slot"
             }
             

@@ -827,6 +827,39 @@ class GlobalService:
             except Exception as e:
                 print(f"Earning history record creation failed for user {user.id}: {str(e)}")
 
+            # TREE PLACEMENT INTEGRATION - PROJECT_DOCUMENTATION.md Section 5
+            # "Global Program (Required third) - Final program in sequence"
+            # Create Global tree placement for the user
+            try:
+                from modules.tree.service import TreeService
+                tree_service = TreeService()
+                
+                # Get referrer ID from user
+                referrer_id = user.refered_by
+                if not referrer_id:
+                    # If no referrer, use ROOT user as referrer
+                    root_user = User.objects(uid='ROOT').first()
+                    if root_user:
+                        referrer_id = root_user.id
+                
+                if referrer_id:
+                    # Place user in global tree under their referrer
+                    global_placement = tree_service.place_user_in_tree(
+                        user_id=ObjectId(user_id),
+                        referrer_id=ObjectId(referrer_id),
+                        program='global',
+                        slot_no=1  # First global slot
+                    )
+                    
+                    if global_placement:
+                        print(f"✅ Global tree placement created for user {user_id} under {referrer_id}")
+                    else:
+                        print(f"⚠️ Global tree placement failed for user {user_id}")
+                        
+            except Exception as e:
+                print(f"Error in global tree placement: {e}")
+                # Don't fail global join if tree placement fails
+
             return {"success": True, "slot_no": 1, "amount": float(expected_amount)}
         except Exception as e:
             return {"success": False, "error": str(e)}

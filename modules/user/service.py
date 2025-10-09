@@ -306,6 +306,97 @@ class UserService:
                 "error": f"Failed to get community members: {str(e)}"
             }
 
+    def get_my_team(self, user_id: str, program: str, level: int) -> Dict[str, Any]:
+        """
+        Get team members for a specific program and level
+        
+        Level logic:
+        - Level 1: Direct children of the user (parent_id = user_id)
+        - Level 2: Grandchildren (children of Level 1)
+        - Level 3: Great-grandchildren (children of Level 2)
+        etc.
+        """
+        try:
+            from modules.tree.model import TreePlacement
+            from modules.user.model import User
+            
+            uid = ObjectId(user_id)
+            program_lower = program.lower()
+            
+            if program_lower not in ['binary', 'matrix']:
+                return {
+                    "success": False,
+                    "error": "Invalid program. Must be 'binary' or 'matrix'"
+                }
+            
+            # Recursive function to get descendants at specific depth
+            def get_descendants_at_depth(parent_id, current_depth, target_depth):
+                """Get all descendants at target depth from parent"""
+                # Get direct children
+                children = TreePlacement.objects(
+                    parent_id=parent_id,
+                    program=program_lower,
+                    is_active=True
+                ).order_by('created_at')
+                
+                # If we're at target depth, return these children
+                if current_depth == target_depth:
+                    return list(children)
+                
+                # If we haven't reached target depth yet, recurse deeper
+                if current_depth < target_depth:
+                    descendants = []
+                    for child in children:
+                        descendants.extend(get_descendants_at_depth(child.user_id, current_depth + 1, target_depth))
+                    return descendants
+                
+                return []
+            
+            # Get team members at requested level (depth)
+            # Level 1 = depth 1 (direct children)
+            team_members = get_descendants_at_depth(uid, 1, level)
+            
+            team_data = []
+            for member in team_members:
+                # Get user details
+                user = User.objects(id=member.user_id).first()
+                if user:
+                    team_data.append({
+                        "s_no": len(team_data) + 1,
+                        "id": str(user.id),
+                        "uid": user.uid,
+                        "address": user.wallet_address,
+                        "inviter_id": str(user.refered_by) if user.refered_by else "--",
+                        "activation_date": member.created_at.strftime("%d %b %Y (%H:%M)"),
+                        "rank": "--",  # TODO: Implement rank calculation
+                        "direct_partner": self._count_direct_partners(str(user.id))
+                    })
+            
+            return {
+                "success": True,
+                "data": {
+                    "program": program_lower,
+                    "level": level,
+                    "total_members": len(team_data),
+                    "team_members": team_data
+                }
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to get team data: {str(e)}"
+            }
+    
+    def _count_direct_partners(self, user_id: str) -> int:
+        """Count direct partners for a user"""
+        try:
+            uid = ObjectId(user_id)
+            direct_partners = User.objects(refered_by=uid).count()
+            return direct_partners
+        except Exception:
+            return 0
+
 
 def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
@@ -1077,6 +1168,32 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                         pass
         except Exception:
             pass
+
+        # TREE PLACEMENT INTEGRATION - PROJECT_DOCUMENTATION.md Section 6
+        # "When a user joins, the first 2 slots of the binary program should become active"
+        try:
+            # Import TreeService for binary tree placement
+            from modules.tree.service import TreeService
+            
+            # Create binary tree placement for the new user
+            tree_service = TreeService()
+            
+            # Place user in binary tree under their referrer
+            binary_placement = tree_service.place_user_in_tree(
+                user_id=user.id,
+                referrer_id=ObjectId(upline_id),
+                program='binary',
+                slot_no=1  # First slot
+            )
+            
+            if binary_placement:
+                print(f"✅ Binary tree placement created for user {user.id} under {upline_id}")
+            else:
+                print(f"⚠️ Binary tree placement failed for user {user.id}")
+                
+        except Exception as e:
+            print(f"Error in binary tree placement: {e}")
+            # Don't fail user creation if tree placement fails
 
         return {
             "_id": str(user.id),
