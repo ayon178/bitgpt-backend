@@ -357,6 +357,226 @@ class RoyalCaptainService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
+    def check_user_eligibility_without_record(self, user_id: str) -> Dict[str, Any]:
+        """Check Royal Captain eligibility for user without requiring RoyalCaptain record"""
+        try:
+            # Check package requirements directly
+            package_status = self._check_package_requirements(user_id)
+            has_both_packages = package_status.get("both_active", False)
+            
+            # Check direct partners
+            partners_status = self._check_direct_partners(user_id)
+            partners_with_both = partners_status.get("partners_with_both_packages", 0)
+            
+            # Check global team
+            team_status = self._check_global_team(user_id)
+            global_team_count = team_status.get("total_team", 0)
+            
+            # Determine eligibility based on requirements
+            is_eligible = has_both_packages and partners_with_both >= 5
+            
+            return {
+                "success": True,
+                "is_eligible": is_eligible,
+                "has_both_packages": has_both_packages,
+                "direct_partners_with_both": partners_with_both,
+                "global_team_count": global_team_count,
+                "requirements_met": {
+                    "both_packages": has_both_packages,
+                    "five_partners": partners_with_both >= 5
+                },
+                "message": f"Packages: {has_both_packages}, Partners with both: {partners_with_both}/5, Global team: {global_team_count}"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def get_claimable_amount(self, user_id: str) -> Dict[str, Any]:
+        """Get claimable Royal Captain bonus amounts for user by tier and currency"""
+        try:
+            # Check if user has any past payments (indicates they were eligible before)
+            past_payments = RoyalCaptainBonusPayment.objects(user_id=ObjectId(user_id))
+            has_past_payments = past_payments.count() > 0
+            
+            # Check current eligibility (use new method for all users to avoid model issues)
+            # Always use the new method since RoyalCaptain model has field issues
+            elig = self.check_user_eligibility_without_record(user_id)
+            is_currently_eligible = elig.get('success') and elig.get('is_eligible')
+            
+            # Check if RoyalCaptain record exists (using direct MongoDB query to avoid model issues)
+            from pymongo import MongoClient
+            client = MongoClient('mongodb://localhost:27017/')
+            db = client['bitgpt']
+            rc_exists = db['royal_captain'].find_one({"user_id": ObjectId(user_id)}) is not None
+            
+            # If no past payments and not currently eligible, return not eligible
+            if not has_past_payments and not is_currently_eligible:
+                return {
+                    "success": True,
+                    "is_eligible": False,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "message": "Not eligible for Royal Captain bonus",
+                    "eligibility_details": {
+                        "has_both_packages": elig.get("has_both_packages", False),
+                        "direct_partners_with_both": elig.get("direct_partners_with_both", 0),
+                        "global_team_count": elig.get("global_team_count", 0),
+                        "requirements_met": elig.get("requirements_met", {})
+                    }
+                }
+            
+            # rc already defined above in eligibility check
+            
+            # Scenario 1: User has past payments but no current RoyalCaptain record
+            if has_past_payments and not rc_exists:
+                # If user is currently eligible, calculate claimable amounts
+                if is_currently_eligible:
+                    # Continue to normal flow to calculate claimable amounts
+                    pass  # Don't return here, continue to normal flow
+                else:
+                    return {
+                        "success": True,
+                        "is_eligible": True,  # Show as eligible since they had past payments
+                        "can_claim_now": False,
+                        "claimable_amounts": {"USDT": 0, "BNB": 0},
+                        "message": "Had past payments but missing RoyalCaptain record - contact support"
+                    }
+            
+            # Scenario 2: User has past payments but current eligibility unclear
+            if has_past_payments and not is_currently_eligible:
+                return {
+                    "success": True,
+                    "is_eligible": True,  # Show as eligible since they had past payments
+                    "can_claim_now": False,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "message": "Had past payments but current eligibility unclear - contact support"
+                }
+            
+            # Scenario 3: New user - no past payments, no RoyalCaptain record
+            if not has_past_payments and not rc_exists:
+                if is_currently_eligible:
+                    # User meets requirements but not in program yet
+                    eligibility_details = elig if 'elig' in locals() else {}
+                    return {
+                        "success": True,
+                        "is_eligible": True,
+                        "can_claim_now": False,
+                        "claimable_amounts": {"USDT": 0, "BNB": 0},
+                        "message": "Meets requirements but not in Royal Captain program - join program first",
+                        "eligibility_details": {
+                            "has_both_packages": eligibility_details.get("has_both_packages", False),
+                            "direct_partners_with_both": eligibility_details.get("direct_partners_with_both", 0),
+                            "global_team_count": eligibility_details.get("global_team_count", 0),
+                            "requirements_met": eligibility_details.get("requirements_met", {})
+                        }
+                    }
+                else:
+                    # User doesn't meet requirements
+                    eligibility_details = elig if 'elig' in locals() else {}
+                    return {
+                        "success": True,
+                        "is_eligible": False,
+                        "claimable_amounts": {"USDT": 0, "BNB": 0},
+                        "message": "Does not meet Royal Captain requirements - need both Matrix & Global packages + 5 direct partners with both packages",
+                        "eligibility_details": {
+                            "has_both_packages": eligibility_details.get("has_both_packages", False),
+                            "direct_partners_with_both": eligibility_details.get("direct_partners_with_both", 0),
+                            "global_team_count": eligibility_details.get("global_team_count", 0),
+                            "requirements_met": eligibility_details.get("requirements_met", {})
+                        }
+                    }
+            
+            # Scenario 4: User has RoyalCaptain record but no past payments (new program member)
+            if not has_past_payments and rc_exists:
+                if not is_currently_eligible:
+                    return {
+                        "success": True,
+                        "is_eligible": False,
+                        "claimable_amounts": {"USDT": 0, "BNB": 0},
+                        "message": "In Royal Captain program but does not meet current requirements"
+                    }
+                # Continue to normal flow for eligible users with RoyalCaptain record
+            
+            # Check if claimed within 24h
+            last_payment = RoyalCaptainBonusPayment.objects(user_id=ObjectId(user_id)).order_by('-created_at').first()
+            can_claim_now = True
+            if last_payment:
+                hours_since = (datetime.utcnow() - last_payment.created_at).total_seconds() / 3600
+                if hours_since < 24:
+                    can_claim_now = False
+            
+            # Calculate claimable amounts based on eligibility and tier requirements
+            # Since user is eligible, they should be able to claim Tier 1 bonus
+            # According to PROJECT_DOCUMENTATION.md: 5 direct partners = $200 USDT
+            
+            global_team_count = elig.get("global_team_count", 0)
+            partners_with_both = elig.get("direct_partners_with_both", 0)
+            
+            # Determine eligible tier based on requirements
+            eligible_tier = None
+            claimable_usdt = 0.0
+            claimable_bnb = 0.0
+            
+            # Tier 1: 5 direct partners, 0 global team = $200 USDT
+            if partners_with_both >= 5 and global_team_count >= 0:
+                eligible_tier = 1
+                claimable_usdt = 200.0  # 60% of $200 = $120 USDT
+                claimable_bnb = 0.0     # 40% of $200 = $80 BNB (converted)
+            
+            # Tier 2: 5 direct partners, 10 global team = $200 USDT  
+            elif partners_with_both >= 5 and global_team_count >= 10:
+                eligible_tier = 2
+                claimable_usdt = 200.0
+                claimable_bnb = 0.0
+            
+            # Tier 3: 5 direct partners, 20 global team = $200 USDT
+            elif partners_with_both >= 5 and global_team_count >= 20:
+                eligible_tier = 3
+                claimable_usdt = 200.0
+                claimable_bnb = 0.0
+            
+            # Tier 4: 5 direct partners, 30 global team = $250 USDT
+            elif partners_with_both >= 5 and global_team_count >= 30:
+                eligible_tier = 4
+                claimable_usdt = 250.0
+                claimable_bnb = 0.0
+            
+            # Tier 5: 5 direct partners, 40 global team = $250 USDT
+            elif partners_with_both >= 5 and global_team_count >= 40:
+                eligible_tier = 5
+                claimable_usdt = 250.0
+                claimable_bnb = 0.0
+            
+            if not eligible_tier:
+                return {
+                    "success": True,
+                    "is_eligible": True,
+                    "can_claim_now": can_claim_now,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "message": "No eligible tier found based on current requirements"
+                }
+            
+            return {
+                "success": True,
+                "is_eligible": True,
+                "can_claim_now": can_claim_now,
+                "eligible_tier": eligible_tier,
+                "claimable_amounts": {
+                    "USDT": claimable_usdt,
+                    "BNB": claimable_bnb
+                },
+                "total_usd": claimable_usdt + claimable_bnb,
+                "message": f"Eligible for tier {eligible_tier} bonus" + ("" if can_claim_now else " (wait 24h)"),
+                "eligibility_details": {
+                    "has_both_packages": elig.get("has_both_packages", False),
+                    "direct_partners_with_both": elig.get("direct_partners_with_both", 0),
+                    "global_team_count": elig.get("global_team_count", 0),
+                    "requirements_met": elig.get("requirements_met", {})
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     def distribute_bonus_payment(self, bonus_payment_id: str) -> Dict[str, Any]:
         """Distribute Royal Captain bonus payment - credits both USDT and BNB to wallet"""
         try:

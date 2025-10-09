@@ -407,7 +407,7 @@ class WalletService:
                     return "royal_captain_bonus"
                 if r.startswith("president_reward_"):
                     return "president_reward"
-                if r.startswith("top_leader_gift_"):
+                if r.startswith("top_leader_gift_") or r == "top_leaders_gift":
                     return "top_leader_gift"
                 if r.startswith("jackpot_"):
                     return "jackpot_programme"
@@ -558,19 +558,20 @@ class WalletService:
                 except Exception:
                     pass
 
-            # Jackpot winnings - user specific (check JackpotWinner model)
+            # Jackpot winnings - user specific (JackpotWinner is embedded in JackpotDistribution)
             try:
-                from ..jackpot.model import JackpotWinner
-                if JackpotWinner:
-                    agg = [
-                        {"$match": {"user_id": ObjectId(user_id)}},
-                        {"$group": {"_id": "$currency", "total": {"$sum": "$winning_amount"}}}
-                    ]
-                    for r in JackpotWinner.objects.aggregate(agg):
-                        curr = (r.get('_id') or 'BNB').upper()
-                        if curr in totals["jackpot_programme"]:
-                            totals["jackpot_programme"][curr] += float(r.get('total') or 0)
-            except Exception:
+                from ..jackpot.model import JackpotDistribution
+                # Unwind winners array and filter by user_id
+                agg = [
+                    {"$unwind": "$winners"},
+                    {"$match": {"winners.user_id": ObjectId(user_id)}},
+                    {"$group": {"_id": None, "total": {"$sum": "$winners.amount_won"}}}
+                ]
+                res = list(JackpotDistribution.objects.aggregate(agg))
+                if res:
+                    # Jackpot is in BNB (entry fee is 0.0025 BNB)
+                    totals["jackpot_programme"]["BNB"] += float(res[0].get("total") or 0)
+            except Exception as e:
                 pass
 
             return {"success": True, "data": totals}

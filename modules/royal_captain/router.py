@@ -643,8 +643,9 @@ async def get_royal_captain_claim_history(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100)
 ):
-    """Get Royal Captain bonus claim history for a user."""
+    """Get Royal Captain bonus claim history for a user with claimable amounts."""
     try:
+        # Get claim history
         q = RoyalCaptainBonusPayment.objects(user_id=ObjectId(user_id))
         if currency:
             q = q.filter(currency=currency.upper())
@@ -661,8 +662,21 @@ async def get_royal_captain_claim_history(
                 "paid_at": it.paid_at,
                 "created_at": it.created_at,
             })
+        
+        # Get claimable amounts
+        from .service import RoyalCaptainService
+        service = RoyalCaptainService()
+        claimable_info = service.get_claimable_amount(user_id)
+        
         return success_response({
             "claims": data,
+            "claimable_amounts": claimable_info.get("claimable_amounts", {"USDT": 0, "BNB": 0}),
+            "eligibility": {
+                "is_eligible": claimable_info.get("is_eligible", False),
+                "can_claim_now": claimable_info.get("can_claim_now", False),
+                "eligible_tier": claimable_info.get("eligible_tier"),
+                "message": claimable_info.get("message", "")
+            },
             "pagination": {
                 "page": page,
                 "limit": limit,

@@ -9,7 +9,7 @@ logging.getLogger("pymongo").setLevel(logging.CRITICAL)
 
 def connect_to_db():
     try:
-        mongoengine.connect(db="tutor", host=MONGO_URI)
+        mongoengine.connect(db="bitgpt", host=MONGO_URI)
         client = mongoengine.get_connection()
         client.server_info()
         logging.info("Successfully connected to MongoDB!")
