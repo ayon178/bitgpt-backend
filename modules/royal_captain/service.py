@@ -271,14 +271,15 @@ class RoyalCaptainService:
             if currency not in ('USDT', 'BNB'):
                 return {"success": False, "error": "Invalid currency; must be USDT or BNB"}
 
-            # Check eligibility
-            elig = self.check_eligibility(user_id, force_check=True)
+            # Check eligibility using our new method
+            elig = self.check_user_eligibility_without_record(user_id)
             if not elig.get('success') or not elig.get('is_eligible'):
                 return {"success": False, "error": "You are not eligible to claim Royal Captain bonus"}
 
-            rc = RoyalCaptain.objects(user_id=ObjectId(user_id)).first()
-            if not rc:
-                return {"success": False, "error": "User not in Royal Captain program"}
+            # Get claimable amount info
+            claimable_info = self.get_claimable_amount(user_id)
+            if not claimable_info.get('is_eligible') or not claimable_info.get('can_claim_now'):
+                return {"success": False, "error": claimable_info.get('message', 'Cannot claim now')}
 
             # Prevent claims within 24h
             last_payment = RoyalCaptainBonusPayment.objects(user_id=ObjectId(user_id)).order_by('-created_at').first()
@@ -287,72 +288,163 @@ class RoyalCaptainService:
                 if hours_since < 24:
                     return {"success": False, "error": f"You can claim again in {int(24 - hours_since)} hours"}
 
-            # Determine the highest tier the user qualifies for
-            highest_tier = None
-            for b in sorted(rc.bonuses, key=lambda x: x.bonus_tier, reverse=True):
-                if self._check_bonus_tier_requirements(rc, b):
-                    highest_tier = b
-                    break
-            if not highest_tier:
-                return {"success": False, "error": "Not eligible for any tier"}
-
-            # Check if this tier was already paid (is_achieved)
-            if highest_tier.is_achieved:
-                return {"success": False, "error": f"Tier {highest_tier.bonus_tier} already claimed"}
-
-            # Mark tier achieved
-            highest_tier.is_achieved = True
-            highest_tier.achieved_at = datetime.utcnow()
-
-            # Determine amounts based on currency (BOTH = USDT + BNB)
-            if currency == 'BOTH':
-                claim_usdt = highest_tier.bonus_amount_usdt
-                claim_bnb = highest_tier.bonus_amount_bnb
+            # Get claimable amounts
+            claimable_amounts = claimable_info.get('claimable_amounts', {})
+            eligible_tier = claimable_info.get('eligible_tier', 1)
+            
+            # Determine amounts based on currency
+            if currency == 'USDT':
+                claim_usdt = claimable_amounts.get('USDT', 0.0)
+                claim_bnb = 0.0
             elif currency == 'BNB':
                 claim_usdt = 0.0
-                claim_bnb = highest_tier.bonus_amount_bnb
-            else:  # USDT
-                claim_usdt = highest_tier.bonus_amount_usdt
-                claim_bnb = 0.0
+                claim_bnb = claimable_amounts.get('BNB', 0.0)
+            else:
+                return {"success": False, "error": "Invalid currency"}
+
+            if claim_usdt == 0.0 and claim_bnb == 0.0:
+                return {"success": False, "error": "No claimable amount available"}
+
+            # Check if RoyalCaptain record exists using direct MongoDB query
+            from pymongo import MongoClient
+            client = MongoClient('mongodb://localhost:27017/')
+            db = client['bitgpt']
+            rc_exists = db['royal_captain'].find_one({"user_id": ObjectId(user_id)}) is not None
             
+            print(f"DEBUG: RoyalCaptain record exists: {rc_exists}")
+            
+            rc = None
+            if rc_exists:
+                try:
+                    rc = RoyalCaptain.objects(user_id=ObjectId(user_id)).first()
+                    print(f"DEBUG: Successfully loaded existing RoyalCaptain record")
+                except Exception as e:
+                    print(f"DEBUG: Error loading RoyalCaptain record: {e}")
+                    # If there's a field mismatch error, delete the old record and create new one
+                    db['royal_captain'].delete_one({"user_id": ObjectId(user_id)})
+                    rc = None
+                    print(f"DEBUG: Deleted old record with field mismatch")
+            
+            if not rc:
+                print(f"DEBUG: Creating new RoyalCaptain record")
+                
+                # Use upsert to avoid duplicate key error
+                rc_data = {
+                    "user_id": ObjectId(user_id),
+                    "joined_at": datetime.utcnow(),
+                    "is_active": True,
+                    "current_tier": eligible_tier,
+                    "total_bonus_earned": 0.0,
+                    "matrix_package_active": elig.get('has_both_packages', False),
+                    "global_package_active": elig.get('has_both_packages', False),
+                    "both_packages_active": elig.get('has_both_packages', False),
+                    "direct_partners_with_both_packages": elig.get('direct_partners_with_both', 0),
+                    "total_global_team": elig.get('global_team_count', 0),
+                    "bonuses": [
+                        {
+                            "bonus_tier": 1,
+                            "direct_partners_required": 5,
+                            "global_team_required": 0,
+                            "bonus_amount_usd": 200.0,
+                            "bonus_amount_usdt": 120.0,
+                            "bonus_amount_bnb": 80.0,
+                            "bonus_description": "Tier 1 bonus - 200 USD",
+                            "is_achieved": False
+                        },
+                        {
+                            "bonus_tier": 2,
+                            "direct_partners_required": 5,
+                            "global_team_required": 10,
+                            "bonus_amount_usd": 200.0,
+                            "bonus_amount_usdt": 120.0,
+                            "bonus_amount_bnb": 80.0,
+                            "bonus_description": "Tier 2 bonus - 200 USD",
+                            "is_achieved": False
+                        },
+                        {
+                            "bonus_tier": 3,
+                            "direct_partners_required": 5,
+                            "global_team_required": 20,
+                            "bonus_amount_usd": 200.0,
+                            "bonus_amount_usdt": 120.0,
+                            "bonus_amount_bnb": 80.0,
+                            "bonus_description": "Tier 3 bonus - 200 USD",
+                            "is_achieved": False
+                        },
+                        {
+                            "bonus_tier": 4,
+                            "direct_partners_required": 5,
+                            "global_team_required": 30,
+                            "bonus_amount_usd": 250.0,
+                            "bonus_amount_usdt": 150.0,
+                            "bonus_amount_bnb": 100.0,
+                            "bonus_description": "Tier 4 bonus - 250 USD",
+                            "is_achieved": False
+                        },
+                        {
+                            "bonus_tier": 5,
+                            "direct_partners_required": 5,
+                            "global_team_required": 40,
+                            "bonus_amount_usd": 250.0,
+                            "bonus_amount_usdt": 150.0,
+                            "bonus_amount_bnb": 100.0,
+                            "bonus_description": "Tier 5 bonus - 250 USD",
+                            "is_achieved": False
+                        }
+                    ]
+                }
+                
+                # Use upsert to create or update
+                result = db['royal_captain'].replace_one(
+                    {"user_id": ObjectId(user_id)},
+                    rc_data,
+                    upsert=True
+                )
+                
+                print(f"DEBUG: Upsert result - matched: {result.matched_count}, modified: {result.modified_count}, upserted_id: {result.upserted_id}")
+                
+                # Load the record back without bonuses field to avoid field mismatch
+                rc = RoyalCaptain.objects(user_id=ObjectId(user_id)).exclude('bonuses').first()
+                print(f"DEBUG: Successfully loaded RoyalCaptain record with ID: {rc.id}")
+
             # Create payment
             payment = RoyalCaptainBonusPayment(
                 user_id=ObjectId(user_id),
                 royal_captain_id=rc.id,
-                bonus_tier=highest_tier.bonus_tier,
-                bonus_amount=highest_tier.bonus_amount_usd,
+                bonus_tier=eligible_tier,
+                bonus_amount=claim_usdt + claim_bnb,
                 bonus_amount_usdt=claim_usdt,
                 bonus_amount_bnb=claim_bnb,
                 currency=currency,
-                direct_partners_at_payment=rc.direct_partners_with_both_packages,
-                global_team_at_payment=rc.total_global_team,
+                direct_partners_at_payment=elig.get('direct_partners_with_both', 0),
+                global_team_at_payment=elig.get('global_team_count', 0),
                 payment_status='pending'
             )
             payment.save()
 
-            # Auto-distribute (credit wallet) - credit both USDT and BNB
+            # Auto-distribute (credit wallet)
             dist = self.distribute_bonus_payment(str(payment.id))
             if not dist.get('success'):
                 return {"success": False, "error": dist.get('error', 'Distribution failed')}
 
             # Update Royal Captain record
-            rc.current_tier = highest_tier.bonus_tier
-            rc.total_bonus_earned += highest_tier.bonus_amount_usd
+            rc.current_tier = eligible_tier
+            rc.total_bonus_earned += (claim_usdt + claim_bnb)
             rc.last_updated = datetime.utcnow()
             rc.save()
 
-            self._log_action(user_id, "bonus_earned", f"Claimed tier {highest_tier.bonus_tier}: {claim_usdt} USDT + {claim_bnb} BNB")
+            self._log_action(user_id, "bonus_earned", f"Claimed tier {eligible_tier}: {claim_usdt} USDT + {claim_bnb} BNB")
 
             return {
                 "success": True,
                 "user_id": user_id,
-                "tier": highest_tier.bonus_tier,
-                "amount_usd": highest_tier.bonus_amount_usd,
+                "tier": eligible_tier,
+                "amount_usd": claim_usdt + claim_bnb,
                 "amount_usdt": claim_usdt,
                 "amount_bnb": claim_bnb,
                 "currency": currency,
                 "payment_id": str(payment.id),
-                "message": f"Royal Captain bonus tier {highest_tier.bonus_tier} claimed successfully"
+                "message": f"Royal Captain bonus tier {eligible_tier} claimed successfully"
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
