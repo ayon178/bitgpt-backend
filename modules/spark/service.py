@@ -2,7 +2,7 @@ from typing import Dict, Any, List, Optional
 from bson import ObjectId
 from datetime import datetime, timedelta
 from decimal import Decimal
-from .model import TripleEntryReward, SparkCycle, SparkBonusDistribution
+from .model import TripleEntryReward, SparkCycle, SparkBonusDistribution, TripleEntryPayment
 from ..user.model import User
 import os
 
@@ -55,6 +55,61 @@ class SparkService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def contribute_to_spark_fund(self, amount: Decimal, program: str, slot_number: int = None, user_id: str = None) -> Dict[str, Any]:
+        """
+        Contribute 8% of activation amount to Spark Bonus fund
+        Called when Binary or Matrix slot is activated
+        
+        Per PROJECT_DOCUMENTATION.md Section 22:
+        - Binary activations contribute 8% to Spark Bonus
+        - Matrix activations contribute 8% to Spark Bonus
+        """
+        try:
+            from modules.income.bonus_fund import BonusFund
+            
+            # Validate program
+            if program not in ['binary', 'matrix']:
+                return {"success": False, "error": "Invalid program. Must be 'binary' or 'matrix'"}
+            
+            # Calculate 8% contribution
+            spark_contribution = amount * Decimal('0.08')
+            
+            # Get or create BonusFund for this program
+            spark_fund = BonusFund.objects(
+                fund_type='spark_bonus',
+                program=program,
+                status='active'
+            ).first()
+            
+            if not spark_fund:
+                # Create new fund if doesn't exist
+                spark_fund = BonusFund(
+                    fund_type='spark_bonus',
+                    program=program,
+                    total_collected=Decimal('0'),
+                    total_distributed=Decimal('0'),
+                    current_balance=Decimal('0'),
+                    status='active'
+                )
+            
+            # Update fund balances
+            spark_fund.total_collected += spark_contribution
+            spark_fund.current_balance += spark_contribution
+            spark_fund.updated_at = datetime.utcnow()
+            spark_fund.save()
+            
+            return {
+                "success": True,
+                "program": program,
+                "slot_number": slot_number,
+                "activation_amount": float(amount),
+                "spark_contribution_8_percent": float(spark_contribution),
+                "new_balance": float(spark_fund.current_balance),
+                "message": f"Contributed ${float(spark_contribution)} (8%) to {program} Spark Bonus fund"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     def contribute_to_fund(self, amount: float, source: str = "matrix", metadata: Dict[str, Any] | None = None, program: str | None = None, **kwargs) -> Dict[str, Any]:
         """Record contribution to Spark fund and distribute to Triple Entry (18%) and Top Leaders Gift (2%).
         Matrix distribution gets remaining 80%.
@@ -101,23 +156,52 @@ class SparkService:
 
     # ------------------ Fund Info & Slot Breakdown ------------------
     def get_spark_bonus_fund_info(self) -> Dict[str, Any]:
-        """Return Spark Bonus fund totals.
-        For stability, read from env `SPARK_POOL_TOTAL_USDT` (default 1000) instead of
-        inferring from distribution history. Values are in USDT.
+        """
+        Return Spark Bonus fund totals - DYNAMIC calculation
+        Fund Sources (PROJECT_DOCUMENTATION.md):
+        - 8% from Binary slot activations
+        - 8% from Matrix slot activations
+        
+        Calculates actual accumulated fund from database transactions
         """
         try:
-            import os
-            total_env = os.getenv('SPARK_POOL_TOTAL_USDT', '1000')
-            total = float(total_env) if total_env else 1000.0
+            from modules.income.bonus_fund import BonusFund
+            
+            # Get Spark Bonus funds from database (collected from activations)
+            spark_binary = BonusFund.objects(
+                fund_type='spark_bonus',
+                program='binary',
+                status='active'
+            ).first()
+            
+            spark_matrix = BonusFund.objects(
+                fund_type='spark_bonus',
+                program='matrix',
+                status='active'
+            ).first()
+            
+            # Calculate total available fund
+            binary_balance = float(spark_binary.current_balance) if spark_binary else 0.0
+            matrix_balance = float(spark_matrix.current_balance) if spark_matrix else 0.0
+            total_fund = binary_balance + matrix_balance
+            
             return {
                 "success": True,
                 "currency": "USDT",
-                "total_fund_amount": total,
-                "available_amount": total,
+                "total_fund_amount": total_fund,
+                "available_amount": total_fund,
+                "sources": {
+                    "binary_8_percent": binary_balance,
+                    "matrix_8_percent": matrix_balance
+                },
+                "is_dynamic": True,
                 "updated_at": datetime.utcnow(),
             }
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     def get_slot_breakdown(self, currency: str = "USDT", user_id: str | None = None, slot_number: int | None = None) -> Dict[str, Any]:
         """Compute slot-wise Spark fund breakdown for UI display.
@@ -465,6 +549,368 @@ class SparkService:
                 "participants": count,
                 "slot_percentage": str(pct),
                 "payout_per_participant": str(payout_each)
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    # ------------------ Triple Entry Reward Methods ------------------
+    def _deduct_from_triple_entry_fund(self, amount: Decimal) -> Dict[str, Any]:
+        """
+        Deduct claimed amount from Triple Entry fund sources
+        Deducts proportionally from Spark Bonus and Global funds
+        """
+        try:
+            from modules.income.bonus_fund import BonusFund
+            
+            # Get current fund breakdown
+            fund_info = self._calculate_triple_entry_fund()
+            total_fund = Decimal(str(fund_info.get('total_fund', 0)))
+            
+            if total_fund <= 0:
+                return {"success": True, "message": "No fund to deduct from (using fallback)"}
+            
+            # Calculate proportional deduction
+            sources = fund_info.get('sources', {})
+            spark_contribution = Decimal(str(sources.get('spark_bonus_contribution', 0)))
+            global_contribution = Decimal(str(sources.get('global_program_contribution', 0)))
+            
+            # Proportional deduction from each source
+            if spark_contribution > 0:
+                spark_deduction = (amount * spark_contribution / total_fund).quantize(Decimal('0.00000001'))
+            else:
+                spark_deduction = Decimal('0')
+            
+            if global_contribution > 0:
+                global_deduction = (amount * global_contribution / total_fund).quantize(Decimal('0.00000001'))
+            else:
+                global_deduction = Decimal('0')
+            
+            sources_updated = []
+            
+            # Deduct from Spark Bonus funds (if applicable)
+            if spark_deduction > 0:
+                # Deduct from binary spark fund
+                spark_fund_binary = BonusFund.objects(
+                    fund_type='spark_bonus',
+                    program='binary',
+                    status='active'
+                ).first()
+                
+                if spark_fund_binary and spark_fund_binary.current_balance > 0:
+                    deduct_binary = min(spark_deduction / 2, Decimal(str(spark_fund_binary.current_balance)))
+                    spark_fund_binary.current_balance -= deduct_binary
+                    spark_fund_binary.total_distributed += deduct_binary
+                    spark_fund_binary.last_distribution = datetime.utcnow()
+                    spark_fund_binary.updated_at = datetime.utcnow()
+                    spark_fund_binary.save()
+                    sources_updated.append(f"Spark Binary: ${float(deduct_binary)}")
+                
+                # Deduct from matrix spark fund
+                spark_fund_matrix = BonusFund.objects(
+                    fund_type='spark_bonus',
+                    program='matrix',
+                    status='active'
+                ).first()
+                
+                if spark_fund_matrix and spark_fund_matrix.current_balance > 0:
+                    deduct_matrix = min(spark_deduction / 2, Decimal(str(spark_fund_matrix.current_balance)))
+                    spark_fund_matrix.current_balance -= deduct_matrix
+                    spark_fund_matrix.total_distributed += deduct_matrix
+                    spark_fund_matrix.last_distribution = datetime.utcnow()
+                    spark_fund_matrix.updated_at = datetime.utcnow()
+                    spark_fund_matrix.save()
+                    sources_updated.append(f"Spark Matrix: ${float(deduct_matrix)}")
+            
+            # Note: Global contribution is already distributed through wallet ledger
+            # We track the deduction but don't need to modify a separate fund
+            if global_deduction > 0:
+                sources_updated.append(f"Global (tracked): ${float(global_deduction)}")
+            
+            return {
+                "success": True,
+                "total_deducted": float(amount),
+                "spark_deduction": float(spark_deduction),
+                "global_deduction": float(global_deduction),
+                "sources_updated": sources_updated,
+                "message": f"Deducted ${float(amount)} from Triple Entry fund"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _calculate_triple_entry_fund(self) -> Dict[str, Any]:
+        """
+        Calculate total Triple Entry Reward fund from database
+        Fund Sources (PROJECT_DOCUMENTATION.md Section 22):
+        - 20% from Spark Bonus (8% Binary + 8% Matrix)
+        - 5% from Global program
+        Total = 25%
+        """
+        try:
+            from modules.wallet.model import WalletLedger
+            
+            # 1. Get Spark Bonus fund (20% contribution to TER)
+            # Use the same source as /wallet/income/spark-bonus route
+            spark_fund_info = self.get_spark_bonus_fund_info()
+            total_spark_fund = Decimal(str(spark_fund_info.get('total_fund_amount', 0)))
+            
+            # 20% of Spark Bonus goes to Triple Entry Reward
+            ter_from_spark = total_spark_fund * Decimal('0.20')
+            
+            # 2. Get Global program contribution (5% goes to TER)
+            # Sum all Global program transactions and take 5%
+            global_pipeline = [
+                {"$match": {"reason": {"$regex": "global", "$options": "i"}, "type": "credit"}},
+                {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+            ]
+            
+            from modules.wallet.model import WalletLedger
+            global_result = list(WalletLedger.objects.aggregate(global_pipeline))
+            total_global_income = Decimal(str(global_result[0].get("total", 0))) if global_result else Decimal('0')
+            
+            # 5% of Global program income goes to Triple Entry Reward
+            ter_from_global = total_global_income * Decimal('0.05')
+            
+            # 3. Total TER fund
+            total_ter_fund = ter_from_spark + ter_from_global
+            
+            return {
+                "success": True,
+                "total_fund": float(total_ter_fund),
+                "sources": {
+                    "spark_bonus_contribution": float(ter_from_spark),
+                    "global_program_contribution": float(ter_from_global)
+                },
+                "breakdown": {
+                    "total_spark_fund": float(total_spark_fund),
+                    "spark_20_percent": float(ter_from_spark),
+                    "total_global_income": float(total_global_income),
+                    "global_5_percent": float(ter_from_global)
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def get_triple_entry_claimable_amount(self, user_id: str) -> Dict[str, Any]:
+        """
+        Calculate claimable Triple Entry Reward amounts for both USDT and BNB
+        
+        Eligibility: User must have joined all three programs (Binary, Matrix, Global)
+        Distribution: Total TER fund divided equally among all eligible users
+        Fund Sources: 5% from Global + 20% from Spark Bonus
+        """
+        try:
+            # 1. Check eligibility
+            user = User.objects(id=ObjectId(user_id)).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            is_eligible = bool(user.binary_joined and user.matrix_joined and user.global_joined)
+            if not is_eligible:
+                return {
+                    "success": True,
+                    "is_eligible": False,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "message": "User must join all three programs (Binary, Matrix, Global) to be eligible for Triple Entry Reward"
+                }
+            
+            # 2. Get all eligible users (who joined all 3 programs)
+            eligible_users = User.objects(
+                binary_joined=True,
+                matrix_joined=True,
+                global_joined=True
+            ).only('id')
+            
+            eligible_count = eligible_users.count()
+            if eligible_count == 0:
+                return {
+                    "success": True,
+                    "is_eligible": True,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "message": "No eligible users found"
+                }
+            
+            # 3. Calculate total TER fund from database
+            fund_info = self._calculate_triple_entry_fund()
+            
+            if not fund_info.get("success"):
+                return {
+                    "success": False,
+                    "error": "Failed to calculate Triple Entry fund",
+                    "details": fund_info.get("error")
+                }
+            
+            ter_fund_usdt = Decimal(str(fund_info.get('total_fund', 0)))
+            
+            # Check if fund is available
+            if ter_fund_usdt <= 0:
+                return {
+                    "success": True,
+                    "is_eligible": True,
+                    "claimable_amounts": {"USDT": 0, "BNB": 0},
+                    "eligible_users_count": eligible_count,
+                    "total_fund_usdt": 0,
+                    "fund_breakdown": fund_info.get("breakdown", {}),
+                    "fund_sources": fund_info.get("sources", {}),
+                    "already_claimed": {"USDT": False, "BNB": False},
+                    "message": "No Triple Entry Reward fund available yet. Fund will be collected from Binary/Matrix activations (8% each) and Global program (5%)."
+                }
+            
+            # 4. Calculate per-user share
+            per_user_usdt = (ter_fund_usdt / Decimal(str(eligible_count))).quantize(Decimal('0.00000001'))
+            
+            # 5. Convert to BNB
+            rate = Decimal(os.getenv('SPARK_USDT_PER_BNB', '300'))
+            if rate <= 0:
+                rate = Decimal('300')
+            per_user_bnb = (per_user_usdt / rate).quantize(Decimal('0.00000001'))
+            
+            # 6. Check if user already claimed today
+            day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            already_claimed_usdt = TripleEntryPayment.objects(
+                user_id=ObjectId(user_id),
+                currency='USDT',
+                created_at__gte=day_start
+            ).first()
+            
+            already_claimed_bnb = TripleEntryPayment.objects(
+                user_id=ObjectId(user_id),
+                currency='BNB',
+                created_at__gte=day_start
+            ).first()
+            
+            return {
+                "success": True,
+                "is_eligible": True,
+                "claimable_amounts": {
+                    "USDT": float(per_user_usdt) if not already_claimed_usdt else 0,
+                    "BNB": float(per_user_bnb) if not already_claimed_bnb else 0
+                },
+                "eligible_users_count": eligible_count,
+                "total_fund_usdt": float(ter_fund_usdt),
+                "fund_breakdown": fund_info.get("breakdown", {}),
+                "fund_sources": fund_info.get("sources", {}),
+                "already_claimed": {
+                    "USDT": bool(already_claimed_usdt),
+                    "BNB": bool(already_claimed_bnb)
+                },
+                "message": "Eligible for Triple Entry Reward"
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def get_triple_entry_claim_history(self, user_id: str, currency: str = None) -> Dict[str, Any]:
+        """
+        Get Triple Entry Reward claim history for a user
+        Returns both USDT and BNB history by default, or filtered by currency
+        """
+        try:
+            # Build query
+            query = {"user_id": ObjectId(user_id)}
+            if currency:
+                currency = currency.upper()
+                if currency not in ['USDT', 'BNB']:
+                    return {"success": False, "error": "Invalid currency. Must be USDT or BNB"}
+                query["currency"] = currency
+            
+            # Get payments
+            payments = TripleEntryPayment.objects(**query).order_by('-created_at')
+            
+            # Group by currency
+            usdt_claims = []
+            bnb_claims = []
+            
+            for payment in payments:
+                claim_data = {
+                    "id": str(payment.id),
+                    "amount": float(payment.amount),
+                    "status": payment.status,
+                    "paid_at": payment.paid_at.strftime("%d %b %Y (%H:%M)") if payment.paid_at else None,
+                    "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                    "tx_hash": payment.tx_hash,
+                    "eligible_users_count": payment.eligible_users_count,
+                    "total_fund_amount": float(payment.total_fund_amount) if payment.total_fund_amount else None
+                }
+                
+                if payment.currency == 'USDT':
+                    usdt_claims.append(claim_data)
+                elif payment.currency == 'BNB':
+                    bnb_claims.append(claim_data)
+            
+            return {
+                "success": True,
+                "USDT": {
+                    "claims": usdt_claims,
+                    "total_claims": len(usdt_claims)
+                },
+                "BNB": {
+                    "claims": bnb_claims,
+                    "total_claims": len(bnb_claims)
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def claim_triple_entry_reward(self, user_id: str, currency: str = 'USDT') -> Dict[str, Any]:
+        """
+        Process Triple Entry Reward claim for a user
+        """
+        try:
+            currency = currency.upper()
+            if currency not in ['USDT', 'BNB']:
+                return {"success": False, "error": "Invalid currency. Must be USDT or BNB"}
+            
+            # Get claimable amount
+            claimable_info = self.get_triple_entry_claimable_amount(user_id)
+            if not claimable_info.get("success"):
+                return claimable_info
+            
+            if not claimable_info.get("is_eligible"):
+                return {"success": False, "error": "User is not eligible for Triple Entry Reward"}
+            
+            claimable_amount = claimable_info["claimable_amounts"][currency]
+            if claimable_amount <= 0:
+                return {"success": False, "error": f"No claimable amount for {currency} or already claimed today"}
+            
+            # Deduct from fund sources
+            fund_deduction_result = self._deduct_from_triple_entry_fund(Decimal(str(claimable_amount)))
+            
+            # Create payment record
+            payment = TripleEntryPayment(
+                user_id=ObjectId(user_id),
+                amount=Decimal(str(claimable_amount)),
+                currency=currency,
+                status='paid',
+                paid_at=datetime.utcnow(),
+                tx_hash=f"TER-{currency}-{user_id}-{int(datetime.utcnow().timestamp())}",
+                eligible_users_count=claimable_info.get("eligible_users_count"),
+                total_fund_amount=Decimal(str(claimable_info.get("total_fund_usdt", 0)))
+            )
+            payment.save()
+            
+            # Credit wallet
+            from modules.wallet.service import WalletService
+            wallet_service = WalletService()
+            wallet_result = wallet_service.credit_main_wallet(
+                user_id=user_id,
+                amount=Decimal(str(claimable_amount)),
+                currency=currency,
+                reason='triple_entry_reward',
+                tx_hash=payment.tx_hash
+            )
+            
+            return {
+                "success": True,
+                "payment_id": str(payment.id),
+                "amount": claimable_amount,
+                "currency": currency,
+                "tx_hash": payment.tx_hash,
+                "wallet_credited": wallet_result.get("success", False),
+                "fund_deducted": fund_deduction_result.get("success", False),
+                "fund_sources_updated": fund_deduction_result.get("sources_updated", []),
+                "message": f"Triple Entry Reward of {claimable_amount} {currency} claimed successfully"
             }
         except Exception as e:
             return {"success": False, "error": str(e)}

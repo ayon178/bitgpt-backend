@@ -7,6 +7,7 @@ from decimal import Decimal
 from .model import SparkBonusDistribution
 from bson import ObjectId
 from datetime import datetime, timedelta
+from utils.response import success_response, error_response
 
 
 router = APIRouter(prefix="/spark", tags=["Spark / Triple Entry Reward"])
@@ -90,6 +91,71 @@ async def get_spark_bonus_history(
         raise HTTPException(status_code=500, detail=str(e))
     total_spark_pool: float
     participant_user_ids: list[str]
+
+
+@router.get("/triple-entry/claim/history")
+async def get_triple_entry_claim_history(
+    user_id: str = Query(..., description="User ID for Triple Entry Reward history")
+):
+    """
+    Get Triple Entry Reward claim history and claimable amounts for a user
+    Returns both USDT and BNB data with claimable amounts and claim history
+    """
+    try:
+        service = SparkService()
+        
+        # Get claimable amounts
+        claimable_info = service.get_triple_entry_claimable_amount(user_id)
+        if not claimable_info.get("success"):
+            return error_response(claimable_info.get("error", "Failed to get claimable amount"))
+        
+        # Get claim history (both currencies)
+        history = service.get_triple_entry_claim_history(user_id)
+        if not history.get("success"):
+            return error_response(history.get("error", "Failed to get claim history"))
+        
+        # Build response with currency-wise data
+        response_data = {
+            "USDT": {
+                "claimable_amount": claimable_info.get("claimable_amounts", {}).get("USDT", 0),
+                "claims": history.get("USDT", {}).get("claims", []),
+                "total_claims": history.get("USDT", {}).get("total_claims", 0)
+            },
+            "BNB": {
+                "claimable_amount": claimable_info.get("claimable_amounts", {}).get("BNB", 0),
+                "claims": history.get("BNB", {}).get("claims", []),
+                "total_claims": history.get("BNB", {}).get("total_claims", 0)
+            },
+            "eligibility": {
+                "is_eligible": claimable_info.get("is_eligible", False),
+                "eligible_users_count": claimable_info.get("eligible_users_count", 0),
+                "total_fund_usdt": claimable_info.get("total_fund_usdt", 0),
+                "already_claimed": claimable_info.get("already_claimed", {"USDT": False, "BNB": False}),
+                "message": claimable_info.get("message", "")
+            }
+        }
+        
+        return success_response(response_data, "Triple Entry Reward data fetched successfully")
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.post("/triple-entry/claim")
+async def claim_triple_entry_reward(
+    user_id: str = Query(..., description="User ID"),
+    currency: str = Query(..., description="Currency (USDT or BNB)")
+):
+    """Claim Triple Entry Reward for a specific currency"""
+    try:
+        service = SparkService()
+        result = service.claim_triple_entry_reward(user_id, currency)
+        
+        if result.get("success"):
+            return success_response(result, result.get("message", "Triple Entry Reward claimed successfully"))
+        else:
+            return error_response(result.get("error", "Failed to claim reward"))
+    except Exception as e:
+        return error_response(str(e))
 
 
 @router.post("/distribute")

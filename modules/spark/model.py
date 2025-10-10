@@ -90,3 +90,35 @@ class SparkSlotClaimLedger(Document):
             ('slot_number', 'currency', 'created_at')
         ]
     }
+
+
+class TripleEntryPayment(Document):
+    """Track Triple Entry Reward claim/payment history"""
+    user_id = ObjectIdField(required=True)
+    amount = DecimalField(required=True, precision=8)
+    currency = StringField(choices=['USDT', 'BNB'], required=True)
+    
+    # Payment details
+    status = StringField(choices=['pending', 'paid', 'failed'], default='paid')
+    paid_at = DateTimeField()
+    
+    # Transaction details
+    tx_hash = StringField()
+    
+    # Eligibility info
+    eligible_users_count = IntField()  # Total eligible users at time of claim
+    total_fund_amount = DecimalField(precision=8)  # Total TER fund at time of claim
+    
+    # Timestamps
+    created_at = DateTimeField(default=datetime.utcnow)
+    updated_at = DateTimeField(default=datetime.utcnow)
+    
+    meta = {
+        'collection': 'triple_entry_payments',
+        'indexes': [
+            'user_id',
+            'currency',
+            'status',
+            'created_at'
+        ]
+    }
