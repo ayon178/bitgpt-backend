@@ -10,7 +10,9 @@ The Triple Entry Reward API provides endpoints to check claimable amounts and cl
   - Global Program ✓
 
 ## Fund Distribution
-- **Total TER Fund**: Configurable via `TRIPLE_ENTRY_FUND_USDT` env variable (default: $1000)
+- **Fund Sources**: 
+  - Spark Bonus (20%): from Binary (8%) + Matrix (8%) activations
+  - Global Program (5%): from Global transactions
 - **Distribution**: Equal distribution among all eligible users
 - **Claim Frequency**: Once per 24 hours per currency
 
@@ -18,9 +20,9 @@ The Triple Entry Reward API provides endpoints to check claimable amounts and cl
 
 ## API Endpoints
 
-### 1. Get Triple Entry Claim History & Claimable Amount
+### 1. Get Claimable Fund (NEW)
 
-**Endpoint**: `GET /spark/triple-entry/claim/history`
+**Endpoint**: `GET /spark/triple-entry/claimable-fund`
 
 **Query Parameters**:
 - `user_id` (required): User ID
@@ -29,7 +31,50 @@ The Triple Entry Reward API provides endpoints to check claimable amounts and cl
 ```json
 {
   "status": "Ok",
-  "message": "Triple Entry Reward data fetched successfully",
+  "message": "Triple Entry claimable fund fetched successfully",
+  "data": {
+    "USDT": {
+      "claimable_amount": 0.40
+    },
+    "BNB": {
+      "claimable_amount": 0.00133
+    },
+    "eligibility": {
+      "is_eligible": true,
+      "eligible_users_count": 83,
+      "total_fund_usdt": 33.96,
+      "fund_sources": {
+        "spark_bonus_contribution": 10.69,
+        "global_program_contribution": 23.27
+      },
+      "already_claimed": {
+        "USDT": false,
+        "BNB": false
+      },
+      "message": "Eligible for Triple Entry Reward"
+    }
+  },
+  "status_code": 200,
+  "success": true
+}
+```
+
+**Use Case**: Check if user can claim and how much (without history)
+
+---
+
+### 2. Get Claim History (All Currencies)
+
+**Endpoint**: `GET /spark/triple-entry/history`
+
+**Query Parameters**:
+- `user_id` (required): User ID
+
+**Response**:
+```json
+{
+  "status": "Ok",
+  "message": "Triple Entry claim history fetched successfully",
   "data": {
     "USDT": {
       "claimable_amount": 13.69863014,

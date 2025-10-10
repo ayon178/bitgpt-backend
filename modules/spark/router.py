@@ -93,13 +93,13 @@ async def get_spark_bonus_history(
     participant_user_ids: list[str]
 
 
-@router.get("/triple-entry/claim/history")
-async def get_triple_entry_claim_history(
-    user_id: str = Query(..., description="User ID for Triple Entry Reward history")
+@router.get("/triple-entry/claimable-fund")
+async def get_triple_entry_claimable_fund(
+    user_id: str = Query(..., description="User ID")
 ):
     """
-    Get Triple Entry Reward claim history and claimable amounts for a user
-    Returns both USDT and BNB data with claimable amounts and claim history
+    Get Triple Entry Reward claimable amounts only
+    Returns USDT and BNB claimable amounts with eligibility info
     """
     try:
         service = SparkService()
@@ -109,33 +109,72 @@ async def get_triple_entry_claim_history(
         if not claimable_info.get("success"):
             return error_response(claimable_info.get("error", "Failed to get claimable amount"))
         
-        # Get claim history (both currencies)
-        history = service.get_triple_entry_claim_history(user_id)
-        if not history.get("success"):
-            return error_response(history.get("error", "Failed to get claim history"))
-        
-        # Build response with currency-wise data
+        # Build response with currency-wise claimable amounts
         response_data = {
             "USDT": {
-                "claimable_amount": claimable_info.get("claimable_amounts", {}).get("USDT", 0),
-                "claims": history.get("USDT", {}).get("claims", []),
-                "total_claims": history.get("USDT", {}).get("total_claims", 0)
+                "claimable_amount": claimable_info.get("claimable_amounts", {}).get("USDT", 0)
             },
             "BNB": {
-                "claimable_amount": claimable_info.get("claimable_amounts", {}).get("BNB", 0),
-                "claims": history.get("BNB", {}).get("claims", []),
-                "total_claims": history.get("BNB", {}).get("total_claims", 0)
+                "claimable_amount": claimable_info.get("claimable_amounts", {}).get("BNB", 0)
             },
             "eligibility": {
                 "is_eligible": claimable_info.get("is_eligible", False),
                 "eligible_users_count": claimable_info.get("eligible_users_count", 0),
                 "total_fund_usdt": claimable_info.get("total_fund_usdt", 0),
+                "fund_sources": claimable_info.get("fund_sources", {}),
                 "already_claimed": claimable_info.get("already_claimed", {"USDT": False, "BNB": False}),
                 "message": claimable_info.get("message", "")
             }
         }
         
-        return success_response(response_data, "Triple Entry Reward data fetched successfully")
+        return success_response(response_data, "Triple Entry claimable fund fetched successfully")
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/triple-entry/history")
+async def get_triple_entry_history(
+    user_id: str = Query(..., description="User ID"),
+    currency: str = Query(None, description="Filter by currency (USDT or BNB). If not provided, returns both.")
+):
+    """
+    Get Triple Entry Reward claim history
+    Returns currency-wise claim history
+    If currency is specified, returns only that currency's history
+    """
+    try:
+        service = SparkService()
+        
+        # Get claim history
+        history = service.get_triple_entry_claim_history(user_id, currency)
+        if not history.get("success"):
+            return error_response(history.get("error", "Failed to get claim history"))
+        
+        # If currency filter applied, return only that currency
+        if currency:
+            currency_upper = currency.upper()
+            if currency_upper in ['USDT', 'BNB']:
+                response_data = {
+                    "currency": currency_upper,
+                    "claims": history.get(currency_upper, {}).get("claims", []),
+                    "total_claims": history.get(currency_upper, {}).get("total_claims", 0)
+                }
+            else:
+                return error_response("Invalid currency. Must be USDT or BNB")
+        else:
+            # Return both currencies
+            response_data = {
+                "USDT": {
+                    "claims": history.get("USDT", {}).get("claims", []),
+                    "total_claims": history.get("USDT", {}).get("total_claims", 0)
+                },
+                "BNB": {
+                    "claims": history.get("BNB", {}).get("claims", []),
+                    "total_claims": history.get("BNB", {}).get("total_claims", 0)
+                }
+            }
+        
+        return success_response(response_data, "Triple Entry claim history fetched successfully")
     except Exception as e:
         return error_response(str(e))
 
