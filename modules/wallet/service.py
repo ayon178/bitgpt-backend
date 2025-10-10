@@ -1169,3 +1169,236 @@ class WalletService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_universal_claim_history(self, user_id: str, currency: str = None, claim_type: str = None, page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """
+        Get universal claim history for all bonus programs
+        Aggregates claims from all payment collections
+        """
+        try:
+            from ..royal_captain.model import RoyalCaptainBonusPayment
+            from ..president_reward.model import PresidentRewardPayment
+            from ..leadership_stipend.model import LeadershipStipendPayment
+            from ..spark.model import TripleEntryPayment
+            from ..top_leader_gift.payment_model import TopLeadersGiftPayment
+            
+            uid = ObjectId(user_id)
+            all_claims = []
+            
+            # 1. Royal Captain Bonus Payments
+            try:
+                rc_filter = {"user_id": uid, "payment_status": "paid"}
+                if currency:
+                    rc_filter["currency"] = currency.upper()
+                
+                rc_payments = RoyalCaptainBonusPayment.objects(**rc_filter).order_by('-created_at')
+                
+                for payment in rc_payments:
+                    # Royal Captain pays in both USDT (60%) and BNB (40%)
+                    if not currency or currency.upper() == 'USDT':
+                        if payment.bonus_amount_usdt > 0:
+                            all_claims.append({
+                                "id": str(payment.id),
+                                "type": "Royal Captain Bonus",
+                                "amount": float(payment.bonus_amount_usdt),
+                                "currency": "USDT",
+                                "tier": payment.bonus_tier,
+                                "status": payment.payment_status,
+                                "paid_at": payment.paid_at.strftime("%d %b %Y (%H:%M)") if payment.paid_at else "--",
+                                "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                                "tx_hash": payment.payment_reference or "--"
+                            })
+                    
+                    if not currency or currency.upper() == 'BNB':
+                        if payment.bonus_amount_bnb > 0:
+                            all_claims.append({
+                                "id": str(payment.id),
+                                "type": "Royal Captain Bonus",
+                                "amount": float(payment.bonus_amount_bnb),
+                                "currency": "BNB",
+                                "tier": payment.bonus_tier,
+                                "status": payment.payment_status,
+                                "paid_at": payment.paid_at.strftime("%d %b %Y (%H:%M)") if payment.paid_at else "--",
+                                "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                                "tx_hash": payment.payment_reference or "--"
+                            })
+            except Exception as e:
+                print(f"Error fetching Royal Captain payments: {e}")
+            
+            # 2. President Reward Payments
+            try:
+                pr_filter = {"user_id": uid, "payment_status": "paid"}
+                if currency:
+                    pr_filter["currency"] = currency.upper()
+                
+                pr_payments = PresidentRewardPayment.objects(**pr_filter).order_by('-created_at')
+                
+                for payment in pr_payments:
+                    # President Reward also pays in both USDT (60%) and BNB (40%)
+                    if not currency or currency.upper() == 'USDT':
+                        if payment.reward_amount_usdt > 0:
+                            all_claims.append({
+                                "id": str(payment.id),
+                                "type": "President Reward",
+                                "amount": float(payment.reward_amount_usdt),
+                                "currency": "USDT",
+                                "tier": payment.reward_tier,
+                                "status": payment.payment_status,
+                                "paid_at": payment.paid_at.strftime("%d %b %Y (%H:%M)") if payment.paid_at else "--",
+                                "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                                "tx_hash": payment.payment_reference or "--"
+                            })
+                    
+                    if not currency or currency.upper() == 'BNB':
+                        if payment.reward_amount_bnb > 0:
+                            all_claims.append({
+                                "id": str(payment.id),
+                                "type": "President Reward",
+                                "amount": float(payment.reward_amount_bnb),
+                                "currency": "BNB",
+                                "tier": payment.reward_tier,
+                                "status": payment.payment_status,
+                                "paid_at": payment.paid_at.strftime("%d %b %Y (%H:%M)") if payment.paid_at else "--",
+                                "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                                "tx_hash": payment.payment_reference or "--"
+                            })
+            except Exception as e:
+                print(f"Error fetching President Reward payments: {e}")
+            
+            # 3. Leadership Stipend Payments
+            try:
+                ls_filter = {"user_id": uid, "payment_status": "paid"}
+                if currency:
+                    ls_filter["currency"] = currency.upper()
+                
+                ls_payments = LeadershipStipendPayment.objects(**ls_filter).order_by('-created_at')
+                
+                for payment in ls_payments:
+                    all_claims.append({
+                        "id": str(payment.id),
+                        "type": "Leadership Stipend",
+                        "amount": float(payment.daily_return_amount),  # Fixed: daily_return_amount
+                        "currency": payment.currency,
+                        "tier": payment.tier_name,
+                        "slot": payment.slot_number,
+                        "status": payment.payment_status,
+                        "paid_at": payment.payment_date.strftime("%d %b %Y (%H:%M)") if payment.payment_date else "--",
+                        "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                        "tx_hash": payment.payment_reference or "--"
+                    })
+            except Exception as e:
+                print(f"Error fetching Leadership Stipend payments: {e}")
+            
+            # 4. Triple Entry Reward Payments
+            try:
+                ter_filter = {"user_id": uid, "status": "paid"}
+                if currency:
+                    ter_filter["currency"] = currency.upper()
+                
+                ter_payments = TripleEntryPayment.objects(**ter_filter).order_by('-created_at')
+                
+                for payment in ter_payments:
+                    all_claims.append({
+                        "id": str(payment.id),
+                        "type": "Triple Entry Reward",
+                        "amount": float(payment.amount),
+                        "currency": payment.currency,
+                        "status": payment.status,
+                        "paid_at": payment.paid_at.strftime("%d %b %Y (%H:%M)") if payment.paid_at else "--",
+                        "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                        "tx_hash": payment.tx_hash or "--"
+                    })
+            except Exception as e:
+                print(f"Error fetching Triple Entry Reward payments: {e}")
+            
+            # 5. Top Leader Gift Payments
+            try:
+                tlg_filter = {"user_id": uid, "payment_status": "paid"}
+                if currency:
+                    tlg_filter["currency"] = currency.upper()
+                
+                tlg_payments = TopLeadersGiftPayment.objects(**tlg_filter).order_by('-created_at')
+                
+                for payment in tlg_payments:
+                    # Top Leader Gift pays in both USDT and BNB
+                    if not currency or currency.upper() == 'USDT':
+                        if payment.claimed_amount_usdt > 0:
+                            all_claims.append({
+                                "id": str(payment.id),
+                                "type": "Top Leader Gift",
+                                "amount": float(payment.claimed_amount_usdt),  # Fixed: claimed_amount_usdt
+                                "currency": "USDT",
+                                "level": payment.level_number,
+                                "level_name": payment.level_name,
+                                "status": payment.payment_status,
+                                "paid_at": payment.processed_at.strftime("%d %b %Y (%H:%M)") if payment.processed_at else "--",
+                                "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                                "tx_hash": payment.payment_reference or "--"
+                            })
+                    
+                    if not currency or currency.upper() == 'BNB':
+                        if payment.claimed_amount_bnb > 0:
+                            all_claims.append({
+                                "id": str(payment.id),
+                                "type": "Top Leader Gift",
+                                "amount": float(payment.claimed_amount_bnb),  # Fixed: claimed_amount_bnb
+                                "currency": "BNB",
+                                "level": payment.level_number,
+                                "level_name": payment.level_name,
+                                "status": payment.payment_status,
+                                "paid_at": payment.processed_at.strftime("%d %b %Y (%H:%M)") if payment.processed_at else "--",
+                                "created_at": payment.created_at.strftime("%d %b %Y (%H:%M)"),
+                                "tx_hash": payment.payment_reference or "--"
+                            })
+            except Exception as e:
+                print(f"Error fetching Top Leader Gift payments: {e}")
+            
+            # Filter by claim_type if provided
+            if claim_type:
+                claim_type_map = {
+                    "royal_captain": "Royal Captain Bonus",
+                    "president_reward": "President Reward",
+                    "leadership_stipend": "Leadership Stipend",
+                    "triple_entry": "Triple Entry Reward",
+                    "top_leader_gift": "Top Leader Gift"
+                }
+                filter_type = claim_type_map.get(claim_type.lower())
+                if filter_type:
+                    all_claims = [c for c in all_claims if c["type"] == filter_type]
+            
+            # Sort by created_at (most recent first)
+            all_claims.sort(key=lambda x: x["created_at"], reverse=True)
+            
+            # Pagination
+            total = len(all_claims)
+            start = (page - 1) * limit
+            end = start + limit
+            paginated_claims = all_claims[start:end]
+            
+            # Add serial numbers
+            for idx, claim in enumerate(paginated_claims, start=start + 1):
+                claim["s_no"] = idx
+            
+            return {
+                "success": True,
+                "data": {
+                    "claims": paginated_claims,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total,
+                        "total_pages": (total + limit - 1) // limit
+                    },
+                    "filters": {
+                        "currency": currency or "All",
+                        "type": claim_type or "All"
+                    },
+                    "summary": {
+                        "total_claims": total,
+                        "total_amount_usdt": sum(c["amount"] for c in all_claims if c["currency"] == "USDT"),
+                        "total_amount_bnb": sum(c["amount"] for c in all_claims if c["currency"] == "BNB")
+                    }
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}

@@ -136,6 +136,36 @@ async def get_pools_summary(user_id: str = Query(..., description="User ID for p
         return error_response(str(e))
 
 
+@router.get("/claim-history")
+async def get_claim_history(
+    user_id: str = Query(..., description="User ID"),
+    currency: Optional[str] = Query(None, description="Filter by currency (USDT or BNB)"),
+    type: Optional[str] = Query(None, description="Filter by claim type (royal_captain, president_reward, etc.)"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100)
+):
+    """
+    Get universal claim history for all bonus programs
+    Returns all claims made by user across all programs
+    """
+    try:
+        service = WalletService()
+        result = service.get_universal_claim_history(
+            user_id=user_id,
+            currency=currency,
+            claim_type=type,
+            page=page,
+            limit=limit
+        )
+        
+        if result.get("success"):
+            return success_response(result["data"], "Claim history fetched successfully")
+        else:
+            return error_response(result.get("error", "Failed to fetch claim history"))
+    except Exception as e:
+        return error_response(str(e))
+
+
 @router.get("/duel-tree-earnings")
 async def get_duel_tree_earnings(currency: str = 'BNB', page: int = 1, limit: int = 50):
     try:
