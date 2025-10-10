@@ -854,8 +854,32 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                     print(f"Error in Tree Upline Reserve System: {e}")
                     pass
 
+                # Distribute funds to all bonus pools (PROJECT_DOCUMENTATION.md Section 32)
+                if amount > 0:
+                    try:
+                        from modules.fund_distribution.service import FundDistributionService
+                        import os
+                        
+                        fund_service = FundDistributionService()
+                        
+                        # Convert BNB to USD for fund distribution
+                        bnb_to_usd_rate = Decimal(os.getenv('BNB_TO_USD_RATE', '600'))
+                        amount_usd = amount * bnb_to_usd_rate
+                        
+                        distribution_result = fund_service.distribute_binary_funds(
+                            user_id=str(user.id),
+                            amount=amount_usd,
+                            slot_no=slot_no,
+                            referrer_id=upline_id,
+                            tx_hash=f"AUTO-{user.uid}-S{slot_no}"
+                        )
+                        
+                        if distribution_result.get('success'):
+                            print(f"✅ Binary Slot {slot_no} funds distributed: ${distribution_result.get('total_distributed')}")
+                    except Exception as e:
+                        print(f"⚠️ Binary fund distribution error: {e}")
+                
                 # Trigger upgrade commission logic for each activated slot
-                # Upgrade commission logic for each activated slot
                 if amount > 0:
                     try:
                         commission_service.calculate_upgrade_commission(
