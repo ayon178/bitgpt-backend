@@ -121,7 +121,27 @@ class MatrixService:
             # 4. Initialize MatrixAutoUpgrade tracking
             self._initialize_matrix_auto_upgrade(user_id)
             
-            # 5. Process all commission distributions (100% total)
+            # 5. Distribute funds to all bonus pools (PROJECT_DOCUMENTATION.md Section 32)
+            try:
+                from modules.fund_distribution.service import FundDistributionService
+                fund_service = FundDistributionService()
+                
+                distribution_result = fund_service.distribute_matrix_funds(
+                    user_id=user_id,
+                    amount=amount,
+                    slot_no=1,
+                    referrer_id=direct_referrer_id,
+                    tx_hash=tx_hash
+                )
+                
+                if distribution_result.get('success'):
+                    print(f"✅ Matrix funds distributed: {distribution_result.get('total_distributed')}")
+                else:
+                    print(f"⚠️ Matrix fund distribution failed: {distribution_result.get('error')}")
+            except Exception as e:
+                print(f"⚠️ Matrix fund distribution error: {e}")
+            
+            # 5b. Process all commission distributions (100% total)
             commission_results = self._process_matrix_commissions(
                 user_id,
                 direct_referrer_id,

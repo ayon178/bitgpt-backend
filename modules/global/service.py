@@ -681,6 +681,29 @@ class GlobalService:
             else:
                 print(f"User {user_id} placed as root in {phase}")
 
+            # 1.1.4b. Distribute funds to all bonus pools (PROJECT_DOCUMENTATION.md Section 32)
+            try:
+                from modules.fund_distribution.service import FundDistributionService
+                fund_service = FundDistributionService()
+                
+                # Get referrer for partner incentive
+                referrer_id = str(user.refered_by) if user.refered_by else None
+                
+                distribution_result = fund_service.distribute_global_funds(
+                    user_id=user_id,
+                    amount=expected_amount,
+                    slot_no=1,
+                    referrer_id=referrer_id,
+                    tx_hash=unique_tx_hash
+                )
+                
+                if distribution_result.get('success'):
+                    print(f"✅ Global funds distributed: {distribution_result.get('total_distributed')}")
+                else:
+                    print(f"⚠️ Global fund distribution failed: {distribution_result.get('error')}")
+            except Exception as e:
+                print(f"⚠️ Global fund distribution error: {e}")
+            
             # 1.1.5 Commission Calculations - Section 1.1.5 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
             # Joining Commission (10%): Calculate and distribute to upline
             try:

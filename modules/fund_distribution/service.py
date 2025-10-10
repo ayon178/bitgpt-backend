@@ -18,36 +18,37 @@ class FundDistributionService:
     """Service for handling complete fund distribution percentages across all programs"""
     
     def __init__(self):
+        # Use income_type values that match IncomeEvent model choices
         self.binary_percentages = {
             "spark_bonus": Decimal('8.0'),
-            "royal_captain_bonus": Decimal('4.0'),
+            "royal_captain": Decimal('4.0'),  # Changed from royal_captain_bonus
             "president_reward": Decimal('3.0'),
             "leadership_stipend": Decimal('5.0'),
-            "jackpot_entry": Decimal('5.0'),
+            "jackpot": Decimal('5.0'),  # Changed from jackpot_entry
             "partner_incentive": Decimal('10.0'),
-            "share_holders": Decimal('5.0'),
+            "shareholders": Decimal('5.0'),  # Changed from share_holders
             "level_distribution": Decimal('60.0')
         }
         
         self.matrix_percentages = {
             "spark_bonus": Decimal('8.0'),
-            "royal_captain_bonus": Decimal('4.0'),
+            "royal_captain": Decimal('4.0'),  # Changed from royal_captain_bonus
             "president_reward": Decimal('3.0'),
-            "newcomer_growth_support": Decimal('20.0'),
-            "mentorship_bonus": Decimal('10.0'),
+            "newcomer_support": Decimal('20.0'),  # Changed from newcomer_growth_support
+            "mentorship": Decimal('10.0'),  # Changed from mentorship_bonus
             "partner_incentive": Decimal('10.0'),
-            "share_holders": Decimal('5.0'),
+            "shareholders": Decimal('5.0'),  # Changed from share_holders
             "level_distribution": Decimal('40.0')
         }
         
         self.global_percentages = {
-            "tree_upline_reserve": Decimal('30.0'),
-            "tree_upline_wallet": Decimal('30.0'),
+            "global_phase_1": Decimal('30.0'),  # Tree upline reserve
+            "global_phase_2": Decimal('30.0'),  # Tree upline wallet
             "partner_incentive": Decimal('10.0'),
-            "royal_captain_bonus": Decimal('10.0'),
+            "royal_captain": Decimal('10.0'),  # Changed from royal_captain_bonus
             "president_reward": Decimal('10.0'),
-            "share_holders": Decimal('5.0'),
-            "triple_entry_reward": Decimal('5.0')
+            "shareholders": Decimal('5.0'),  # Changed from share_holders
+            "triple_entry": Decimal('5.0')  # Handled separately via SparkService, not BonusFund
         }
         
         # Binary level distribution breakdown (60% treated as 100%)
@@ -96,8 +97,19 @@ class FundDistributionService:
                     )
                     distributions.extend(level_distributions)
                     total_distributed += amount * (percentage / Decimal('100.0'))
+                elif income_type == "partner_incentive":
+                    # Handle partner incentive separately (goes to referrer, not user)
+                    if referrer_id:
+                        dist_amount = amount * (percentage / Decimal('100.0'))
+                        if dist_amount > 0:
+                            distribution = self._create_income_event(
+                                referrer_id, user_id, 'binary', slot_no, income_type,
+                                dist_amount, percentage, tx_hash, "Binary Partner Incentive"
+                            )
+                            distributions.append(distribution)
+                            total_distributed += dist_amount
                 else:
-                    # Direct distribution
+                    # Direct distribution to fund pools
                     dist_amount = amount * (percentage / Decimal('100.0'))
                     if dist_amount > 0:
                         distribution = self._create_income_event(
@@ -106,17 +118,6 @@ class FundDistributionService:
                         )
                         distributions.append(distribution)
                         total_distributed += dist_amount
-            
-            # Handle partner incentive separately if referrer provided
-            if referrer_id and "partner_incentive" in self.binary_percentages:
-                pi_amount = amount * (self.binary_percentages["partner_incentive"] / Decimal('100.0'))
-                if pi_amount > 0:
-                    pi_distribution = self._create_income_event(
-                        referrer_id, user_id, 'binary', slot_no, 'partner_incentive',
-                        pi_amount, self.binary_percentages["partner_incentive"], 
-                        tx_hash, "Binary Partner Incentive"
-                    )
-                    distributions.append(pi_distribution)
             
             return {
                 "success": True,
@@ -148,8 +149,19 @@ class FundDistributionService:
                     )
                     distributions.extend(level_distributions)
                     total_distributed += amount * (percentage / Decimal('100.0'))
+                elif income_type == "partner_incentive":
+                    # Handle partner incentive separately (goes to referrer, not user)
+                    if referrer_id:
+                        dist_amount = amount * (percentage / Decimal('100.0'))
+                        if dist_amount > 0:
+                            distribution = self._create_income_event(
+                                referrer_id, user_id, 'matrix', slot_no, income_type,
+                                dist_amount, percentage, tx_hash, "Matrix Partner Incentive"
+                            )
+                            distributions.append(distribution)
+                            total_distributed += dist_amount
                 else:
-                    # Direct distribution
+                    # Direct distribution to fund pools
                     dist_amount = amount * (percentage / Decimal('100.0'))
                     if dist_amount > 0:
                         distribution = self._create_income_event(
@@ -158,17 +170,6 @@ class FundDistributionService:
                         )
                         distributions.append(distribution)
                         total_distributed += dist_amount
-            
-            # Handle partner incentive separately if referrer provided
-            if referrer_id and "partner_incentive" in self.matrix_percentages:
-                pi_amount = amount * (self.matrix_percentages["partner_incentive"] / Decimal('100.0'))
-                if pi_amount > 0:
-                    pi_distribution = self._create_income_event(
-                        referrer_id, user_id, 'matrix', slot_no, 'partner_incentive',
-                        pi_amount, self.matrix_percentages["partner_incentive"], 
-                        tx_hash, "Matrix Partner Incentive"
-                    )
-                    distributions.append(pi_distribution)
             
             return {
                 "success": True,
@@ -311,11 +312,30 @@ class FundDistributionService:
             print(f"Error finding upline at level {target_level}: {e}")
             return None
 
+    def _map_income_type_to_fund_type(self, income_type: str) -> str:
+        """Map income_type to BonusFund fund_type"""
+        mapping = {
+            'spark_bonus': 'spark_bonus',
+            'royal_captain': 'royal_captain',
+            'president_reward': 'president_reward',
+            'leadership_stipend': 'leadership_stipend',
+            'jackpot': 'jackpot_entry',
+            'partner_incentive': 'partner_incentive',
+            'shareholders': 'shareholders',
+            'newcomer_support': 'newcomer_support',
+            'mentorship': 'mentorship_bonus',
+            'triple_entry': 'triple_entry',
+            'global_phase_1': None,  # Handled separately (tree upline reserve)
+            'global_phase_2': None   # Handled separately (tree upline wallet)
+        }
+        return mapping.get(income_type)
+    
     def _create_income_event(self, recipient_id: str, source_id: str, program: str, 
                            slot_no: int, income_type: str, amount: Decimal, 
                            percentage: Decimal, tx_hash: str, description: str) -> Dict[str, Any]:
-        """Create income event for distribution"""
+        """Create income event for distribution AND update BonusFund"""
         try:
+            # 1. Create IncomeEvent (for tracking/history)
             income_event = IncomeEvent(
                 user_id=ObjectId(recipient_id),
                 source_user_id=ObjectId(source_id),
@@ -331,13 +351,60 @@ class FundDistributionService:
             )
             income_event.save()
             
+            # 2. Update BonusFund (for actual fund balance)
+            fund_type = self._map_income_type_to_fund_type(income_type)
+            fund_updated = False
+            
+            # Skip level distribution (level_1_distribution, level_2_distribution, etc.)
+            is_level_dist = 'level_' in income_type and '_distribution' in income_type
+            
+            # Debug logging
+            if not fund_type:
+                print(f"⚠️ No mapping for income_type: {income_type}")
+            elif is_level_dist:
+                pass  # Don't log level dist skips
+            
+            if fund_type and not is_level_dist:
+                try:
+                    from modules.income.bonus_fund import BonusFund
+                    
+                    # Get or create BonusFund
+                    bonus_fund = BonusFund.objects(
+                        fund_type=fund_type,
+                        program=program,
+                        status='active'
+                    ).first()
+                    
+                    if not bonus_fund:
+                        print(f"Creating new BonusFund: {fund_type}_{program}")
+                        bonus_fund = BonusFund(
+                            fund_type=fund_type,
+                            program=program,
+                            total_collected=Decimal('0'),
+                            total_distributed=Decimal('0'),
+                            current_balance=Decimal('0'),
+                            status='active'
+                        )
+                    
+                    # Update fund balances
+                    bonus_fund.total_collected += amount
+                    bonus_fund.current_balance += amount
+                    bonus_fund.updated_at = datetime.utcnow()
+                    bonus_fund.save()
+                    fund_updated = True
+                    print(f"✅ Updated {fund_type}_{program}: +${amount} → ${bonus_fund.current_balance}")
+                    
+                except Exception as e:
+                    print(f"❌ Failed to update BonusFund for {income_type} → {fund_type}: {e}")
+            
             return {
                 "income_type": income_type,
                 "amount": amount,
                 "percentage": percentage,
                 "recipient_id": recipient_id,
                 "status": "completed",
-                "description": description
+                "description": description,
+                "bonus_fund_updated": fund_updated
             }
             
         except Exception as e:

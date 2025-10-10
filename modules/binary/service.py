@@ -3,6 +3,7 @@ from bson import ObjectId
 from decimal import Decimal
 from datetime import datetime
 from mongoengine.errors import ValidationError
+import os
 
 from ..user.model import User, EarningHistory
 from ..slot.model import SlotActivation, SlotCatalog
@@ -98,7 +99,34 @@ class BinaryService:
             binary_status.last_updated = datetime.utcnow()
             binary_status.save()
             
-            # 3. Process upgrade commission (30% to corresponding level upline + 70% dual tree distribution)
+            # 3. Distribute funds to all bonus pools (PROJECT_DOCUMENTATION.md Section 32)
+            try:
+                from modules.fund_distribution.service import FundDistributionService
+                fund_service = FundDistributionService()
+                
+                # Convert BNB to USD for fund distribution
+                bnb_to_usd_rate = Decimal(os.getenv('BNB_TO_USD_RATE', '600'))
+                amount_usd = amount * bnb_to_usd_rate
+                
+                # Get referrer for partner incentive
+                referrer_id = str(user.refered_by) if user.refered_by else None
+                
+                distribution_result = fund_service.distribute_binary_funds(
+                    user_id=user_id,
+                    amount=amount_usd,
+                    slot_no=slot_no,
+                    referrer_id=referrer_id,
+                    tx_hash=tx_hash
+                )
+                
+                if distribution_result.get('success'):
+                    print(f"✅ Binary funds distributed: {distribution_result.get('total_distributed')}")
+                else:
+                    print(f"⚠️ Binary fund distribution failed: {distribution_result.get('error')}")
+            except Exception as e:
+                print(f"⚠️ Binary fund distribution error: {e}")
+            
+            # 3b. Process upgrade commission (30% to corresponding level upline + 70% dual tree distribution)
             commission_result = self.commission_service.calculate_upgrade_commission(
                 from_user_id=user_id,
                 program='binary',
