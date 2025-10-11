@@ -405,16 +405,39 @@ class SparkService:
             if claimer_user_id and claimer_user_id not in user_ids:
                 return {"success": False, "error": "Claimer is not eligible for this slot"}
 
-            # Idempotency: prevent duplicate claim for this claimer+slot+currency per day
+            # Monthly claim limit: 1 claim per month per slot per currency
+            # প্রতি মাসে 1 বার করে claim (per currency per slot)
             try:
                 from datetime import datetime as _DT
                 from modules.spark.model import SparkBonusDistribution as _SBD
                 if claimer_user_id:
-                    day_start = _DT.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-                    dup = _SBD.objects(user_id=ObjectId(claimer_user_id), slot_number=slot_no, currency=currency, created_at__gte=day_start).first()
-                    if dup:
-                        return {"success": False, "error": "Already claimed for this slot today"}
-            except Exception:
+                    # Get start of current month
+                    now = _DT.utcnow()
+                    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                    
+                    # Check if already claimed this month for this slot+currency
+                    existing_claim = _SBD.objects(
+                        user_id=ObjectId(claimer_user_id), 
+                        slot_number=slot_no, 
+                        currency=currency, 
+                        created_at__gte=month_start
+                    ).first()
+                    
+                    if existing_claim:
+                        # Calculate when next claim is allowed
+                        import calendar
+                        last_day = calendar.monthrange(now.year, now.month)[1]
+                        next_claim_date = now.replace(day=last_day, hour=23, minute=59, second=59) + timedelta(seconds=1)
+                        
+                        return {
+                            "success": False, 
+                            "error": f"Already claimed for slot {slot_no} ({currency}) this month",
+                            "last_claim_date": existing_claim.created_at.strftime("%d %b %Y"),
+                            "next_claim_date": next_claim_date.strftime("%d %b %Y"),
+                            "message": f"You can claim again from {next_claim_date.strftime('%d %b %Y')}"
+                        }
+            except Exception as e:
+                print(f"Error checking monthly claim limit: {e}")
                 pass
 
             from decimal import Decimal as _D

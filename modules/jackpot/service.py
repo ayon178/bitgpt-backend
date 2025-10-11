@@ -745,8 +745,9 @@ class JackpotService:
                 "error": f"Failed to get distribution history: {str(e)}"
             }
     
-    def get_current_jackpot_stats(self) -> Dict[str, Any]:
-        """Get current jackpot session statistics (total entries and total fund)"""
+    def get_current_jackpot_stats(self, user_id: str = None) -> Dict[str, Any]:
+        """Get current jackpot session statistics (total entries and total fund)
+        If user_id is provided, also returns user's own entry count for current session"""
         try:
             week_start, week_end = self._get_current_week_dates()
             current_date = datetime.utcnow()
@@ -755,7 +756,7 @@ class JackpotService:
             is_active = week_start <= current_date <= week_end
             
             if not is_active:
-                return {
+                response = {
                     "success": True,
                     "is_active": False,
                     "message": "No active jackpot session",
@@ -764,6 +765,12 @@ class JackpotService:
                     "week_start": week_start,
                     "week_end": week_end
                 }
+                
+                # Add user entry count if user_id provided
+                if user_id:
+                    response["user_entry_count"] = 0
+                
+                return response
             
             # Get jackpot fund for current week
             fund = JackpotFund.objects(
@@ -784,7 +791,7 @@ class JackpotService:
             
             total_fund = fund.total_fund if fund else Decimal('0.0')
             
-            return {
+            response = {
                 "success": True,
                 "is_active": True,
                 "total_entries": total_entries,
@@ -795,6 +802,29 @@ class JackpotService:
                 "binary_contributions_total": fund.binary_contributions_total if fund else Decimal('0.0'),
                 "rollover_from_previous": fund.rollover_from_previous if fund else Decimal('0.0')
             }
+            
+            # If user_id provided, get user's own entry count for current session
+            if user_id:
+                try:
+                    user_entry = JackpotUserEntry.objects(
+                        user_id=ObjectId(user_id),
+                        week_start_date=week_start,
+                        week_end_date=week_end
+                    ).first()
+                    
+                    user_entry_count = user_entry.total_entries_count if user_entry else 0
+                    response["user_entry_count"] = user_entry_count
+                    
+                    # Calculate user's contribution to total fund (entry fees only)
+                    user_contribution = Decimal(str(user_entry_count)) * self.entry_fee if user_entry_count > 0 else Decimal('0.0')
+                    response["user_contribution"] = user_contribution
+                    
+                except Exception as e:
+                    print(f"Error getting user entry count: {e}")
+                    response["user_entry_count"] = 0
+                    response["user_contribution"] = Decimal('0.0')
+            
+            return response
             
         except Exception as e:
             return {

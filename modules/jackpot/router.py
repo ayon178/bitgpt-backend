@@ -179,11 +179,14 @@ async def get_pool_percentages():
         raise HTTPException(status_code=500, detail=f"Failed to get pool percentages: {str(e)}")
 
 @router.get("/current-stats")
-async def get_current_jackpot_stats():
-    """Get current jackpot session statistics (total entries and total fund)"""
+async def get_current_jackpot_stats(
+    user_id: str = Query(None, description="Optional: User ID to get user's own entry count")
+):
+    """Get current jackpot session statistics (total entries and total fund)
+    If user_id is provided, also returns user's own entry count for current session"""
     try:
         jackpot_service = JackpotService()
-        result = jackpot_service.get_current_jackpot_stats()
+        result = jackpot_service.get_current_jackpot_stats(user_id=user_id)
         
         if result.get("success"):
             return result
