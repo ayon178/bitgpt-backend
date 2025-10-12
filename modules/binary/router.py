@@ -110,37 +110,6 @@ async def get_binary_upgrade_status(
     except Exception as e:
         return error_response(str(e))
 
-@router.get("/dual-tree-earnings/{slot_no}")
-async def calculate_dual_tree_earnings(
-    slot_no: int,
-    current_user: dict = Depends(authentication_service.verify_authentication)
-):
-    """Calculate dual tree earnings distribution for a specific slot"""
-    try:
-        if slot_no < 1 or slot_no > 16:
-            raise HTTPException(status_code=400, detail="Invalid slot number. Must be between 1-16")
-        
-        binary_service = BinaryService()
-        
-        # Get slot value from catalog
-        from ..slot.model import SlotCatalog
-        catalog = SlotCatalog.objects(program='binary', slot_no=slot_no, is_active=True).first()
-        if not catalog:
-            raise HTTPException(status_code=404, detail=f"Slot {slot_no} catalog not found")
-        
-        slot_value = catalog.price or Decimal('0')
-        
-        result = binary_service.calculate_dual_tree_earnings(slot_no, slot_value)
-        
-        if result["success"]:
-            return success_response(result)
-        else:
-            raise HTTPException(status_code=400, detail=result["error"])
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        return error_response(str(e))
 
 @router.get("/slot-catalog")
 async def get_binary_slot_catalog(
@@ -277,13 +246,20 @@ async def get_binary_partner_incentive(
     except Exception as e:
         return error_response(str(e))
 
-@router.get("/duel-tree-earnings/{user_id}")
+@router.get("/duel-tree-earnings/{uid}")
 async def get_duel_tree_earnings(
-    user_id: str,
+    uid: str,
     current_user: dict = Depends(authentication_service.verify_authentication)
 ):
     """Get duel tree earnings data matching frontend matrixData.js structure"""
     try:
+        # Find user by uid
+        user = User.objects(uid=uid).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_id = str(user.id)
+        
         # Extract user ID from current_user with fallback options
         authenticated_user_id = None
         user_id_keys = ["user_id", "_id", "id", "uid"]
@@ -309,6 +285,40 @@ async def get_duel_tree_earnings(
         raise
     except Exception as e:
         return error_response(str(e))
+
+
+@router.get("/dual-tree-earnings/slot/{slot_no}")
+async def calculate_dual_tree_earnings(
+    slot_no: int,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """Calculate dual tree earnings distribution for a specific slot"""
+    try:
+        if slot_no < 1 or slot_no > 16:
+            raise HTTPException(status_code=400, detail="Invalid slot number. Must be between 1-16")
+        
+        binary_service = BinaryService()
+        
+        # Get slot value from catalog
+        from ..slot.model import SlotCatalog
+        catalog = SlotCatalog.objects(program='binary', slot_no=slot_no, is_active=True).first()
+        if not catalog:
+            raise HTTPException(status_code=404, detail=f"Slot {slot_no} catalog not found")
+        
+        slot_value = catalog.price or Decimal('0')
+        
+        result = binary_service.calculate_dual_tree_earnings(slot_no, slot_value)
+        
+        if result["success"]:
+            return success_response(result)
+        else:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
 
 @router.get("/duel-tree-details/{tree_id}")
 async def get_duel_tree_details(
