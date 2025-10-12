@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from decimal import Decimal
+from typing import Optional
 from .service import GlobalService
 from auth.service import authentication_service
 from utils.response import success_response, error_response
+from ..user.model import User
 
 router = APIRouter(prefix="/global", tags=["Global Program"])
 
@@ -189,70 +191,86 @@ async def get_team_statistics(user_id: str):
         return {"status": "Ok", "data": result["statistics"]}
     raise HTTPException(status_code=400, detail=result.get("error", "Failed to fetch team statistics"))
 
-@router.get("/earnings/{user_id}")
-async def get_global_earnings(
-    user_id: str,
-    phase: str = None,
-    current_user: dict = Depends(authentication_service.verify_authentication)
+@router.get("/earnings/details")
+async def get_global_earnings_details(
+    uid: str,
+    item_id: Optional[int] = None,
+    phase: Optional[str] = None
 ):
-    """Get Global program earnings data matching frontend matrixData.js structure"""
+    """
+    Get Global earnings details by item_id or last item if item_id not provided
+    
+    Examples:
+    - /global/earnings/details?uid=AUTO001 - Returns last earnings item for user
+    - /global/earnings/details?uid=AUTO001&item_id=3 - Returns specific item with ID 3
+    - /global/earnings/details?uid=AUTO001&phase=phase1 - Returns last item for specific phase
+    """
     try:
-        # Extract user ID from current_user with fallback options
-        authenticated_user_id = None
-        user_id_keys = ["user_id", "_id", "id", "uid"]
-
-        for key in user_id_keys:
-            if current_user and current_user.get(key):
-                authenticated_user_id = str(current_user[key])
-                break
+        if not uid:
+            raise HTTPException(status_code=400, detail="uid parameter is required")
         
-        # Authorization check - users can only access their own data
-        if authenticated_user_id and authenticated_user_id != user_id:
-            raise HTTPException(status_code=403, detail="Unauthorized to view this user's Global earnings")
+        # Find user by uid
+        user = User.objects(uid=uid).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_id = str(user.id)
 
         service = GlobalService()
-        result = service.get_global_earnings(user_id, phase)
-
-        if result["success"]:
-            return success_response(result["data"])
+        
+        # If item_id is provided, return specific item
+        if item_id is not None:
+            result = service.get_global_earnings_details(user_id, item_id, phase)
+            
+            if result["success"]:
+                return success_response(result["data"])
+            else:
+                raise HTTPException(status_code=404, detail=result["error"])
+        
+        # If item_id is not provided, return last item from earnings data
         else:
-            raise HTTPException(status_code=400, detail=result["error"])
+            result = service.get_global_earnings(user_id, phase)
+            
+            if result["success"]:
+                earnings_data = result["data"].get("globalEarningsData", [])
+                
+                if not earnings_data:
+                    raise HTTPException(status_code=404, detail="No earnings data found for this user")
+                
+                # Return only the last earnings item
+                last_item = earnings_data[-1]
+                return success_response(last_item)
+            else:
+                raise HTTPException(status_code=400, detail=result["error"])
 
     except HTTPException:
         raise
     except Exception as e:
         return error_response(str(e))
 
-@router.get("/earnings/details/{item_id}")
-async def get_global_earnings_details(
-    item_id: int,
+@router.get("/earnings/{user_id}")
+async def get_global_earnings(
+    user_id: str,
     phase: str = None,
-    user_id: str = None,
-    current_user: dict = Depends(authentication_service.verify_authentication)
+    # current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get specific Global earnings item details by item_id"""
+    """Get Global program earnings data matching frontend matrixData.js structure"""
     try:
         # Extract user ID from current_user with fallback options
-        authenticated_user_id = None
-        user_id_keys = ["user_id", "_id", "id", "uid"]
+        # authenticated_user_id = None
+        # user_id_keys = ["user_id", "_id", "id", "uid"]
 
-        for key in user_id_keys:
-            if current_user and current_user.get(key):
-                authenticated_user_id = str(current_user[key])
-                break
+        # for key in user_id_keys:
+        #     if current_user and current_user.get(key):
+        #         authenticated_user_id = str(current_user[key])
+        #         break
         
-        # Use provided user_id or authenticated user's ID
-        if user_id:
-            if authenticated_user_id and authenticated_user_id != user_id:
-                raise HTTPException(status_code=403, detail="Unauthorized to view this user's Global earnings")
-        else:
-            user_id = authenticated_user_id
-        
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User ID not found")
+        # # Authorization check - users can only access their own data
+        # if authenticated_user_id and authenticated_user_id != user_id:
+        #     raise HTTPException(status_code=403, detail="Unauthorized to view this user's Global earnings")
 
         service = GlobalService()
-        result = service.get_global_earnings_details(user_id, item_id, phase)
+        result = service.get_global_earnings(user_id, phase)
 
         if result["success"]:
             return success_response(result["data"])
