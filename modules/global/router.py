@@ -232,7 +232,16 @@ async def get_global_earnings_details(
             result = service.get_global_earnings(user_id, phase)
             
             if result["success"]:
-                earnings_data = result["data"].get("globalEarningsData", [])
+                # Service returns data as { "phase-1": [...], "phase-2": [...] }
+                # Combine all phase data into a single array
+                earnings_data = []
+                
+                if isinstance(result["data"], dict):
+                    for phase_key in ['phase-1', 'phase-2']:
+                        if phase_key in result["data"]:
+                            phase_items = result["data"][phase_key]
+                            if isinstance(phase_items, list):
+                                earnings_data.extend(phase_items)
                 
                 if not earnings_data:
                     raise HTTPException(status_code=404, detail="No earnings data found for this user")
