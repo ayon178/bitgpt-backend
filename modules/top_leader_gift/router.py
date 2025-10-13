@@ -492,6 +492,90 @@ async def get_fund_overview(
     except Exception as e:
         return error_response(str(e))
 
+@router.post("/claim")
+async def claim_top_leader_gift(
+    request: dict,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """
+    Claim Top Leaders Gift reward for a specific level
+    
+    Request Body:
+    - user_id (required): User's MongoDB ObjectId
+    - level (required): Level number (1-5)
+    - currency (optional): 'USDT', 'BNB', or 'BOTH' (default: 'BOTH')
+    
+    Process:
+    1. Checks user eligibility for the level
+    2. Calculates claimable amount from fund overview
+    3. Validates against max reward limits
+    4. Credits user wallet with specified currency
+    5. Updates claimed amounts and tracking
+    """
+    try:
+        # Extract parameters
+        user_id = request.get('user_id')
+        level_number = request.get('level')
+        currency = request.get('currency', 'BOTH').upper()
+        
+        # Validation
+        if not user_id:
+            return error_response("user_id is required", status_code=400)
+        
+        if not level_number:
+            return error_response("level is required", status_code=400)
+        
+        try:
+            level_number = int(level_number)
+        except:
+            return error_response("level must be a number", status_code=400)
+        
+        if level_number < 1 or level_number > 5:
+            return error_response("level must be between 1 and 5", status_code=400)
+        
+        if currency not in ['USDT', 'BNB', 'BOTH']:
+            return error_response("currency must be USDT, BNB, or BOTH", status_code=400)
+        
+        # Authorization check
+        user_id_keys = ["user_id", "id", "_id", "uid"]
+        authenticated_user_id = None
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                authenticated_user_id = str(current_user[key])
+                break
+        
+        if not authenticated_user_id:
+            return error_response("User ID not found in token", status_code=401)
+        
+        # Users can only claim for themselves
+        if user_id != authenticated_user_id:
+            return error_response("You can only claim rewards for yourself", status_code=403)
+        
+        # Call claim service
+        from .claim_service import TopLeadersGiftClaimService
+        service = TopLeadersGiftClaimService()
+        
+        result = service.claim_reward(user_id, level_number, currency)
+        
+        if result.get("success"):
+            return success_response(
+                data={
+                    "user_id": result["user_id"],
+                    "level": result["level"],
+                    "currency": result["currency"],
+                    "claimed_usdt": result["claimed_usdt"],
+                    "claimed_bnb": result["claimed_bnb"],
+                    "payment_id": result["payment_id"],
+                    "message": result["message"]
+                },
+                message=result["message"]
+            )
+        else:
+            return error_response(result.get("error", "Failed to claim reward"), status_code=400)
+            
+    except Exception as e:
+        return error_response(str(e))
+
 @router.post("/fund")
 async def update_top_leader_gift_fund(request: TopLeaderGiftFundRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Top Leader Gift fund"""
