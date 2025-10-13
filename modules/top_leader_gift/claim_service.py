@@ -546,4 +546,125 @@ class TopLeadersGiftClaimService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+    
+    def get_claim_history(self, user_id: str) -> Dict[str, Any]:
+        """Get level-wise and currency-wise claim history for user"""
+        try:
+            # Get user
+            tl_user = TopLeadersGiftUser.objects(user_id=ObjectId(user_id)).first()
+            if not tl_user:
+                # Auto-join
+                join_result = self.join_program(user_id)
+                if not join_result.get('success'):
+                    return join_result
+                tl_user = TopLeadersGiftUser.objects(user_id=ObjectId(user_id)).first()
+            
+            # Get all payment records for this user
+            payments = TopLeadersGiftPayment.objects(user_id=ObjectId(user_id)).order_by('-created_at')
+            
+            # Build level-wise summary
+            level_summary = {}
+            for level_num in range(1, 6):
+                level_payments = [p for p in payments if p.level_number == level_num]
+                
+                total_claimed_usdt = sum(p.claimed_amount_usdt for p in level_payments if p.payment_status == 'paid')
+                total_claimed_bnb = sum(p.claimed_amount_bnb for p in level_payments if p.payment_status == 'paid')
+                
+                level_summary[f"level_{level_num}"] = {
+                    "level": level_num,
+                    "total_claims": len(level_payments),
+                    "successful_claims": len([p for p in level_payments if p.payment_status == 'paid']),
+                    "pending_claims": len([p for p in level_payments if p.payment_status == 'pending']),
+                    "failed_claims": len([p for p in level_payments if p.payment_status == 'failed']),
+                    "total_claimed_usdt": total_claimed_usdt,
+                    "total_claimed_bnb": total_claimed_bnb,
+                    "total_claimed_usd_value": total_claimed_usdt + (total_claimed_bnb * 1316),  # Approximate USD value
+                    "claims": []
+                }
+                
+                # Add individual claim records
+                for payment in level_payments:
+                    level_summary[f"level_{level_num}"]["claims"].append({
+                        "payment_id": str(payment.id),
+                        "claimed_at": payment.created_at,
+                        "claimed_usdt": payment.claimed_amount_usdt,
+                        "claimed_bnb": payment.claimed_amount_bnb,
+                        "currency": payment.currency,
+                        "status": payment.payment_status,
+                        "paid_at": payment.paid_at,
+                        "usdt_tx_hash": payment.usdt_tx_hash,
+                        "bnb_tx_hash": payment.bnb_tx_hash,
+                        "payment_reference": payment.payment_reference
+                    })
+            
+            # Currency-wise summary
+            all_paid_payments = [p for p in payments if p.payment_status == 'paid']
+            
+            currency_summary = {
+                "usdt": {
+                    "total_claimed": sum(p.claimed_amount_usdt for p in all_paid_payments),
+                    "claim_count": len([p for p in all_paid_payments if p.claimed_amount_usdt > 0]),
+                    "claims_by_level": {}
+                },
+                "bnb": {
+                    "total_claimed": sum(p.claimed_amount_bnb for p in all_paid_payments),
+                    "claim_count": len([p for p in all_paid_payments if p.claimed_amount_bnb > 0]),
+                    "claims_by_level": {}
+                }
+            }
+            
+            # Currency breakdown by level
+            for level_num in range(1, 6):
+                level_payments = [p for p in all_paid_payments if p.level_number == level_num]
+                
+                currency_summary["usdt"]["claims_by_level"][f"level_{level_num}"] = sum(
+                    p.claimed_amount_usdt for p in level_payments
+                )
+                currency_summary["bnb"]["claims_by_level"][f"level_{level_num}"] = sum(
+                    p.claimed_amount_bnb for p in level_payments
+                )
+            
+            # Overall summary
+            overall_summary = {
+                "total_claims": len(payments),
+                "successful_claims": len(all_paid_payments),
+                "pending_claims": len([p for p in payments if p.payment_status == 'pending']),
+                "failed_claims": len([p for p in payments if p.payment_status == 'failed']),
+                "total_claimed_usdt": tl_user.total_claimed_usdt,
+                "total_claimed_bnb": tl_user.total_claimed_bnb,
+                "total_claims_count": tl_user.total_claims_count,
+                "last_claim_date": tl_user.last_claim_date,
+                "highest_level_claimed": max([p.level_number for p in all_paid_payments]) if all_paid_payments else 0
+            }
+            
+            # All claims (recent first)
+            all_claims = []
+            for payment in payments:
+                all_claims.append({
+                    "payment_id": str(payment.id),
+                    "level": payment.level_number,
+                    "level_name": payment.level_name,
+                    "claimed_at": payment.created_at,
+                    "claimed_usdt": payment.claimed_amount_usdt,
+                    "claimed_bnb": payment.claimed_amount_bnb,
+                    "currency": payment.currency,
+                    "status": payment.payment_status,
+                    "paid_at": payment.paid_at,
+                    "payment_reference": payment.payment_reference,
+                    "self_rank_at_claim": payment.self_rank_at_claim,
+                    "direct_partners_at_claim": payment.direct_partners_at_claim,
+                    "total_team_at_claim": payment.total_team_at_claim
+                })
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "overall_summary": overall_summary,
+                "level_summary": level_summary,
+                "currency_summary": currency_summary,
+                "all_claims": all_claims
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 

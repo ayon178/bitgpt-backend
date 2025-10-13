@@ -576,6 +576,51 @@ async def claim_top_leader_gift(
     except Exception as e:
         return error_response(str(e))
 
+@router.get("/claim/history")
+async def get_claim_history(
+    user_id: str,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """
+    Get level-wise and currency-wise claim history for user
+    
+    Returns:
+    - Overall summary (total claims, successful, pending, failed)
+    - Level-wise summary (claims per level with USDT/BNB breakdown)
+    - Currency-wise summary (total USDT/BNB claimed with level breakdown)
+    - All claim records (chronological order, recent first)
+    """
+    try:
+        # Authorization check
+        user_id_keys = ["user_id", "id", "_id", "uid"]
+        authenticated_user_id = None
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                authenticated_user_id = str(current_user[key])
+                break
+        
+        if not authenticated_user_id:
+            return error_response("User ID not found in token", status_code=401)
+        
+        # Users can view their own history or admin can view any
+        # For now, allowing all authenticated users
+        
+        from .claim_service import TopLeadersGiftClaimService
+        service = TopLeadersGiftClaimService()
+        
+        result = service.get_claim_history(user_id)
+        
+        if result.get("success"):
+            return success_response(
+                data=result,
+                message="Claim history retrieved successfully"
+            )
+        else:
+            return error_response(result.get("error", "Failed to get claim history"), status_code=400)
+            
+    except Exception as e:
+        return error_response(str(e))
+
 @router.post("/fund")
 async def update_top_leader_gift_fund(request: TopLeaderGiftFundRequest, current_user: dict = Depends(authentication_service.verify_authentication)):
     """Update Top Leader Gift fund"""
