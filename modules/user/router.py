@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, Request, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 from typing import Optional
 from utils.response import create_response, success_response, error_response
-from modules.user.service import create_user_service, UserService
+from modules.user.service import create_user_service, create_temp_user_service, UserService
 import asyncio
 from modules.tree.service import TreeService
 from modules.rank.service import RankService
@@ -33,6 +33,21 @@ class CreateUserRequest(BaseModel):
                 "refered_by": "RC12345",
                 "wallet_address": "0xABCDEF0123456789",
                 "binary_payment_tx": "0x1234567890abcdef"
+            }
+        }
+
+
+class TempCreateUserRequest(BaseModel):
+    email: str = Field(..., description="Email address")
+    name: str = Field(..., description="Full name of the user")
+    refered_by: str = Field(..., description="Referral code of the user who referred this user")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "john@example.com",
+                "name": "John Doe",
+                "refered_by": "RC12345"
             }
         }
 
@@ -104,6 +119,56 @@ async def create_user(payload: CreateUserRequest, background_tasks: BackgroundTa
         status="Ok",
         status_code=status.HTTP_201_CREATED,
         message="User created successfully",
+        data=result,
+    )
+
+
+@user_router.post("/temp-create")
+async def temp_create_user(payload: TempCreateUserRequest, background_tasks: BackgroundTasks):
+    """
+    Temporary user creation endpoint - Simplified registration
+    
+    Auto-generates:
+    - wallet_address (unique blockchain address)
+    - password (strong random password)
+    - uid (unique user identifier)
+    - refer_code (unique referral code)
+    
+    Takes from frontend:
+    - email
+    - name
+    - refered_by (referral code)
+    
+    Returns:
+    - Full user data including auto-generated credentials
+    - Access token for immediate login
+    """
+    payload_dict = payload.dict()
+    result, error = create_temp_user_service(payload_dict)
+
+    if error:
+        return create_response(
+            status="Error",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=error,
+            data=None,
+        )
+
+    # Schedule background placement (non-blocking) - same as create_user
+    try:
+        # Get upline_id from the created user's refered_by field
+        from modules.user.model import User
+        created_user = User.objects(id=result.get("_id")).first()
+        upline_id = str(created_user.refered_by) if created_user and created_user.refered_by else None
+        if upline_id:
+            background_tasks.add_task(_post_create_background, result.get("_id"), upline_id)
+    except Exception:
+        pass
+
+    return create_response(
+        status="Ok",
+        status_code=status.HTTP_201_CREATED,
+        message="User created successfully with auto-generated credentials",
         data=result,
     )
 

@@ -398,6 +398,156 @@ class UserService:
             return 0
 
 
+def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Temporary user creation service - simplified registration
+    Auto-generates: wallet_address, password, uid, refer_code, binary_payment_tx
+    Takes from frontend: email, name, refered_by
+    
+    Returns (result, error):
+      - result: {"_id": str, "token": str, "token_type": "bearer", "user": {...}}
+      - error: error message string if any
+    """
+    import time
+    import random
+    import secrets
+    
+    # Required fields (minimal)
+    required_fields = ["email", "name", "refered_by"]
+    
+    missing = [f for f in required_fields if not payload.get(f)]
+    if missing:
+        return None, f"Missing required fields: {', '.join(missing)}"
+    
+    # Check if email already exists
+    email = payload.get("email")
+    existing_email = User.objects(email=email).first()
+    if existing_email:
+        return None, "User with this email already exists"
+    
+    # Look up refered_by code to get upline_id
+    refered_by_code = payload.get("refered_by")
+    upline_user = User.objects(refer_code=refered_by_code).first()
+    if not upline_user:
+        return None, f"Referral code '{refered_by_code}' not found"
+    
+    upline_id = str(upline_user.id)
+    
+    # Auto-generate unique wallet_address (0x + 40 hex chars)
+    wallet_address = "0x" + secrets.token_hex(20)
+    
+    # Ensure wallet_address is unique
+    while User.objects(wallet_address=wallet_address).first():
+        wallet_address = "0x" + secrets.token_hex(20)
+    
+    # Auto-generate unique uid
+    uid = f"user{int(time.time() * 1000)}{random.randint(1000, 9999)}"
+    
+    # Ensure uid is unique
+    while User.objects(uid=uid).first():
+        uid = f"user{int(time.time() * 1000)}{random.randint(1000, 9999)}"
+    
+    # Auto-generate unique refer_code
+    refer_code = f"RC{int(time.time() * 1000)}{random.randint(100, 999)}"
+    
+    # Ensure refer_code is unique
+    while User.objects(refer_code=refer_code).first():
+        refer_code = f"RC{int(time.time() * 1000)}{random.randint(100, 999)}"
+    
+    # Auto-generate password (strong random password)
+    auto_password = secrets.token_urlsafe(16)
+    
+    try:
+        # Hash password
+        hashed_password = authentication_service.get_password_hash(auto_password)
+        
+        # Create user
+        user = User(
+            uid=uid,
+            refer_code=refer_code,
+            refered_by=upline_id,
+            wallet_address=wallet_address,
+            name=payload.get("name"),
+            role="user",
+            email=email,
+            password=hashed_password,
+        )
+        user.save()
+        
+        # Initialize program participation flags
+        try:
+            current_time = datetime.utcnow()
+            updates: Dict[str, Any] = {
+                'binary_joined': True,
+                'binary_joined_at': current_time
+            }
+            User.objects(id=user.id).update_one(**{f'set__{k}': v for k, v in updates.items()})
+            user.reload()
+        except Exception:
+            pass
+        
+        # Create PartnerGraph for the new user
+        try:
+            if not PartnerGraph.objects(user_id=ObjectId(user.id)).first():
+                PartnerGraph(user_id=ObjectId(user.id)).save()
+        except Exception:
+            pass
+        
+        # Update referrer's PartnerGraph
+        try:
+            ref_pg = PartnerGraph.objects(user_id=ObjectId(upline_user.id)).first()
+            if not ref_pg:
+                ref_pg = PartnerGraph(user_id=ObjectId(upline_user.id))
+            directs = ref_pg.directs or []
+            if ObjectId(user.id) not in [ObjectId(d) for d in directs]:
+                directs.append(ObjectId(user.id))
+            ref_pg.directs = directs
+            ref_pg.directs_count_by_program = ref_pg.directs_count_by_program or {}
+            ref_pg.directs_count_by_program['binary'] = int(ref_pg.directs_count_by_program.get('binary', 0)) + 1
+            ref_pg.last_updated = datetime.utcnow()
+            ref_pg.save()
+        except Exception:
+            pass
+        
+        # Generate access token
+        try:
+            token_obj = authentication_service.create_access_token(data={"user_id": str(user.id)})
+            # Extract actual token string
+            if hasattr(token_obj, 'access_token'):
+                access_token = token_obj.access_token
+            elif isinstance(token_obj, str):
+                access_token = token_obj
+            else:
+                access_token = str(token_obj)
+        except Exception:
+            access_token = None
+        
+        # Return full user data + token + auto-generated credentials
+        user_data = {
+            "_id": str(user.id),
+            "uid": user.uid,
+            "refer_code": user.refer_code,
+            "name": user.name,
+            "email": user.email,
+            "wallet_address": user.wallet_address,
+            "auto_password": auto_password,  # Return generated password (user should save this)
+            "refered_by": upline_id,
+            "refered_by_code": refered_by_code,
+            "refered_by_name": upline_user.name if upline_user else None,
+            "binary_joined": user.binary_joined,
+            "matrix_joined": user.matrix_joined if hasattr(user, 'matrix_joined') else False,
+            "global_joined": user.global_joined if hasattr(user, 'global_joined') else False,
+            "created_at": user.created_at,
+            "token": access_token,
+            "token_type": "bearer"
+        }
+        
+        return user_data, None
+        
+    except Exception as e:
+        return None, str(e)
+
+
 def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Create a new user if wallet_address is unique.
