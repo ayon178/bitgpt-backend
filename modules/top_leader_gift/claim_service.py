@@ -402,4 +402,148 @@ class TopLeadersGiftClaimService:
             return max(count, 1)
         except Exception:
             return 1
+    
+    def get_fund_overview_for_user(self, user_id: str) -> Dict[str, Any]:
+        """Get fund overview with level-wise claimable amounts for user"""
+        try:
+            # Get or create user record
+            tl_user = TopLeadersGiftUser.objects(user_id=ObjectId(user_id)).first()
+            if not tl_user:
+                # Auto-join
+                join_result = self.join_program(user_id)
+                if not join_result.get('success'):
+                    return join_result
+                tl_user = TopLeadersGiftUser.objects(user_id=ObjectId(user_id)).first()
+            
+            # Get fund
+            fund = TopLeadersGiftFund.objects(is_active=True).first()
+            if not fund:
+                return {"success": False, "error": "Top Leaders Gift fund not found"}
+            
+            # Check eligibility
+            status = self._get_user_status(user_id)
+            tl_user.current_self_rank = status['self_rank']
+            tl_user.current_direct_partners_count = status['direct_partners_count']
+            tl_user.current_total_team_size = status['total_team_size']
+            tl_user.direct_partners_with_ranks = status['direct_partners_with_ranks']
+            
+            # Update levels eligibility
+            for level in tl_user.levels:
+                is_eligible = self._check_level_eligibility(status, level)
+                if is_eligible and not level.is_achieved:
+                    level.is_achieved = True
+                    level.achieved_at = datetime.utcnow()
+            
+            # Calculate highest level
+            eligible_levels = []
+            for level in tl_user.levels:
+                if self._check_level_eligibility(status, level) and not level.is_maxed_out:
+                    eligible_levels.append(level.level_number)
+            
+            if eligible_levels:
+                tl_user.highest_level_achieved = max(eligible_levels)
+                tl_user.is_eligible = True
+            
+            tl_user.last_updated = datetime.utcnow()
+            tl_user.save()
+            
+            # Build level-wise overview
+            levels_overview = []
+            
+            for level in tl_user.levels:
+                level_number = level.level_number
+                
+                # Check if user is eligible for this level
+                is_eligible = self._check_level_eligibility(status, level)
+                
+                # Get level fund percentage
+                level_percentages = {
+                    1: fund.level_1_percentage,
+                    2: fund.level_2_percentage,
+                    3: fund.level_3_percentage,
+                    4: fund.level_4_percentage,
+                    5: fund.level_5_percentage
+                }
+                level_percentage = level_percentages.get(level_number, 0.0)
+                
+                # Calculate allocated fund for this level
+                level_allocated_usdt = fund.available_usdt * (level_percentage / 100.0)
+                level_allocated_bnb = fund.available_bnb * (level_percentage / 100.0)
+                
+                # Count eligible users for this level
+                eligible_users_count = self._count_eligible_users_for_level(level_number) if is_eligible else 0
+                
+                # Calculate per-user claimable amount
+                per_user_usdt = level_allocated_usdt / eligible_users_count if eligible_users_count > 0 else 0.0
+                per_user_bnb = level_allocated_bnb / eligible_users_count if eligible_users_count > 0 else 0.0
+                
+                # Cap by max reward limits
+                remaining_usdt = level.max_reward_usdt - level.total_claimed_usdt
+                remaining_bnb = level.max_reward_bnb - level.total_claimed_bnb
+                
+                claimable_usdt = min(per_user_usdt, remaining_usdt) if is_eligible else 0.0
+                claimable_bnb = min(per_user_bnb, remaining_bnb) if is_eligible else 0.0
+                
+                # Calculate already claimed percent
+                claimed_percent_usdt = (level.total_claimed_usdt / level.max_reward_usdt * 100.0) if level.max_reward_usdt > 0 else 0.0
+                claimed_percent_bnb = (level.total_claimed_bnb / level.max_reward_bnb * 100.0) if level.max_reward_bnb > 0 else 0.0
+                
+                # Overall claimed percent (average of both currencies)
+                already_claimed_percent = (claimed_percent_usdt + claimed_percent_bnb) / 2.0
+                
+                levels_overview.append({
+                    "level": level_number,
+                    "level_name": level.level_name,
+                    "is_eligible": is_eligible,
+                    "is_maxed_out": level.is_maxed_out,
+                    "requirements": {
+                        "self_rank": level.self_rank_required,
+                        "direct_partners": level.direct_partners_required,
+                        "partners_rank": level.partners_rank_required,
+                        "total_team": level.total_team_required
+                    },
+                    "current_status": {
+                        "self_rank": status['self_rank'],
+                        "direct_partners": status['direct_partners_count'],
+                        "total_team": status['total_team_size']
+                    },
+                    "fund_allocation": {
+                        "percentage": level_percentage,
+                        "allocated_usdt": level_allocated_usdt,
+                        "allocated_bnb": level_allocated_bnb
+                    },
+                    "eligible_users_count": eligible_users_count,
+                    "claimable_amount": {
+                        "usdt": claimable_usdt,
+                        "bnb": claimable_bnb
+                    },
+                    "claimed": {
+                        "usdt": level.total_claimed_usdt,
+                        "bnb": level.total_claimed_bnb
+                    },
+                    "remaining": {
+                        "usdt": remaining_usdt,
+                        "bnb": remaining_bnb
+                    },
+                    "max_reward": {
+                        "usdt": level.max_reward_usdt,
+                        "bnb": level.max_reward_bnb
+                    },
+                    "already_claimed_percent": round(already_claimed_percent, 2)
+                })
+            
+            return {
+                "success": True,
+                "user_id": user_id,
+                "is_eligible": tl_user.is_eligible,
+                "highest_level_achieved": tl_user.highest_level_achieved,
+                "total_fund": {
+                    "usdt": fund.available_usdt,
+                    "bnb": fund.available_bnb
+                },
+                "levels": levels_overview
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
