@@ -485,6 +485,106 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             user.reload()
         except Exception:
             pass
+
+        # Auto-activate first two binary slots (Explorer=1, Contributor=2) and distribute funds
+        # so that referrer receives partner incentive and pools-summary reflects changes
+        try:
+            commission_service = CommissionService()
+            total_join_amount = Decimal('0')
+            currency = ensure_currency_for_program('binary', 'BNB')
+            for slot_no in [1, 2]:
+                catalog = SlotCatalog.objects(program='binary', slot_no=slot_no, is_active=True).first()
+                if not catalog:
+                    continue
+                amount = catalog.price or Decimal('0')
+                total_join_amount += (amount or Decimal('0'))
+
+                # Ensure tree placement exists BEFORE distribution so level earnings resolve
+                try:
+                    tree_service = TreeService()
+                    tree_service.place_user_in_tree(
+                        user_id=ObjectId(user.id),
+                        referrer_id=ObjectId(upline_id),
+                        program='binary',
+                        slot_no=slot_no
+                    )
+                except Exception:
+                    pass
+
+                # Record activation for consistency
+                try:
+                    activation = SlotActivation(
+                        user_id=ObjectId(user.id),
+                        program='binary',
+                        slot_no=slot_no,
+                        slot_name=catalog.name,
+                        activation_type='initial',
+                        upgrade_source='auto',
+                        amount_paid=amount,
+                        currency=currency,
+                        tx_hash=f"AUTO-{user.uid}-S{slot_no}",
+                        is_auto_upgrade=True,
+                        status='completed'
+                    )
+                    activation.save()
+                except Exception:
+                    pass
+
+                # Update user's binary_slots list with auto-activated slot
+                try:
+                    from .model import BinarySlotInfo
+                    slot_info = BinarySlotInfo(
+                        slot_name=catalog.name,
+                        slot_value=float(amount or Decimal('0')),
+                        level=catalog.level,
+                        is_active=True,
+                        activated_at=datetime.utcnow(),
+                        upgrade_cost=float(catalog.upgrade_cost or Decimal('0')),
+                        total_income=float(catalog.total_income or Decimal('0')),
+                        wallet_amount=float(catalog.wallet_amount or Decimal('0'))
+                    )
+                    existing_slot = None
+                    for i, existing_slot_info in enumerate(user.binary_slots):
+                        if existing_slot_info.slot_name == catalog.name:
+                            existing_slot = i
+                            break
+                    if existing_slot is not None:
+                        user.binary_slots[existing_slot] = slot_info
+                    else:
+                        user.binary_slots.append(slot_info)
+                    user.save()
+                except Exception:
+                    pass
+
+                # Distribute funds to bonus pools; specifically credits partner incentive to referrer
+                try:
+                    from modules.fund_distribution.service import FundDistributionService
+                    fund_service = FundDistributionService()
+                    fund_service.distribute_binary_funds(
+                        user_id=str(user.id),
+                        amount=amount,  # BNB amount
+                        slot_no=slot_no,
+                        referrer_id=upline_id,
+                        tx_hash=f"AUTO-{user.uid}-S{slot_no}",
+                        currency=currency
+                    )
+                except Exception:
+                    pass
+
+            # Optional: joining commission (does not impact pools-summary mapping directly)
+            try:
+                if total_join_amount and total_join_amount > 0:
+                    commission_service.calculate_joining_commission(
+                        from_user_id=str(user.id),
+                        program='binary',
+                        amount=total_join_amount,
+                        currency=currency
+                    )
+            except Exception:
+                pass
+        except Exception:
+            # Do not fail temp create if activation/distribution has any issue
+            pass
         
         # Create PartnerGraph for the new user
         try:
@@ -1012,20 +1112,18 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                         
                         fund_service = FundDistributionService()
                         
-                        # Convert BNB to USD for fund distribution
-                        bnb_to_usd_rate = Decimal(os.getenv('BNB_TO_USD_RATE', '600'))
-                        amount_usd = amount * bnb_to_usd_rate
-                        
+                        # Pass original BNB amount (not converted to USD) for proper wallet crediting
                         distribution_result = fund_service.distribute_binary_funds(
                             user_id=str(user.id),
-                            amount=amount_usd,
+                            amount=amount,  # Original BNB amount
                             slot_no=slot_no,
                             referrer_id=upline_id,
-                            tx_hash=f"AUTO-{user.uid}-S{slot_no}"
+                            tx_hash=f"AUTO-{user.uid}-S{slot_no}",
+                            currency=currency  # Pass currency (BNB)
                         )
                         
                         if distribution_result.get('success'):
-                            print(f"✅ Binary Slot {slot_no} funds distributed: ${distribution_result.get('total_distributed')}")
+                            print(f"✅ Binary Slot {slot_no} funds distributed: {distribution_result.get('total_distributed')} {currency}")
                     except Exception as e:
                         print(f"⚠️ Binary fund distribution error: {e}")
                 

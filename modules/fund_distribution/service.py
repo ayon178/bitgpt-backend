@@ -79,7 +79,7 @@ class FundDistributionService:
         }
 
     def distribute_binary_funds(self, user_id: str, amount: Decimal, slot_no: int, 
-                               referrer_id: str = None, tx_hash: str = None) -> Dict[str, Any]:
+                               referrer_id: str = None, tx_hash: str = None, currency: str = 'BNB') -> Dict[str, Any]:
         """Distribute Binary program funds according to percentages"""
         try:
             if not tx_hash:
@@ -93,7 +93,7 @@ class FundDistributionService:
                 if income_type == "level_distribution":
                     # Handle level distribution separately
                     level_distributions = self._distribute_binary_levels(
-                        user_id, amount, percentage, slot_no, tx_hash
+                        user_id, amount, percentage, slot_no, tx_hash, currency
                     )
                     distributions.extend(level_distributions)
                     total_distributed += amount * (percentage / Decimal('100.0'))
@@ -104,7 +104,7 @@ class FundDistributionService:
                         if dist_amount > 0:
                             distribution = self._create_income_event(
                                 referrer_id, user_id, 'binary', slot_no, income_type,
-                                dist_amount, percentage, tx_hash, "Binary Partner Incentive"
+                                dist_amount, percentage, tx_hash, "Binary Partner Incentive", currency
                             )
                             distributions.append(distribution)
                             total_distributed += dist_amount
@@ -114,7 +114,7 @@ class FundDistributionService:
                     if dist_amount > 0:
                         distribution = self._create_income_event(
                             user_id, user_id, 'binary', slot_no, income_type,
-                            dist_amount, percentage, tx_hash, f"Binary {income_type.replace('_', ' ').title()}"
+                            dist_amount, percentage, tx_hash, f"Binary {income_type.replace('_', ' ').title()}", currency
                         )
                         distributions.append(distribution)
                         total_distributed += dist_amount
@@ -131,7 +131,7 @@ class FundDistributionService:
             return {"success": False, "error": f"Binary fund distribution failed: {str(e)}"}
 
     def distribute_matrix_funds(self, user_id: str, amount: Decimal, slot_no: int,
-                              referrer_id: str = None, tx_hash: str = None) -> Dict[str, Any]:
+                              referrer_id: str = None, tx_hash: str = None, currency: str = 'USDT') -> Dict[str, Any]:
         """Distribute Matrix program funds according to percentages"""
         try:
             if not tx_hash:
@@ -145,7 +145,7 @@ class FundDistributionService:
                 if income_type == "level_distribution":
                     # Handle level distribution separately
                     level_distributions = self._distribute_matrix_levels(
-                        user_id, amount, percentage, slot_no, tx_hash
+                        user_id, amount, percentage, slot_no, tx_hash, currency
                     )
                     distributions.extend(level_distributions)
                     total_distributed += amount * (percentage / Decimal('100.0'))
@@ -156,7 +156,7 @@ class FundDistributionService:
                         if dist_amount > 0:
                             distribution = self._create_income_event(
                                 referrer_id, user_id, 'matrix', slot_no, income_type,
-                                dist_amount, percentage, tx_hash, "Matrix Partner Incentive"
+                                dist_amount, percentage, tx_hash, "Matrix Partner Incentive", currency
                             )
                             distributions.append(distribution)
                             total_distributed += dist_amount
@@ -166,7 +166,7 @@ class FundDistributionService:
                     if dist_amount > 0:
                         distribution = self._create_income_event(
                             user_id, user_id, 'matrix', slot_no, income_type,
-                            dist_amount, percentage, tx_hash, f"Matrix {income_type.replace('_', ' ').title()}"
+                            dist_amount, percentage, tx_hash, f"Matrix {income_type.replace('_', ' ').title()}", currency
                         )
                         distributions.append(distribution)
                         total_distributed += dist_amount
@@ -226,13 +226,13 @@ class FundDistributionService:
             return {"success": False, "error": f"Global fund distribution failed: {str(e)}"}
 
     def _distribute_binary_levels(self, user_id: str, amount: Decimal, percentage: Decimal,
-                                 slot_no: int, tx_hash: str) -> List[Dict[str, Any]]:
+                                 slot_no: int, tx_hash: str, currency: str = 'BNB') -> List[Dict[str, Any]]:
         """Distribute Binary level distribution (60% treated as 100%)"""
         distributions = []
         level_amount = amount * (percentage / Decimal('100.0'))
         
-        # Get user's tree upline for level distribution
-        user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program='binary', is_active=True).first()
+        # Get user's tree placement for this slot
+        user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program='binary', slot_no=slot_no, is_active=True).first()
         if not user_placement:
             return distributions
         
@@ -241,11 +241,11 @@ class FundDistributionService:
             level_dist_amount = level_amount * (level_percentage / Decimal('100.0'))
             if level_dist_amount > 0:
                 # Find upline at this level
-                upline_id = self._find_upline_at_level(user_id, level, 'binary')
+                upline_id = self._find_upline_at_level(user_id, level, 'binary', slot_no)
                 if upline_id:
                     distribution = self._create_income_event(
                         upline_id, user_id, 'binary', slot_no, f'level_{level}_distribution',
-                        level_dist_amount, level_percentage, tx_hash, f"Binary Level {level} Distribution"
+                        level_dist_amount, level_percentage, tx_hash, f"Binary Level {level} Distribution", currency
                     )
                     distributions.append(distribution)
         
@@ -277,35 +277,26 @@ class FundDistributionService:
         
         return distributions
 
-    def _find_upline_at_level(self, user_id: str, target_level: int, program: str) -> Optional[str]:
-        """Find upline at specific level for level distribution"""
+    def _find_upline_at_level(self, user_id: str, target_level: int, program: str, slot_no: int) -> Optional[str]:
+        """Find upline at specific level for level distribution by traversing parent chain for the given slot."""
         try:
-            # Get user's placement
-            user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program=program, is_active=True).first()
+            # Start from the user's placement for this program+slot
+            user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program=program, slot_no=slot_no, is_active=True).first()
             if not user_placement:
                 return None
-            
-            # Find upline by traversing up the tree
-            current_level = 1
-            current_user_id = user_id
-            
-            while current_level < target_level:
-                # Find parent placement
-                parent_placement = TreePlacement.objects(
-                    program=program, 
-                    is_active=True,
-                    level=current_level + 1
-                ).first()
-                
-                if not parent_placement:
-                    break
-                
-                current_user_id = str(parent_placement.user_id)
-                current_level += 1
-            
-            if current_level == target_level:
-                return current_user_id
-            
+
+            # Traverse up via parent_id pointers
+            steps = 0
+            curr = user_placement
+            while steps < target_level and curr and getattr(curr, 'parent_id', None):
+                parent_id = curr.parent_id
+                # Fetch parent's placement for the same slot
+                curr = TreePlacement.objects(user_id=parent_id, program=program, slot_no=slot_no, is_active=True).first()
+                steps += 1
+
+            if steps == target_level and curr:
+                return str(curr.user_id)
+
             return None
             
         except Exception as e:
@@ -332,8 +323,8 @@ class FundDistributionService:
     
     def _create_income_event(self, recipient_id: str, source_id: str, program: str, 
                            slot_no: int, income_type: str, amount: Decimal, 
-                           percentage: Decimal, tx_hash: str, description: str) -> Dict[str, Any]:
-        """Create income event for distribution AND update BonusFund"""
+                           percentage: Decimal, tx_hash: str, description: str, currency: str = 'USDT') -> Dict[str, Any]:
+        """Create income event for distribution AND update BonusFund AND credit wallet"""
         try:
             # 1. Create IncomeEvent (for tracking/history)
             income_event = IncomeEvent(
@@ -357,6 +348,9 @@ class FundDistributionService:
             
             # Skip level distribution (level_1_distribution, level_2_distribution, etc.)
             is_level_dist = 'level_' in income_type and '_distribution' in income_type
+            
+            # Partner incentive and level distributions should credit wallet
+            should_credit_wallet = (income_type == 'partner_incentive' or is_level_dist)
             
             # Debug logging
             if not fund_type:
@@ -397,6 +391,40 @@ class FundDistributionService:
                 except Exception as e:
                     print(f"❌ Failed to update BonusFund for {income_type} → {fund_type}: {e}")
             
+            # 3. Credit wallet for partner_incentive and level distributions
+            wallet_credited = False
+            if should_credit_wallet and amount > 0:
+                try:
+                    from modules.wallet.service import WalletService
+                    
+                    # Create a proper reason for WalletLedger
+                    if income_type == 'partner_incentive':
+                        wallet_reason = f"{program}_partner_incentive"
+                    elif is_level_dist:
+                        # Extract level number from income_type (e.g., 'level_1_distribution' -> 'level_1')
+                        level_part = income_type.replace('_distribution', '')
+                        wallet_reason = f"{program}_dual_tree_{level_part}"
+                    else:
+                        wallet_reason = f"{program}_{income_type}"
+                    
+                    wallet_service = WalletService()
+                    credit_result = wallet_service.credit_main_wallet(
+                        user_id=recipient_id,
+                        amount=amount,
+                        currency=currency,
+                        reason=wallet_reason,
+                        tx_hash=tx_hash
+                    )
+                    
+                    if credit_result.get("success"):
+                        wallet_credited = True
+                        print(f"✅ Credited wallet for {recipient_id}: +{amount} {currency} ({wallet_reason})")
+                    else:
+                        print(f"⚠️ Wallet credit failed for {recipient_id}: {credit_result.get('error')}")
+                        
+                except Exception as e:
+                    print(f"❌ Failed to credit wallet for {income_type}: {e}")
+            
             return {
                 "income_type": income_type,
                 "amount": amount,
@@ -404,7 +432,8 @@ class FundDistributionService:
                 "recipient_id": recipient_id,
                 "status": "completed",
                 "description": description,
-                "bonus_fund_updated": fund_updated
+                "bonus_fund_updated": fund_updated,
+                "wallet_credited": wallet_credited
             }
             
         except Exception as e:

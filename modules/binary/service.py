@@ -104,23 +104,21 @@ class BinaryService:
                 from modules.fund_distribution.service import FundDistributionService
                 fund_service = FundDistributionService()
                 
-                # Convert BNB to USD for fund distribution
-                bnb_to_usd_rate = Decimal(os.getenv('BNB_TO_USD_RATE', '600'))
-                amount_usd = amount * bnb_to_usd_rate
-                
                 # Get referrer for partner incentive
                 referrer_id = str(user.refered_by) if user.refered_by else None
                 
+                # Pass original BNB amount (not converted to USD) for proper wallet crediting
                 distribution_result = fund_service.distribute_binary_funds(
                     user_id=user_id,
-                    amount=amount_usd,
+                    amount=amount,  # Original BNB amount
                     slot_no=slot_no,
                     referrer_id=referrer_id,
-                    tx_hash=tx_hash
+                    tx_hash=tx_hash,
+                    currency=currency  # Pass currency (BNB)
                 )
                 
                 if distribution_result.get('success'):
-                    print(f"✅ Binary funds distributed: {distribution_result.get('total_distributed')}")
+                    print(f"✅ Binary funds distributed: {distribution_result.get('total_distributed')} {currency}")
                 else:
                     print(f"⚠️ Binary fund distribution failed: {distribution_result.get('error')}")
             except Exception as e:

@@ -379,6 +379,23 @@ class WalletService:
             ]
             results = list(WalletLedger.objects.aggregate(pipeline))
 
+            # Fallback: if aggregation returns nothing (e.g., provider limitations),
+            # perform a python-side rollup from ledger documents
+            if not results:
+                try:
+                    credits = WalletLedger.objects(user_id=ObjectId(user_id), type="credit")
+                    tmp_map: dict[tuple[str, str], float] = {}
+                    for row in credits:
+                        r = (getattr(row, 'reason', '') or '').lower()
+                        c = (getattr(row, 'currency', 'USDT') or 'USDT').upper()
+                        amt = float(getattr(row, 'amount', 0) or 0)
+                        k = (r, c)
+                        tmp_map[k] = tmp_map.get(k, 0.0) + amt
+                    # Convert to results-like structure
+                    results = [{"_id": {"reason": k[0], "currency": k[1]}, "total": v} for k, v in tmp_map.items()]
+                except Exception:
+                    results = []
+
             def map_reason_to_pool(reason: str) -> str | None:
                 r = (reason or "").lower()
                 if r.startswith("binary_dual_tree_"):
@@ -473,6 +490,39 @@ class WalletService:
                     # Global phases
                     totals["global_phase_1"]["USDT"] += _sum_income(["global_phase_1"])  # Phase-1 allocation
                     totals["global_phase_2"]["USDT"] += _sum_income(["global_phase_2"])  # Phase-2 allocation
+
+                    # Fallback for Binary Partner Incentive and Duel Tree when WalletLedger is missing
+                    # Sum partner incentive for binary as BNB-equivalent (amounts recorded in native amount)
+                    try:
+                        agg_pi = [
+                            {"$match": {
+                                "user_id": ObjectId(user_id),
+                                "program": "binary",
+                                "income_type": "partner_incentive",
+                                "status": {"$in": ["pending", "completed"]}
+                            }},
+                            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+                        ]
+                        res_pi = list(IncomeEvent.objects.aggregate(agg_pi))
+                        totals["binary_partner_incentive"]["BNB"] += float(res_pi[0]["total"]) if res_pi else 0.0
+                    except Exception:
+                        pass
+
+                    # Sum duel tree level distributions for binary as BNB
+                    try:
+                        agg_dt = [
+                            {"$match": {
+                                "user_id": ObjectId(user_id),
+                                "program": "binary",
+                                "income_type": {"$regex": "^level_\\d+_distribution$"},
+                                "status": {"$in": ["pending", "completed"]}
+                            }},
+                            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+                        ]
+                        res_dt = list(IncomeEvent.objects.aggregate(agg_dt))
+                        totals["duel_tree"]["BNB"] += float(res_dt[0]["total"]) if res_dt else 0.0
+                    except Exception:
+                        pass
                 except Exception:
                     pass
 
