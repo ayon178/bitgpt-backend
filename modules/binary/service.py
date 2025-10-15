@@ -1225,14 +1225,16 @@ class BinaryService:
 
     def get_duel_tree_earnings(self, user_id: str) -> Dict[str, Any]:
         """
-        Get duel tree earnings data matching frontend matrixData.js structure
-        Returns data in the format expected by DualTree and DuelTreeDetails components
+        Return Binary tree overview for a user with:
+        - tree: full downline nodes under the user (binary program)
+        - slots: 1..17 slot catalog with name/value and completion/progress info
         """
         try:
             from ..tree.model import TreePlacement
             from ..slot.model import SlotActivation, SlotCatalog
             from ..wallet.model import WalletLedger
             from ..user.model import User
+            from ..auto_upgrade.model import BinaryAutoUpgrade
             
             print(f"Getting duel tree earnings for user: {user_id}")
             
@@ -1247,109 +1249,122 @@ class BinaryService:
             if not user_info:
                 return {"success": False, "error": "User not found"}
             
-            duel_tree_data = []
+            # Build downline tree nodes (all descendants under this user for binary)
+            nodes, depth = self._build_binary_downline_nodes(user_oid)
             
-            # Get all binary slots for this user from tree_placement
-            user_slots = TreePlacement.objects(
-                user_id=user_oid,
-                program='binary'
-            ).order_by('slot_no')
+            # Gather slot catalog 1..17 for binary
+            catalogs = SlotCatalog.objects(program='binary').order_by('slot_no')
+            catalog_by_slot = {c.slot_no: c for c in catalogs}
+            max_slot_no = max(catalog_by_slot.keys()) if catalog_by_slot else 17
+            # Ensure we cover up to 17 as per documentation
+            target_max_slot = max(17, max_slot_no)
             
-            # Get unique slot numbers for this user
-            slot_numbers = set()
-            for slot_placement in user_slots:
-                slot_numbers.add(slot_placement.slot_no)
+            # Activated/completed slots for this user
+            activated = SlotActivation.objects(user_id=user_oid, program='binary', status='completed')
+            completed_slots = {a.slot_no for a in activated}
             
-            # If no slots found, create default empty slots
-            if not slot_numbers:
-                slot_numbers = set(range(1, 7))  # Default slots 1-6
+            # Current binary status for next-slot progress
+            binary_status = BinaryAutoUpgrade.objects(user_id=user_oid).first()
+            current_slot_no = binary_status.current_slot_no if binary_status else 0
+            partners_required = binary_status.partners_required if binary_status else 2
+            partners_available = binary_status.partners_available if binary_status else 0
+            next_slot_no = current_slot_no + 1 if current_slot_no + 1 <= target_max_slot else None
+            next_progress = 0
+            if next_slot_no:
+                if partners_required and partners_required > 0:
+                    next_progress = int(min(100, (partners_available / partners_required) * 100))
+                else:
+                    next_progress = 0
             
-            for slot_no in sorted(slot_numbers):
-                # Get the user's placement for this slot
-                slot_placement = user_slots.filter(slot_no=slot_no).first()
-                
-                # Get slot catalog info for price
-                slot_catalog = SlotCatalog.objects(
-                    program='binary',
-                    slot_no=slot_no,
-                    is_active=True
-                ).first()
-                
-                # Get total binary earnings for this user from wallet_ledger
-                total_binary_earnings = self._get_total_binary_earnings(user_oid)
-                # Convert BNB to USDT (assuming 1 BNB = 300 USDT for display) - keep exact amount
-                price = total_binary_earnings * 300 if total_binary_earnings > 0 else (float(slot_catalog.price) if slot_catalog and slot_catalog.price else 0.0)
-                
-                print(f"Slot {slot_no}: Total binary earnings = {total_binary_earnings} BNB, Price = {price} USDT")
-                
-                # If price is still 0, use progressive pricing based on slot level
-                if price == 0:
-                    # Progressive pricing: 100, 200, 300, 400, etc.
-                    price = 100 + (slot_no - 1) * 100
-                
-                # Get slot activation status
-                slot_activation = SlotActivation.objects(
-                    user_id=user_oid,
-                    program='binary',
-                    slot_no=slot_no
-                ).first()
-                
-                # Determine status flags based on tree_placement data
-                is_completed = slot_activation and slot_activation.status == 'completed'
-                is_process = slot_placement and slot_placement.auto_upgrade_eligible
-                is_auto_upgrade = slot_placement and slot_placement.auto_upgrade_eligible
-                is_manual_upgrade = not is_auto_upgrade and not is_completed
-                
-                # Calculate process percentage based on children_count
-                process_percent = 0
-                if slot_placement:
-                    # Binary tree needs 2 children (left and right)
-                    required_children = 2
-                    current_children = slot_placement.children_count or 0
-                    process_percent = min(100, (current_children / required_children) * 100)
-                
-                # Get team members for this slot - create progressive tree structure
-                team_members_progressive = self._get_progressive_team_members(user_oid, slot_no)
-                
-                # Create multiple duel tree items for progressive display
-                for i, team_members in enumerate(team_members_progressive):
-                    # Use progressive pricing for each level
-                    progressive_price = price + (i * 50)  # Each level adds 50
-                    
-                    # Calculate dynamic process percent based on current level
-                    current_level_members = len(team_members)
-                    max_possible_members = 2 ** (i + 1)  # Binary tree: 2, 4, 8, 16, etc.
-                    dynamic_process_percent = min(100, (current_level_members / max_possible_members) * 100)
-                    
-                    # Create duel tree data object matching matrixData.js structure
-                    duel_tree_item = {
-                        "id": i + 1,  # Different ID for each progressive level
-                        "price": progressive_price,
-                        "userId": str(user_info.uid) if user_info.uid else str(user_oid),
-                        "recycle": slot_placement.children_count if slot_placement else 0,
-                        "isCompleted": is_completed,
-                        "isProcess": is_process,
-                        "isAutoUpgrade": is_auto_upgrade,
-                        "isManualUpgrade": is_manual_upgrade,
-                        "processPercent": int(dynamic_process_percent),
-                        "users": team_members
-                    }
-                    
-                    duel_tree_data.append(duel_tree_item)
-            
+            # Build slots summary array
+            slots_summary = []
+            for slot_no in range(1, target_max_slot + 1):
+                catalog = catalog_by_slot.get(slot_no)
+                slot_name = catalog.name if catalog else f"Slot {slot_no}"
+                slot_value = float(catalog.price) if catalog and catalog.price is not None else 0.0
+                is_completed = slot_no in completed_slots
+                progress_percent = 100 if is_completed else (next_progress if next_slot_no == slot_no else 0)
+                slots_summary.append({
+                    "slot_no": slot_no,
+                    "slot_name": slot_name,
+                    "slot_value": slot_value,
+                    "isCompleted": is_completed,
+                    "progressPercent": progress_percent
+                })
             
             result = {
-                "duelTreeData": duel_tree_data,
-                "totalSlots": len(duel_tree_data),
+                "tree": {
+                    "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
+                    "totalMembers": max(0, len(nodes) - 1),
+                    "levels": depth,
+                    "nodes": nodes
+                },
+                "slots": slots_summary,
+                "totalSlots": len(slots_summary),
                 "user_id": str(user_id)
             }
             
-            print(f"Duel tree earnings generated: {len(duel_tree_data)} slots")
+            print(f"Binary tree overview generated: nodes={len(nodes)}, slots={len(slots_summary)}")
             return {"success": True, "data": result}
             
         except Exception as e:
             print(f"Error in get_duel_tree_earnings: {e}")
             return {"success": False, "error": str(e)}
+
+    def _build_binary_downline_nodes(self, user_oid) -> (List[Dict[str, Any]], int):
+        """Build a flat list of nodes representing the user's binary downline tree.
+        Returns (nodes, max_depth). Each node has: id, type, userId, level, position.
+        The first node is the self node (level=0)."""
+        try:
+            from ..tree.model import TreePlacement
+            from ..user.model import User
+            
+            # Helper to get display id
+            def display_id(oid) -> str:
+                try:
+                    u = User.objects(id=oid).only('uid').first()
+                    return str(u.uid) if u and u.uid else str(oid)
+                except Exception:
+                    return str(oid)
+            
+            nodes: List[Dict[str, Any]] = []
+            max_depth = 0
+            # Add self node
+            nodes.append({
+                "id": 0,
+                "type": "self",
+                "userId": display_id(user_oid),
+                "level": 0,
+                "position": "root"
+            })
+            
+            # BFS traversal across all slots combined (binary program)
+            queue = [(user_oid, 0)]
+            visited = {str(user_oid)}  # Deduplicate by user id string
+            next_node_id = 1
+            while queue:
+                parent_id, level = queue.pop(0)
+                max_depth = max(max_depth, level)
+                # Fetch children under binary regardless of slot (aggregate view)
+                children = TreePlacement.objects(program='binary', parent_id=parent_id).order_by('created_at')
+                for child in children:
+                    child_id_str = str(child.user_id)
+                    if child_id_str in visited:
+                        continue
+                    visited.add(child_id_str)
+                    node = {
+                        "id": next_node_id,
+                        "type": "downLine",
+                        "userId": display_id(child.user_id),
+                        "level": level + 1,
+                        "position": getattr(child, 'position', 'left')
+                    }
+                    nodes.append(node)
+                    next_node_id += 1
+                    queue.append((child.user_id, level + 1))
+            return nodes, max_depth
+        except Exception:
+            return [{"id": 0, "type": "self", "userId": str(user_oid), "level": 0, "position": "root"}], 0
 
     def _get_duel_tree_team_members(self, user_oid, slot_no: int) -> List[Dict[str, Any]]:
         """Get team members for duel tree display based on tree_placement structure"""
