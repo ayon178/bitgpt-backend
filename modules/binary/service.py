@@ -1265,7 +1265,21 @@ class BinaryService:
             
             # Current binary status for next-slot progress
             binary_status = BinaryAutoUpgrade.objects(user_id=user_oid).first()
-            current_slot_no = binary_status.current_slot_no if binary_status else 0
+            # Prefer the greater of stored current slot and the highest completed activation
+            current_slot_no = 0
+            stored_current = 0
+            if binary_status and getattr(binary_status, 'current_slot_no', None) is not None:
+                try:
+                    stored_current = int(binary_status.current_slot_no or 0)
+                except Exception:
+                    stored_current = 0
+            highest_completed = max(completed_slots) if completed_slots else 0
+            current_slot_no = max(stored_current, highest_completed)
+            # Clamp within [0, target_max_slot]
+            if current_slot_no < 0:
+                current_slot_no = 0
+            if current_slot_no > target_max_slot:
+                current_slot_no = target_max_slot
             partners_required = binary_status.partners_required if binary_status else 2
             partners_available = binary_status.partners_available if binary_status else 0
             next_slot_no = current_slot_no + 1 if current_slot_no + 1 <= target_max_slot else None
@@ -1282,8 +1296,17 @@ class BinaryService:
                 catalog = catalog_by_slot.get(slot_no)
                 slot_name = catalog.name if catalog else f"Slot {slot_no}"
                 slot_value = float(catalog.price) if catalog and catalog.price is not None else 0.0
-                is_completed = slot_no in completed_slots
-                progress_percent = 100 if is_completed else (next_progress if next_slot_no == slot_no else 0)
+                is_completed = slot_no in completed_slots or slot_no <= current_slot_no
+                # Progress logic:
+                # - Slots below current: 100
+                # - Current slot: remaining percent to next upgrade (100 - next_progress)
+                # - Others: 0
+                if slot_no < current_slot_no:
+                    progress_percent = 100
+                elif slot_no == current_slot_no:
+                    progress_percent = max(0, 100 - next_progress) if next_slot_no else 0
+                else:
+                    progress_percent = 0
                 slots_summary.append({
                     "slot_no": slot_no,
                     "slot_name": slot_name,
