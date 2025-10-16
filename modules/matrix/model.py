@@ -43,6 +43,7 @@ class MatrixTree(Document):
     is_complete = BooleanField(default=False)  # True when 39 members complete
     nodes = ListField(EmbeddedDocumentField(MatrixNode))  # All nodes in tree
     slots = ListField(EmbeddedDocumentField(MatrixSlotInfo))  # User's slot info
+    reserve_fund = FloatField(default=0.0)  # Reserve fund for auto-upgrade
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)
     

@@ -1732,15 +1732,30 @@ class MatrixService:
             except Exception as e:
                 print(f"  ⚠️ Error creating activation record: {e}")
             
-            # Update user's matrix_slots array
+            # Update user's matrix_slots array with MatrixSlotInfo
             try:
                 upline_user = User.objects(id=ObjectId(upline_id)).first()
                 if upline_user:
                     if not hasattr(upline_user, 'matrix_slots') or upline_user.matrix_slots is None:
                         upline_user.matrix_slots = []
                     
-                    if next_slot not in upline_user.matrix_slots:
-                        upline_user.matrix_slots.append(next_slot)
+                    # Check if slot already exists
+                    next_slot_info = self.MATRIX_SLOTS.get(next_slot, {})
+                    slot_exists = any(
+                        getattr(s, 'slot_name', None) == next_slot_info.get('name')
+                        for s in upline_user.matrix_slots
+                    )
+                    
+                    if not slot_exists:
+                        from ..user.model import MatrixSlotInfo
+                        new_slot = MatrixSlotInfo(
+                            slot_name=next_slot_info.get('name', f'Slot {next_slot}'),
+                            slot_value=float(next_slot_info.get('value', 0)),
+                            level=next_slot_info.get('level', next_slot),
+                            is_active=True,
+                            activated_at=datetime.utcnow()
+                        )
+                        upline_user.matrix_slots.append(new_slot)
                         upline_user.updated_at = datetime.utcnow()
                         upline_user.save()
                         

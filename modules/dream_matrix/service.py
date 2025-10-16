@@ -37,18 +37,6 @@ class DreamMatrixService:
                 # Root user's current (max) completed matrix slot
                 root_current_slot = self._get_user_max_matrix_slot(user_oid)
 
-                # Downline (referral) user ids
-                downline_user_ids = self._get_downline_user_ids(user_oid)
-
-                # Precompute max completed slot for each downline user
-                downline_max_slot: Dict[str, int] = {}
-                if downline_user_ids:
-                    for did in downline_user_ids:
-                        try:
-                            downline_max_slot[str(did)] = self._get_user_max_matrix_slot(did)
-                        except Exception:
-                            downline_max_slot[str(did)] = 0
-
                 user_display_id = str(user_info.uid) if user_info and user_info.uid and user_info.uid != "ROOT" else str(user_oid)
 
                 matrix_tree_data = []
@@ -62,22 +50,27 @@ class DreamMatrixService:
                     # Determine completion for root
                     is_completed = s <= root_current_slot
 
-                    # Users list only if root has this slot
+                    # Users list only if root has this slot - GET USERS FOR THIS SPECIFIC SLOT
                     users_list: List[Dict[str, Any]] = []
                     if is_completed:
+                        # Add root user
                         users_list.append({"id": 0, "type": "self", "userId": user_display_id})
+                        
+                        # Get downline users from TreePlacement for THIS SPECIFIC SLOT
+                        slot_downline_ids = self._get_downline_user_ids_for_slot(user_oid, s)
+                        
                         idx = 1
-                        # Include downline users whose max slot >= this slot
-                        for did in downline_user_ids:
-                            if downline_max_slot.get(str(did), 0) >= s:
-                                # Resolve uid
-                                try:
-                                    du = User.objects(id=did).only('uid').first()
-                                    duid = str(du.uid) if du and du.uid else str(did)
-                                except Exception:
-                                    duid = str(did)
-                                users_list.append({"id": idx, "type": "downLine", "userId": duid})
-                                idx += 1
+                        # Include all users in this slot's tree
+                        for did in slot_downline_ids:
+                            # Resolve uid
+                            try:
+                                du = User.objects(id=did).only('uid').first()
+                                duid = str(du.uid) if du and du.uid else str(did)
+                            except Exception:
+                                duid = str(did)
+                            users_list.append({"id": idx, "type": "downLine", "userId": duid})
+                            idx += 1
+                        
                         # Optional cap to 39 to match 3x matrix tree size
                         if len(users_list) > 39:
                             users_list = users_list[:39]
@@ -197,45 +190,103 @@ class DreamMatrixService:
             return 0
 
     def _get_downline_user_ids(self, user_oid) -> List[ObjectId]:
-        """Return all referral downline user ObjectIds (recursive)."""
+        """Return all downline user ObjectIds from Matrix tree placement (recursive) - ALL SLOTS."""
         try:
+            from ..tree.model import TreePlacement
+            
             result: List[ObjectId] = []
             queue: List[ObjectId] = [user_oid]
             visited: Set[str] = {str(user_oid)}
+            
             while queue:
                 current = queue.pop(0)
-                directs = User.objects(refered_by=current).only('id')
-                for d in directs:
-                    ds = str(d.id)
-                    if ds in visited:
+                # Get tree children using upline_id (actual tree structure)
+                tree_children = TreePlacement.objects(
+                    program='matrix',
+                    upline_id=current
+                ).only('user_id')
+                
+                for child in tree_children:
+                    child_id_str = str(child.user_id)
+                    if child_id_str in visited:
                         continue
-                    visited.add(ds)
-                    result.append(d.id)
-                    queue.append(d.id)
+                    visited.add(child_id_str)
+                    result.append(child.user_id)
+                    queue.append(child.user_id)
+            
             return result
-        except Exception:
+        except Exception as e:
+            print(f"Error getting downline user ids: {e}")
+            return []
+    
+    def _get_downline_user_ids_for_slot(self, user_oid, slot_no: int) -> List[ObjectId]:
+        """Return downline user ObjectIds for a SPECIFIC SLOT from Matrix tree placement (recursive)."""
+        try:
+            from ..tree.model import TreePlacement
+            
+            result: List[ObjectId] = []
+            queue: List[ObjectId] = [user_oid]
+            visited: Set[str] = {str(user_oid)}
+            
+            while queue:
+                current = queue.pop(0)
+                # Get tree children for THIS SPECIFIC SLOT using upline_id
+                tree_children = TreePlacement.objects(
+                    program='matrix',
+                    upline_id=current,
+                    slot_no=slot_no  # Filter by slot
+                ).only('user_id')
+                
+                for child in tree_children:
+                    child_id_str = str(child.user_id)
+                    if child_id_str in visited:
+                        continue
+                    visited.add(child_id_str)
+                    result.append(child.user_id)
+                    queue.append(child.user_id)
+            
+            return result
+        except Exception as e:
+            print(f"Error getting downline user ids for slot {slot_no}: {e}")
             return []
 
     def _get_user_max_matrix_slot(self, user_oid) -> int:
         """Return the highest completed Matrix slot_no for a user."""
         try:
-            activations = MatrixActivation.objects(user_id=user_oid, status='completed').only('slot_no')
             max_slot = 0
-            for a in activations:
-                try:
-                    if int(a.slot_no or 0) > max_slot:
-                        max_slot = int(a.slot_no)
-                except Exception:
-                    continue
-            # Fallback to MatrixTree.current_slot if higher
+            
+            # Check MatrixTree.current_slot (most reliable)
             tree = MatrixTree.objects(user_id=user_oid).first()
             if tree and getattr(tree, 'current_slot', None):
                 try:
                     max_slot = max(max_slot, int(tree.current_slot or 0))
                 except Exception:
                     pass
+            
+            # Check MatrixActivation records
+            activations = MatrixActivation.objects(user_id=user_oid, status='completed').only('slot_no')
+            for a in activations:
+                try:
+                    if int(a.slot_no or 0) > max_slot:
+                        max_slot = int(a.slot_no)
+                except Exception:
+                    continue
+            
+            # Check User.matrix_slots array (fallback)
+            user = User.objects(id=user_oid).first()
+            if user and hasattr(user, 'matrix_slots') and user.matrix_slots:
+                for slot_info in user.matrix_slots:
+                    if hasattr(slot_info, 'level') and slot_info.is_active:
+                        try:
+                            slot_level = int(slot_info.level or 0)
+                            if slot_level > max_slot:
+                                max_slot = slot_level
+                        except Exception:
+                            continue
+            
             return max_slot
-        except Exception:
+        except Exception as e:
+            print(f"Error getting user max matrix slot: {e}")
             return 0
 
     def get_dream_matrix_details(self, user_id: str, tree_id: int) -> Dict[str, Any]:
