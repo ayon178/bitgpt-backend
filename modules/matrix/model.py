@@ -1,4 +1,4 @@
-from mongoengine import Document, ObjectIdField, StringField, IntField, FloatField, BooleanField, DateTimeField, ListField, EmbeddedDocument, EmbeddedDocumentField, DecimalField
+from mongoengine import Document, ObjectIdField, StringField, IntField, FloatField, BooleanField, DateTimeField, ListField, DictField, EmbeddedDocument, EmbeddedDocumentField, DecimalField
 from datetime import datetime
 from decimal import Decimal
 
@@ -93,8 +93,10 @@ class MatrixUpgradeLog(Document):
     currency = StringField(default="USDT")
     tx_hash = StringField(required=True)
     upgrade_type = StringField(choices=['manual', 'auto'], default='manual')
+    trigger_type = StringField(choices=['middle_three', 'manual'], default='manual')
     earnings_used = DecimalField(default=Decimal('0'))
     profit_gained = DecimalField(default=Decimal('0'))
+    contributors = ListField(DictField(), default=list)  # List of middle-three contributors
     status = StringField(choices=['pending', 'processing', 'completed', 'failed'], default='pending')
     created_at = DateTimeField(default=datetime.utcnow)
     completed_at = DateTimeField()

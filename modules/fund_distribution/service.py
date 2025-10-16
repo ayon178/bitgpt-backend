@@ -252,7 +252,7 @@ class FundDistributionService:
         return distributions
 
     def _distribute_matrix_levels(self, user_id: str, amount: Decimal, percentage: Decimal,
-                                 slot_no: int, tx_hash: str) -> List[Dict[str, Any]]:
+                                 slot_no: int, tx_hash: str, currency: str = 'USDT') -> List[Dict[str, Any]]:
         """Distribute Matrix level distribution (40% treated as 100%)"""
         distributions = []
         level_amount = amount * (percentage / Decimal('100.0'))
@@ -271,7 +271,7 @@ class FundDistributionService:
                 if upline_id:
                     distribution = self._create_income_event(
                         upline_id, user_id, 'matrix', slot_no, f'level_{level}_distribution',
-                        level_dist_amount, level_percentage, tx_hash, f"Matrix Level {level} Distribution"
+                        level_dist_amount, level_percentage, tx_hash, f"Matrix Level {level} Distribution", currency
                     )
                     distributions.append(distribution)
         
