@@ -494,9 +494,10 @@ class BinaryService:
                 # Total team count (all levels under user)
                 def count_all_descendants(parent_user_id):
                     count = 0
+                    # Use upline_id for tree structure traversal
                     children = TreePlacement.objects(
                         program='binary',
-                        parent_id=parent_user_id
+                        upline_id=parent_user_id
                     )
                     for child in children:
                         count += 1
@@ -508,9 +509,10 @@ class BinaryService:
                 # Today team count
                 def count_today_descendants(parent_user_id):
                     count = 0
+                    # Use upline_id for tree structure traversal
                     children = TreePlacement.objects(
                         program='binary',
-                        parent_id=parent_user_id,
+                        upline_id=parent_user_id,
                         created_at__gte=today_start,
                         created_at__lte=today_end
                     )
@@ -522,6 +524,7 @@ class BinaryService:
                 team_stats["today_team"] = count_today_descendants(user_oid)
                 
                 # Today direct count
+                # Use parent_id for direct referrals count (not tree placement)
                 team_stats["today_direct"] = TreePlacement.objects(
                     program='binary',
                     parent_id=user_oid,
@@ -945,6 +948,7 @@ class BinaryService:
             from ..tree.model import TreePlacement
             
             # Get direct team members under this user
+            # Use parent_id for direct referrals count (not tree placement)
             direct_members = TreePlacement.objects(
                 program='binary',
                 parent_id=user_oid
@@ -953,9 +957,10 @@ class BinaryService:
             # Get total team members (recursive count)
             def count_total_team(parent_id):
                 total = 0
+                # Use upline_id for tree structure traversal
                 children = TreePlacement.objects(
                     program='binary',
-                    parent_id=parent_id
+                    upline_id=parent_id
                 )
                 for child in children:
                     total += 1
@@ -1020,9 +1025,10 @@ class BinaryService:
         try:
             from ..tree.model import TreePlacement
             
+            # Use upline_id for tree structure
             team_members = TreePlacement.objects(
                 program='binary',
-                parent_id=user_oid
+                upline_id=user_oid
             ).only('user_id', 'level', 'position', 'created_at')
             
             members = []
@@ -1249,8 +1255,9 @@ class BinaryService:
             if not user_info:
                 return {"success": False, "error": "User not found"}
             
-            # Build downline tree nodes (all descendants under this user for binary)
-            nodes, depth = self._build_binary_downline_nodes(user_oid)
+            # Build nested downline tree nodes (limited to 3 levels: 0, 1, 2)
+            # This gives maximum 7 users: 1 + 2 + 4 = 7
+            root_node, depth, total_nodes_count = self._build_nested_binary_tree_limited(user_oid, max_levels=3)
             
             # Gather slot catalog 1..17 for binary
             catalogs = SlotCatalog.objects(program='binary').order_by('slot_no')
@@ -1315,19 +1322,21 @@ class BinaryService:
                     "progressPercent": progress_percent
                 })
             
+            # Convert root node to array format for backward compatibility if needed
+            # But since we're changing the structure, we'll keep it nested
             result = {
                 "tree": {
                     "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
-                    "totalMembers": max(0, len(nodes) - 1),
+                    "totalMembers": max(0, total_nodes_count - 1),  # Exclude the root user
                     "levels": depth,
-                    "nodes": nodes
+                    "nodes": [root_node]  # Root node with nested directDownline structure
                 },
                 "slots": slots_summary,
                 "totalSlots": len(slots_summary),
                 "user_id": str(user_id)
             }
             
-            print(f"Binary tree overview generated: nodes={len(nodes)}, slots={len(slots_summary)}")
+            print(f"Binary tree overview generated: nodes={total_nodes_count}, slots={len(slots_summary)}")
             return {"success": True, "data": result}
             
         except Exception as e:
@@ -1369,7 +1378,8 @@ class BinaryService:
                 parent_id, level = queue.pop(0)
                 max_depth = max(max_depth, level)
                 # Fetch children under binary regardless of slot (aggregate view)
-                children = TreePlacement.objects(program='binary', parent_id=parent_id).order_by('created_at')
+                # Use upline_id for tree structure traversal
+                children = TreePlacement.objects(program='binary', upline_id=parent_id).order_by('created_at')
                 for child in children:
                     child_id_str = str(child.user_id)
                     if child_id_str in visited:
@@ -1388,6 +1398,126 @@ class BinaryService:
             return nodes, max_depth
         except Exception:
             return [{"id": 0, "type": "self", "userId": str(user_oid), "level": 0, "position": "root"}], 0
+
+    def _build_nested_binary_tree_limited(self, user_oid, max_levels: int = 3) -> (Dict[str, Any], int):
+        """
+        Build a nested tree structure with directDownline arrays for binary program.
+        Limited to max_levels (default 3: level 0, 1, 2).
+        Maximum 7 users: 1 (root) + 2 (level 1) + 4 (level 2) = 7
+        Returns (root_node, max_depth, total_count).
+        Each node has: id, type, userId, level, position, directDownline (array of child nodes).
+        """
+        try:
+            from ..tree.model import TreePlacement
+            from ..user.model import User
+            
+            # Helper to get display id
+            def display_id(oid) -> str:
+                try:
+                    u = User.objects(id=oid).only('uid').first()
+                    return str(u.uid) if u and u.uid else str(oid)
+                except Exception:
+                    return str(oid)
+            
+            # Counter for node IDs
+            node_id_counter = [0]
+            total_count = [0]
+            
+            # Helper to build node recursively with level limit
+            def build_node(parent_oid, level: int, position: str) -> Dict[str, Any]:
+                # Stop if we've exceeded max levels (0-indexed, so level 0, 1, 2 for max_levels=3)
+                if level >= max_levels:
+                    return None
+                
+                # Increment total count
+                total_count[0] += 1
+                
+                # Get current node ID and increment counter
+                current_id = node_id_counter[0]
+                node_id_counter[0] += 1
+                
+                # Determine node type
+                node_type = "self" if level == 0 else "downLine"
+                
+                # Create the node
+                node = {
+                    "id": current_id,
+                    "type": node_type,
+                    "userId": display_id(parent_oid),
+                    "level": level,
+                    "position": position
+                }
+                
+                # Only get children if we're not at the last level
+                if level < max_levels - 1:
+                    # Get direct children from TreePlacement (only take first left and first right)
+                    # This ensures binary tree structure (max 2 children per node)
+                    # Use upline_id to get actual tree placement children (not direct referrals)
+                    left_child = TreePlacement.objects(
+                        program='binary',
+                        upline_id=parent_oid,
+                        position='left'
+                    ).order_by('created_at').first()
+                    
+                    right_child = TreePlacement.objects(
+                        program='binary',
+                        upline_id=parent_oid,
+                        position='right'
+                    ).order_by('created_at').first()
+                    
+                    # Build directDownline array
+                    direct_downline = []
+                    
+                    # Add left child first
+                    if left_child:
+                        left_node = build_node(
+                            left_child.user_id,
+                            level + 1,
+                            'left'
+                        )
+                        if left_node:
+                            direct_downline.append(left_node)
+                    
+                    # Add right child second
+                    if right_child:
+                        right_node = build_node(
+                            right_child.user_id,
+                            level + 1,
+                            'right'
+                        )
+                        if right_node:
+                            direct_downline.append(right_node)
+                    
+                    # Add directDownline array to node if there are children
+                    if direct_downline:
+                        node["directDownline"] = direct_downline
+                
+                return node
+            
+            # Start building from root
+            root_node = build_node(user_oid, 0, "root")
+            
+            # Calculate max depth by traversing the tree
+            def calculate_depth(node: Dict[str, Any]) -> int:
+                if not node:
+                    return 0
+                if "directDownline" not in node or not node["directDownline"]:
+                    return node.get("level", 0)
+                return max(calculate_depth(child) for child in node["directDownline"])
+            
+            max_depth = calculate_depth(root_node) if root_node else 0
+            
+            return root_node, max_depth, total_count[0]
+            
+        except Exception as e:
+            print(f"Error in _build_nested_binary_tree_limited: {e}")
+            return {
+                "id": 0,
+                "type": "self",
+                "userId": str(user_oid),
+                "level": 0,
+                "position": "root"
+            }, 0, 1
 
     def _get_duel_tree_team_members(self, user_oid, slot_no: int) -> List[Dict[str, Any]]:
         """Get team members for duel tree display based on tree_placement structure"""
@@ -1415,9 +1545,10 @@ class BinaryService:
                 return []
             
             # Get direct children (left and right) under this user
+            # Use upline_id for tree structure
             children = TreePlacement.objects(
                 program='binary',
-                parent_id=user_oid,
+                upline_id=user_oid,
                 slot_no=slot_no
             ).order_by('position')
             
@@ -1698,23 +1829,33 @@ class BinaryService:
             if not all_earnings["success"]:
                 return {"success": False, "error": all_earnings["error"]}
             
-            # Find the specific tree by ID
-            duel_tree_data = all_earnings["data"]["duelTreeData"]
-            target_tree = None
+            # Get the tree data from the new structure
+            tree_data = all_earnings["data"].get("tree")
             
-            print(f"Available tree IDs: {[tree['id'] for tree in duel_tree_data]}")
+            if not tree_data or not tree_data.get("nodes"):
+                return {"success": False, "error": "No tree data found"}
             
-            for tree in duel_tree_data:
-                if tree["id"] == tree_id:
-                    target_tree = tree
-                    break
+            # Since we now have nested structure, we need to find node by tree_id
+            # The tree_id corresponds to node id in the nested structure
+            def find_node_by_id(nodes, target_id):
+                """Recursively find a node by its id"""
+                for node in nodes:
+                    if node.get("id") == target_id:
+                        return node
+                    if "directDownline" in node:
+                        found = find_node_by_id(node["directDownline"], target_id)
+                        if found:
+                            return found
+                return None
             
-            if not target_tree:
-                return {"success": False, "error": f"Tree with ID {tree_id} not found. Available IDs: {[tree['id'] for tree in duel_tree_data]}"}
+            target_node = find_node_by_id(tree_data["nodes"], tree_id)
+            
+            if not target_node:
+                return {"success": False, "error": f"Node with ID {tree_id} not found in tree"}
             
             return {
                 "success": True,
-                "data": target_tree
+                "data": target_node
             }
             
         except Exception as e:

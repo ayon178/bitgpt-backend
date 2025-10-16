@@ -5,7 +5,12 @@ class TreePlacement(Document):
     """Binary/Matrix/Global tree structure and positioning"""
     user_id = ObjectIdField(required=True)
     program = StringField(choices=['binary', 'matrix', 'global'], required=True)
-    parent_id = ObjectIdField(required=False)  # Allow null for root users
+    
+    # CRITICAL DISTINCTION:
+    # parent_id: Direct referrer (who invited you) - NEVER CHANGES
+    # upline_id: Tree placement upline (where you're actually placed) - CAN CHANGE due to spillover
+    parent_id = ObjectIdField(required=False)  # Direct referrer (refered_by)
+    upline_id = ObjectIdField(required=False)  # Actual tree upline (placement parent)
     
     # Position based on program type
     # Binary: left, right
@@ -55,7 +60,8 @@ class TreePlacement(Document):
         'collection': 'tree_placement',
         'indexes': [
             ('user_id', 'program'), 
-            ('parent_id', 'program'), 
+            ('parent_id', 'program'),
+            ('upline_id', 'program'),  # Index for tree upline queries
             ('program', 'level'),
             'phase',
             'is_spillover',

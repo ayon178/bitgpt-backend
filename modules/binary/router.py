@@ -354,19 +354,18 @@ async def get_duel_tree_details(
             else:
                 raise HTTPException(status_code=404, detail=result["error"])
         
-        # If tree_id is not provided, return last tree from duelTreeData
+        # If tree_id is not provided, return tree data from duel_tree_earnings
         else:
             result = binary_service.get_duel_tree_earnings(user_id)
             
             if result["success"]:
-                duel_tree_data = result["data"].get("duelTreeData", [])
+                tree_data = result["data"].get("tree")
                 
-                if not duel_tree_data:
+                if not tree_data or not tree_data.get("nodes"):
                     raise HTTPException(status_code=404, detail="No tree data found for this user")
                 
-                # Return only the last tree object
-                last_tree = duel_tree_data[-1]
-                return success_response(last_tree)
+                # Return the tree object directly
+                return success_response(tree_data)
             else:
                 raise HTTPException(status_code=400, detail=result["error"])
 
