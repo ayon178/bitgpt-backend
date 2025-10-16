@@ -11,7 +11,9 @@ class DreamMatrixService:
 
     def get_dream_matrix_earnings(self, user_id: str, slot_no: int = None, recycle_no: int = None) -> Dict[str, Any]:
         """Return slot-wise Dream Matrix data:
-        - For each Matrix slot (1..15 or catalog max):
+        - If slot_no is provided, return only that specific slot's data
+        - If slot_no is None, return all slots (1..15)
+        - For each Matrix slot:
           - Include slot details (name/value)
           - If the root user has upgraded up to that slot, include tree 'users' list
             with only the root and downline users who have that slot upgraded.
@@ -41,8 +43,16 @@ class DreamMatrixService:
 
                 matrix_tree_data = []
 
+                # Determine which slots to return
+                if slot_no is not None:
+                    # Return only specific slot
+                    slot_range = [slot_no]
+                else:
+                    # Return all slots
+                    slot_range = range(1, target_max_slot + 1)
+
                 # Build slot-wise items
-                for s in range(1, target_max_slot + 1):
+                for s in slot_range:
                     catalog = catalog_by_slot.get(s)
                     slot_name = catalog.name if catalog else f"Slot {s}"
                     price = float(catalog.price) if catalog and catalog.price is not None else 0.0
