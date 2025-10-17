@@ -491,54 +491,81 @@ class BinaryService:
                 print(f"Error calculating missing profit: {e}")
             
             # 5. Get team statistics (total team, today team, today direct)
+            # IMPORTANT: Count unique users only (ignore multiple slots)
             team_stats = {
                 "total_team": 0,
                 "today_team": 0,
                 "today_direct": 0
             }
             try:
-                # Total team count (all levels under user)
-                def count_all_descendants(parent_user_id):
-                    count = 0
-                    # Use upline_id for tree structure traversal
+                # Total team count (unique users across all levels)
+                def collect_all_descendant_user_ids(parent_user_id, seen_users=None):
+                    """Collect unique user IDs from all levels"""
+                    if seen_users is None:
+                        seen_users = set()
+                    
+                    # Get all children using upline_id for tree structure
                     children = TreePlacement.objects(
                         program='binary',
                         upline_id=parent_user_id
                     )
+                    
                     for child in children:
-                        count += 1
-                        count += count_all_descendants(child.user_id)
-                    return count
+                        # Only add if not already seen (handles multiple slots)
+                        user_id_str = str(child.user_id)
+                        if user_id_str not in seen_users:
+                            seen_users.add(user_id_str)
+                            # Recurse for this user's children
+                            collect_all_descendant_user_ids(child.user_id, seen_users)
+                    
+                    return seen_users
                 
-                team_stats["total_team"] = count_all_descendants(user_oid)
+                unique_team_users = collect_all_descendant_user_ids(user_oid)
+                team_stats["total_team"] = len(unique_team_users)
                 
-                # Today team count
-                def count_today_descendants(parent_user_id):
-                    count = 0
-                    # Use upline_id for tree structure traversal
+                # Today team count (unique users who joined today)
+                def collect_today_descendant_user_ids(parent_user_id, seen_users=None):
+                    """Collect unique user IDs who joined today"""
+                    if seen_users is None:
+                        seen_users = set()
+                    
+                    # Get children who joined today
                     children = TreePlacement.objects(
                         program='binary',
                         upline_id=parent_user_id,
                         created_at__gte=today_start,
                         created_at__lte=today_end
                     )
+                    
                     for child in children:
-                        count += 1
-                        count += count_today_descendants(child.user_id)
-                    return count
+                        user_id_str = str(child.user_id)
+                        if user_id_str not in seen_users:
+                            seen_users.add(user_id_str)
+                            # Continue recursively for children of this user
+                            collect_today_descendant_user_ids(child.user_id, seen_users)
+                    
+                    return seen_users
                 
-                team_stats["today_team"] = count_today_descendants(user_oid)
+                unique_today_team = collect_today_descendant_user_ids(user_oid)
+                team_stats["today_team"] = len(unique_today_team)
                 
-                # Today direct count
-                # Use parent_id for direct referrals count (not tree placement)
-                team_stats["today_direct"] = TreePlacement.objects(
+                # Today direct count (unique direct referrals today)
+                # Get direct referrals using parent_id
+                today_direct_placements = TreePlacement.objects(
                     program='binary',
                     parent_id=user_oid,
                     created_at__gte=today_start,
                     created_at__lte=today_end
-                ).count()
+                )
                 
-                print(f"Team stats for user {user_id}: {team_stats}")
+                # Count unique user_ids only
+                unique_direct_users = set()
+                for placement in today_direct_placements:
+                    unique_direct_users.add(str(placement.user_id))
+                
+                team_stats["today_direct"] = len(unique_direct_users)
+                
+                print(f"Team stats for user {user_id} (unique users): {team_stats}")
                 
             except Exception as e:
                 print(f"Error calculating team stats: {e}")
