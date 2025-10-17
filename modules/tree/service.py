@@ -63,10 +63,13 @@ class TreeService:
                     position = 'left'
             
             # Create TreePlacement record
+            # Set both parent_id (direct referrer) and upline_id (tree placement)
+            # For now, upline_id = parent_id (no spillover in this simple method)
             placement = TreePlacement(
                 user_id=user_id,
                 program=program,
                 parent_id=referrer_id,
+                upline_id=referrer_id,  # ← CRITICAL: Set upline_id for tree queries
                 position=position,
                 level=level,
                 slot_no=slot_no,
@@ -197,6 +200,7 @@ class TreeService:
             user_id=user_id,
             program=program,
             parent_id=referrer_id,
+            upline_id=referrer_id,  # Set upline_id same as parent_id (no spillover)
             position=position,
             level=level,
             slot_no=slot_no,
@@ -285,6 +289,7 @@ class TreeService:
                         user_id=user_id,
                         program=program,
                         parent_id=parent,
+                        upline_id=parent,  # Set upline_id for tree queries
                         position='left',
                         level=level,
                         slot_no=slot_no,
@@ -341,6 +346,7 @@ class TreeService:
                         user_id=user_id,
                         program=program,
                         parent_id=parent,
+                        upline_id=parent,  # Set upline_id for tree queries
                         position='right',
                         level=level,
                         slot_no=slot_no,

@@ -1621,7 +1621,7 @@ class MatrixService:
             
             if not user_placement or not user_placement.upline_id:
                 print(f"  No upline found for user {user_id}")
-                return None
+            return None
             
             # Get the upline's user_id (whose tree this user was placed in)
             upline_id = str(user_placement.upline_id)

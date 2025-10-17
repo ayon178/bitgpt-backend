@@ -701,12 +701,21 @@ async def get_user_by_uid(uid: str):
 async def get_my_team(
     user_id: str = Query(..., description="User ID"),
     program: str = Query(..., description="Program type: binary or matrix"),
-    level: int = Query(..., ge=1, le=16, description="Tree level (1-16)")
+    level: int = Query(..., ge=1, le=16, description="Tree level (1-16)"),
+    slot_no: int = Query(None, description="Slot number filter (default: 1)")
 ):
-    """Get team members for a specific program and level"""
+    """
+    Get team members for a specific program and level
+    
+    Features:
+    - Slot-wise filtering (shows only members from specific slot)
+    - Level maximum enforcement (Binary: 2^level, Matrix: 3^level)
+    - Duplicate removal (same user only once)
+    - Uses upline_id for tree structure
+    """
     try:
         service = UserService()
-        result = service.get_my_team(user_id, program, level)
+        result = service.get_my_team(user_id, program, level, slot_no)
         
         if result.get("success"):
             return success_response(result["data"], "Team data fetched successfully")

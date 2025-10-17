@@ -103,6 +103,8 @@ class GlobalSerialPlacementService:
                 program='global',
                 phase='PHASE-1',
                 slot_no=1,
+                parent_id=None,  # First user has no parent
+                upline_id=None,  # First user has no upline
                 level=1,
                 position=str(1),
                 is_active=True,
@@ -178,6 +180,8 @@ class GlobalSerialPlacementService:
                 program='global',
                 phase=current_phase,
                 slot_no=current_slot,
+                parent_id=ObjectId(first_user_id),  # Set parent_id to first user
+                upline_id=ObjectId(first_user_id),  # Set upline_id for tree queries
                 level=1,  # All users in first user's tree are level 1
                 position=str(placement_position),
                 is_active=True,
@@ -294,6 +298,8 @@ class GlobalSerialPlacementService:
                     program='global',
                     phase=new_phase,
                     slot_no=new_slot,
+                    parent_id=None,  # First user has no parent
+                    upline_id=None,  # First user has no upline
                     level=1,
                     position=str(1),
                     is_active=True,

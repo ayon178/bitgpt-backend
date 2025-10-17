@@ -306,15 +306,23 @@ class UserService:
                 "error": f"Failed to get community members: {str(e)}"
             }
 
-    def get_my_team(self, user_id: str, program: str, level: int) -> Dict[str, Any]:
+    def get_my_team(self, user_id: str, program: str, level: int, slot_no: int = None) -> Dict[str, Any]:
         """
         Get team members for a specific program and level
         
         Level logic:
-        - Level 1: Direct children of the user (parent_id = user_id)
+        - Uses upline_id for tree structure (not parent_id)
+        - Level 1: Direct tree children (upline_id = user_id)
         - Level 2: Grandchildren (children of Level 1)
         - Level 3: Great-grandchildren (children of Level 2)
-        etc.
+        
+        Level maximum:
+        - Binary: L1=2, L2=4, L3=8, etc (2^level)
+        - Matrix: L1=3, L2=9, L3=27, etc (3^level)
+        
+        Slot filtering:
+        - If slot_no provided, only show that slot's tree
+        - If slot_no is None, use default (Slot 1)
         """
         try:
             from modules.tree.model import TreePlacement
@@ -329,13 +337,18 @@ class UserService:
                     "error": "Invalid program. Must be 'binary' or 'matrix'"
                 }
             
-            # Recursive function to get descendants at specific depth
-            def get_descendants_at_depth(parent_id, current_depth, target_depth):
-                """Get all descendants at target depth from parent"""
-                # Get direct children
+            # Default to Slot 1 if not specified
+            if slot_no is None:
+                slot_no = 1
+            
+            # Recursive function to get descendants at specific depth using upline_id
+            def get_descendants_at_depth(upline_id, current_depth, target_depth):
+                """Get all descendants at target depth from upline"""
+                # Get direct children using upline_id (tree structure) and slot filter
                 children = TreePlacement.objects(
-                    parent_id=parent_id,
+                    upline_id=upline_id,
                     program=program_lower,
+                    slot_no=slot_no,  # Filter by slot
                     is_active=True
                 ).order_by('created_at')
                 
@@ -356,8 +369,26 @@ class UserService:
             # Level 1 = depth 1 (direct children)
             team_members = get_descendants_at_depth(uid, 1, level)
             
-            team_data = []
+            # Remove duplicates by user_id (in case same user appears multiple times)
+            seen_users = set()
+            unique_members = []
             for member in team_members:
+                user_id_str = str(member.user_id)
+                if user_id_str not in seen_users:
+                    seen_users.add(user_id_str)
+                    unique_members.append(member)
+            
+            # Calculate level maximum based on program
+            if program_lower == 'binary':
+                level_max = 2 ** level  # Binary: 2^level (2, 4, 8, 16, ...)
+            else:  # matrix
+                level_max = 3 ** level  # Matrix: 3^level (3, 9, 27, ...)
+            
+            # Apply level maximum limit
+            unique_members = unique_members[:level_max]
+            
+            team_data = []
+            for member in unique_members:
                 # Get user details
                 user = User.objects(id=member.user_id).first()
                 if user:
@@ -377,6 +408,8 @@ class UserService:
                 "data": {
                     "program": program_lower,
                     "level": level,
+                    "slot_no": slot_no,
+                    "level_maximum": level_max,
                     "total_members": len(team_data),
                     "team_members": team_data
                 }
@@ -1526,6 +1559,7 @@ def create_root_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
                     user_id=ObjectId(user.id),
                     program='binary',
                     parent_id=None,
+                    upline_id=None,  # Root has no upline
                     position='root',
                     level=1,
                     slot_no=1,

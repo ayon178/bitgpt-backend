@@ -235,6 +235,7 @@ class GlobalService:
                 user_id=user_oid,
                 program='global',
                 parent_id=parent_id if parent_id and parent_id != user_oid else None,  # Don't self-parent
+                upline_id=parent_id if parent_id and parent_id != user_oid else None,  # Set upline_id
                 position=position_label,
                 level=level,
                 slot_no=1,
@@ -441,6 +442,7 @@ class GlobalService:
                 user_id=user_oid,
                 program='global',
                 parent_id=parent_id,
+                upline_id=parent_id,  # Set upline_id for tree queries
                 position=position_label,
                 level=level,
                 slot_no=1,
@@ -1776,6 +1778,7 @@ class GlobalService:
                 phase='PHASE-2',
                 slot_no=1,
                 parent_id=parent,  # parent is already an ObjectId from _find_phase2_parent_bfs
+                upline_id=parent,  # Set upline_id for tree queries
                 position='position_1',  # Default position for Phase-2
                 level=1,  # Default level
                 phase_position=1,  # Default phase position
@@ -2053,6 +2056,7 @@ class GlobalService:
                 phase='PHASE-1',
                 slot_no=slot_no,
                 parent_id=ObjectId(parent.id),
+                upline_id=ObjectId(parent.id),  # Set upline_id for tree queries
                 placement_type='phase_reentry',
                 placed_at=datetime.utcnow()
             )
