@@ -248,8 +248,13 @@ class UserService:
             }
     
     def get_my_community(self, user_id: str, program_type: str = "binary", slot_number: Optional[int] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get community members (referred users) for a user"""
+        """
+        Get community members (direct referrals) for a user
+        Filters by program and optionally by slot
+        """
         try:
+            from modules.tree.model import TreePlacement
+            
             # Validate program type
             if program_type not in ["binary", "matrix"]:
                 return {"success": False, "error": "Invalid program type. Must be 'binary' or 'matrix'"}
@@ -259,33 +264,68 @@ class UserService:
             if not user:
                 return {"success": False, "error": "User not found"}
             
-            # Build query for referred users
-            query = {"refered_by": ObjectId(user_id)}
+            user_oid = ObjectId(user_id)
             
-            # Get referred users with pagination
+            # Get user IDs who are direct referrals AND joined the specified program
+            # Use parent_id for direct referrals (not upline_id which is for tree placement)
+            placement_query = {
+                "parent_id": user_oid,
+                "program": program_type
+            }
+            
+            # Add slot filter if specified
+            if slot_number is not None:
+                placement_query["slot_no"] = slot_number
+            
+            # Get TreePlacement entries for direct referrals in this program
+            placements = TreePlacement.objects(**placement_query).order_by('-created_at')
+            
+            # Collect unique user_ids (avoid duplicates from multiple slots)
+            unique_user_ids = []
+            seen_users = set()
+            
+            for placement in placements:
+                user_id_str = str(placement.user_id)
+                if user_id_str not in seen_users:
+                    seen_users.add(user_id_str)
+                    unique_user_ids.append(placement.user_id)
+            
+            # Get total count
+            total_count = len(unique_user_ids)
+            
+            # Apply pagination to user IDs
             skip = (page - 1) * limit
-            referred_users = User.objects(**query).skip(skip).limit(limit).order_by('-created_at')
+            paginated_user_ids = unique_user_ids[skip:skip + limit]
             
-            # Get total count for pagination
-            total_count = User.objects(**query).count()
+            # Get User details for paginated IDs
+            referred_users = User.objects(id__in=paginated_user_ids)
             
-            # Format response
+            # Create a map for quick lookup
+            user_map = {str(u.id): u for u in referred_users}
+            
+            # Format response (maintain order from placements)
             community_members = []
-            for member in referred_users:
-                community_members.append({
-                    "id": str(member.id),
-                    "uid": member.uid,
-                    "refer_code": member.refer_code,
-                    "name": member.name,
-                    "email": member.email,
-                    "role": member.role,
-                    "wallet_address": member.wallet_address,
-                    "created_at": member.created_at,
-                    "binary_joined": member.binary_joined,
-                    "matrix_joined": member.matrix_joined,
-                    "global_joined": member.global_joined,
-                    "current_rank": getattr(member, 'current_rank', 'Bitron')
-                })
+            for user_id_obj in paginated_user_ids:
+                member = user_map.get(str(user_id_obj))
+                if member:
+                    # Count direct partners for this member
+                    direct_partner_count = User.objects(refered_by=member.id).count()
+                    
+                    community_members.append({
+                        "id": str(member.id),
+                        "uid": member.uid,
+                        "refer_code": member.refer_code,
+                        "name": member.name,
+                        "email": member.email,
+                        "role": member.role,
+                        "wallet_address": member.wallet_address,
+                        "created_at": member.created_at,
+                        "binary_joined": member.binary_joined,
+                        "matrix_joined": member.matrix_joined,
+                        "global_joined": member.global_joined,
+                        "current_rank": getattr(member, 'current_rank', 'Bitron'),
+                        "direct_partner": direct_partner_count
+                    })
             
             return {
                 "success": True,
