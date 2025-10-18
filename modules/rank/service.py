@@ -105,20 +105,29 @@ class RankService:
             new_rank_number = self._calculate_user_rank(achievements)
             
             # Check if rank should be updated
-            if new_rank_number > user_rank.current_rank_number or force_update:
+            if new_rank_number != user_rank.current_rank_number or force_update:
                 # Update user rank
                 old_rank_number = user_rank.current_rank_number
                 old_rank_name = user_rank.current_rank_name
                 
-                # Get new rank details
-                new_rank = Rank.objects(rank_number=new_rank_number).first()
-                if not new_rank:
-                    return {"success": False, "error": f"Rank {new_rank_number} not found"}
-                
-                # Update user rank
-                user_rank.current_rank_number = new_rank_number
-                user_rank.current_rank_name = new_rank.rank_name
-                user_rank.rank_achieved_at = datetime.utcnow()
+                # Handle special case: Rank 0 (No rank - Matrix not joined)
+                if new_rank_number == 0:
+                    # User doesn't have a valid rank yet
+                    user_rank.current_rank_number = 0
+                    user_rank.current_rank_name = "No Rank"
+                    user_rank.rank_achieved_at = datetime.utcnow()
+                    new_rank_name = "No Rank"
+                else:
+                    # Get new rank details from database
+                    new_rank = Rank.objects(rank_number=new_rank_number).first()
+                    if not new_rank:
+                        return {"success": False, "error": f"Rank {new_rank_number} not found"}
+                    
+                    # Update user rank
+                    user_rank.current_rank_number = new_rank_number
+                    user_rank.current_rank_name = new_rank.rank_name
+                    user_rank.rank_achieved_at = datetime.utcnow()
+                    new_rank_name = new_rank.rank_name
                 
                 # Add to rank history
                 user_rank.rank_history.append({
@@ -128,7 +137,11 @@ class RankService:
                 })
                 
                 # Update next rank
-                if new_rank_number < 15:
+                if new_rank_number == 0:
+                    # Next rank is 1 (Bitron) - user needs to join Matrix
+                    user_rank.next_rank_number = 1
+                    user_rank.next_rank_name = "Bitron"
+                elif new_rank_number < 15:
                     user_rank.next_rank_number = new_rank_number + 1
                     next_rank = Rank.objects(rank_number=user_rank.next_rank_number).first()
                     user_rank.next_rank_name = next_rank.rank_name if next_rank else "Unknown"
@@ -157,16 +170,16 @@ class RankService:
                 user_rank.last_updated = datetime.utcnow()
                 user_rank.save()
                 
-                # Create rank achievement record
-                self._create_rank_achievement(user_id, new_rank_number, new_rank.rank_name, achievements)
-                
-                # Check for milestones
-                self._check_and_create_milestones(user_id, new_rank_number)
+                # Create rank achievement record (only for valid ranks)
+                if new_rank_number > 0:
+                    self._create_rank_achievement(user_id, new_rank_number, new_rank_name, achievements)
+                    # Check for milestones
+                    self._check_and_create_milestones(user_id, new_rank_number)
                 
                 return {
                     "success": True,
                     "old_rank": {"number": old_rank_number, "name": old_rank_name},
-                    "new_rank": {"number": new_rank_number, "name": new_rank.rank_name},
+                    "new_rank": {"number": new_rank_number, "name": new_rank_name},
                     "achievements": achievements,
                     "special_qualifications": {
                         "royal_captain_eligible": user_rank.royal_captain_eligible,
@@ -174,7 +187,7 @@ class RankService:
                         "top_leader_gift_eligible": user_rank.top_leader_gift_eligible,
                         "leadership_stipend_eligible": user_rank.leadership_stipend_eligible
                     },
-                    "message": f"Rank updated from {old_rank_name} to {new_rank.rank_name}"
+                    "message": f"Rank updated from {old_rank_name} to {new_rank_name}"
                 }
             else:
                 return {
@@ -490,40 +503,44 @@ class RankService:
             }
     
     def _calculate_user_rank(self, achievements: Dict[str, Any]) -> int:
-        """Calculate user's rank based on achievements"""
-        total_slots = achievements["total_slots"]
+        """
+        Calculate user's rank based on achievements
         
-        # Progressive rank calculation
-        if total_slots >= 30:
-            return 15  # Omega
-        elif total_slots >= 25:
-            return 14  # Spectra
-        elif total_slots >= 20:
-            return 13  # Trion
-        elif total_slots >= 18:
-            return 12  # Axion
-        elif total_slots >= 16:
-            return 11  # Fyre
-        elif total_slots >= 14:
-            return 10  # Nexus
-        elif total_slots >= 12:
-            return 9   # Arion
-        elif total_slots >= 10:
-            return 8   # Lumix
-        elif total_slots >= 8:
-            return 7   # Quanta
-        elif total_slots >= 6:
-            return 6   # Ignis
-        elif total_slots >= 5:
-            return 5   # Stellar
-        elif total_slots >= 4:
-            return 4   # Glint
-        elif total_slots >= 3:
-            return 3   # Neura
-        elif total_slots >= 2:
-            return 2   # Cryzen
-        else:
-            return 1   # Bitron
+        Business Logic: Binary Slot N + Matrix Slot N = Rank N
+        
+        CRITICAL RULE: User MUST join BOTH Binary AND Matrix to have a rank
+        
+        Examples:
+        - Binary only (no Matrix) = Rank 0 (No rank)
+        - Binary Slot 2 + Matrix Slot 0 = Rank 0 (No rank)
+        - Binary Slot 1 + Matrix Slot 1 = Rank 1
+        - Binary Slot 2 + Matrix Slot 1 = Rank 1 (minimum determines rank)
+        - Binary Slot 5 + Matrix Slot 5 = Rank 5
+        
+        Formula: 
+        - If matrix_slots = 0: Rank = 0 (No rank)
+        - Else: Rank = min(Binary Slots, Matrix Slots)
+        Max Rank = 15 (Omega)
+        """
+        binary_slots = achievements.get("binary_slots", 0)
+        matrix_slots = achievements.get("matrix_slots", 0)
+        
+        # CRITICAL: User must join Matrix to have any rank
+        # If Matrix not joined, rank = 0 (No rank)
+        if matrix_slots < 1:
+            return 0  # No rank until Matrix joined
+        
+        # Rank is determined by the minimum of binary and matrix slots
+        # Both programs must be at slot N to achieve rank N
+        rank_number = min(binary_slots, matrix_slots)
+        
+        # Cap at maximum rank 15 (Omega)
+        rank_number = min(rank_number, 15)
+        
+        # Ensure rank is at least 1 (if both programs joined)
+        rank_number = max(rank_number, 1)
+        
+        return rank_number
     
     def _calculate_progress_percentage(self, user_rank: UserRank) -> float:
         """Calculate progress percentage towards next rank"""
