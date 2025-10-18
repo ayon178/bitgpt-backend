@@ -469,6 +469,73 @@ class UserService:
             return direct_partners
         except Exception:
             return 0
+    
+    def add_test_balance(self, user_id: str) -> bool:
+        """
+        🧪 TEMPORARY TEST METHOD - Add test balance to user wallet
+        This method will be removed before production deployment.
+        
+        Adds 10,000,000 balance for both BNB and USDT currencies to main wallet.
+        
+        Args:
+            user_id: User ID (string or ObjectId)
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            from modules.wallet.model import UserWallet
+            
+            user_oid = ObjectId(user_id)
+            test_balance = Decimal('10000000')
+            current_time = datetime.utcnow()
+            
+            # Add BNB balance
+            bnb_wallet = UserWallet.objects(
+                user_id=user_oid,
+                wallet_type='main',
+                currency='BNB'
+            ).first()
+            
+            if not bnb_wallet:
+                bnb_wallet = UserWallet(
+                    user_id=user_oid,
+                    wallet_type='main',
+                    currency='BNB',
+                    balance=test_balance,
+                    last_updated=current_time
+                )
+                bnb_wallet.save()
+            else:
+                bnb_wallet.balance = test_balance
+                bnb_wallet.last_updated = current_time
+                bnb_wallet.save()
+            
+            # Add USDT balance
+            usdt_wallet = UserWallet.objects(
+                user_id=user_oid,
+                wallet_type='main',
+                currency='USDT'
+            ).first()
+            
+            if not usdt_wallet:
+                usdt_wallet = UserWallet(
+                    user_id=user_oid,
+                    wallet_type='main',
+                    currency='USDT',
+                    balance=test_balance,
+                    last_updated=current_time
+                )
+                usdt_wallet.save()
+            else:
+                usdt_wallet.balance = test_balance
+                usdt_wallet.last_updated = current_time
+                usdt_wallet.save()
+            
+            return True
+        except Exception as e:
+            print(f"Error adding test balance: {str(e)}")
+            return False
 
 
 def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -546,6 +613,13 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             password=hashed_password,
         )
         user.save()
+        
+        # 🧪 TEMPORARY: Add test balance for development (will be removed before production)
+        try:
+            user_service = UserService()
+            user_service.add_test_balance(str(user.id))
+        except Exception as e:
+            print(f"Failed to add test balance: {str(e)}")
         
         # Initialize program participation flags
         try:
