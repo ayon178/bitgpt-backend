@@ -199,6 +199,7 @@ class AuthenticationService(object):
             return {
                 "user": {
                     "_id": str(user.id),
+                    "refered_by": str(user.refered_by) if user.refered_by else None,
                     "uid": user.uid,
                     "refer_code": user.refer_code,
                     "name": user.name,
@@ -224,6 +225,7 @@ class AuthenticationService(object):
             return {
                 "user": {
                     "_id": str(user.id),
+                    "refered_by": str(user.refered_by) if user.refered_by else None,
                     "uid": user.uid,
                     "refer_code": user.refer_code,
                     "name": user.name,
