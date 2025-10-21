@@ -3,6 +3,7 @@ from bson import ObjectId
 from modules.user.model import User
 from modules.matrix.model import MatrixTree, MatrixRecycleInstance, MatrixActivation
 from modules.slot.model import SlotCatalog
+from modules.tree.model import TreePlacement
 import random
 
 
@@ -35,29 +36,42 @@ class DreamMatrixService:
                 
                 # Build nested downline tree nodes (limited to 3 levels: 0, 1, 2)
                 # For 3x3 matrix: Level 0: 1, Level 1: 3, Level 2: 9 = 13 total
-                root_node, depth, total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3)
+                try:
+                    root_node, depth, total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3)
+                except Exception as tree_error:
+                    print(f"Error building matrix tree: {tree_error}")
+                    import traceback
+                    traceback.print_exc()
+                    # Return empty tree on error
+                    root_node = {"id": 0, "type": "self", "userId": str(user_info.uid) if user_info else str(user_oid), "level": 0, "position": "root"}
+                    depth = 0
+                    total_nodes_count = 1
                 
                 # Calculate ACTUAL total team members (ALL levels, not just 3)
                 actual_total_team_members = self._count_all_matrix_team_members(user_oid)
                 
-                # Member requirements for each slot (from PROJECT_DOCUMENTATION.md)
-                # Matrix follows 3^Level pattern: 3, 9, 27, 81, 243
+                # Member requirements for each slot to UPGRADE to next slot
+                # Matrix recycle system: Each slot completes with 39 members (3 + 9 + 27)
+                # To upgrade from Slot N to Slot N+1, you need to complete Slot N tree
+                # Slot 1 → Slot 2: Need 3 members in Slot 1
+                # Slot 2 → Slot 3: Need 9 members in Slot 2
+                # Slot 3 → Slot 4: Need 27 members in Slot 3
                 slot_member_requirements = {
-                    1: 3,      # Level 1
-                    2: 9,      # Level 2
-                    3: 27,     # Level 3
-                    4: 81,     # Level 4
-                    5: 243,    # Level 5
-                    6: 729,    # Level 6 (extrapolated)
-                    7: 2187,   # Level 7
-                    8: 6561,   # Level 8
-                    9: 19683,  # Level 9
-                    10: 59049, # Level 10
-                    11: 177147, # Level 11
-                    12: 531441, # Level 12
-                    13: 1594323, # Level 13
-                    14: 4782969, # Level 14
-                    15: 14348907 # Level 15
+                    1: 3,      # Slot 1: Need 3 members to upgrade to Slot 2
+                    2: 9,      # Slot 2: Need 9 members to upgrade to Slot 3
+                    3: 27,     # Slot 3: Need 27 members to upgrade to Slot 4
+                    4: 81,     # Slot 4: Need 81 members to upgrade to Slot 5
+                    5: 243,    # Slot 5: Need 243 members to upgrade to Slot 6
+                    6: 729,    # Slot 6: Need 729 members to upgrade to Slot 7
+                    7: 2187,   # Slot 7: Need 2187 members to upgrade to Slot 8
+                    8: 6561,   # Slot 8: Need 6561 members to upgrade to Slot 9
+                    9: 19683,  # Slot 9: Need 19683 members to upgrade to Slot 10
+                    10: 59049, # Slot 10: Need 59049 members to upgrade to Slot 11
+                    11: 177147, # Slot 11: Need 177147 members to upgrade to Slot 12
+                    12: 531441, # Slot 12: Need 531441 members to upgrade to Slot 13
+                    13: 1594323, # Slot 13: Need 1594323 members to upgrade to Slot 14
+                    14: 4782969, # Slot 14: Need 4782969 members to upgrade to Slot 15
+                    15: 14348907 # Slot 15: Maximum slot
                 }
                 
                 # Gather slot catalog 1..15 for matrix
@@ -99,16 +113,26 @@ class DreamMatrixService:
                     # Check if this is the slot available for manual upgrade
                     is_manual_upgrade = (slot_no == next_manual_upgrade_slot)
                     
-                    # Calculate progress percentage
-                    required_members = slot_member_requirements.get(slot_no, 0)
+                    # Calculate progress percentage for CURRENT ACTIVE SLOT
+                    # If user is in Slot N, progress shows how many members joined in Slot N tree
+                    # to upgrade to Slot N+1
+                    progress_percent = 0
+                    
                     if is_completed:
+                        # Completed slots always show 100%
                         progress_percent = 100
-                    elif slot_no == next_manual_upgrade_slot:
+                    elif slot_no == highest_completed_slot + 1:
+                        # This is the current active slot
+                        # Count members in THIS specific slot's tree
+                        current_slot_members = self._count_slot_specific_members(user_oid, slot_no)
+                        required_members = slot_member_requirements.get(slot_no, 0)
+                        
                         if required_members > 0:
-                            progress_percent = int(min(100, (actual_total_team_members / required_members) * 100))
+                            progress_percent = int(min(100, (current_slot_members / required_members) * 100))
                         else:
                             progress_percent = 0
                     else:
+                        # Future slots show 0%
                         progress_percent = 0
                     
                     slots_summary.append({
@@ -143,6 +167,7 @@ class DreamMatrixService:
     def _build_nested_matrix_tree_limited(self, user_oid, max_levels: int = 3) -> (Dict[str, Any], int, int):
         """
         Build a nested tree structure with directDownline arrays for matrix program.
+        Uses TreePlacement model (same as Binary).
         Limited to max_levels (default 3: level 0, 1, 2).
         For 3x3 matrix: Level 0: 1, Level 1: 3, Level 2: 9 = 13 total maximum
         Returns (root_node, max_depth, total_count).
@@ -193,9 +218,11 @@ class DreamMatrixService:
                 if level < max_levels - 1:
                     # Get direct children from TreePlacement for matrix program
                     # Matrix has 3 positions per level (3x3 structure)
+                    # IMPORTANT: Exclude self (user_id != parent_oid) to avoid root appearing as child
                     children = TreePlacement.objects(
                         program='matrix',
-                        upline_id=parent_oid
+                        upline_id=parent_oid,
+                        user_id__ne=parent_oid  # Exclude self
                     ).order_by('created_at').limit(3)
                     
                     # Build directDownline array
@@ -235,7 +262,9 @@ class DreamMatrixService:
             return root_node, max_depth, total_count[0]
             
         except Exception as e:
-            print(f"Error building nested matrix tree: {e}")
+            print(f"❌ Error building nested matrix tree: {e}")
+            import traceback
+            traceback.print_exc()
             # Return empty root node
             return {
                 "id": 0,
@@ -246,11 +275,22 @@ class DreamMatrixService:
             }, 0, 1
     
     def _count_all_matrix_team_members(self, user_oid) -> int:
-        """Count ALL matrix team members recursively (all levels)"""
+        """Count ALL matrix team members recursively (all levels) from TreePlacement"""
         try:
             from ..tree.model import TreePlacement
             
-            def count_recursive(parent_oid) -> int:
+            visited = set()
+            
+            def count_recursive(parent_oid, depth=0) -> int:
+                # Prevent infinite loop
+                if depth > 20:
+                    return 0
+                
+                parent_str = str(parent_oid)
+                if parent_str in visited:
+                    return 0
+                visited.add(parent_str)
+                
                 # Get direct children
                 children = TreePlacement.objects(
                     program='matrix',
@@ -261,7 +301,7 @@ class DreamMatrixService:
                 
                 # Recursively count children's children
                 for child in children:
-                    count += count_recursive(child.user_id)
+                    count += count_recursive(child.user_id, depth + 1)
                 
                 return count
             
@@ -271,6 +311,51 @@ class DreamMatrixService:
             
         except Exception as e:
             print(f"Error counting matrix team members: {e}")
+            return 0
+    
+    def _count_slot_specific_members(self, user_oid, slot_no: int) -> int:
+        """
+        Count members in a SPECIFIC slot's tree.
+        This counts only users who joined in THIS particular slot.
+        Used for progress calculation: current slot members / required members
+        """
+        try:
+            from ..tree.model import TreePlacement
+            
+            visited = set()
+            
+            def count_recursive(parent_oid, depth=0) -> int:
+                # Prevent infinite loop
+                if depth > 20:
+                    return 0
+                
+                parent_str = str(parent_oid)
+                if parent_str in visited:
+                    return 0
+                visited.add(parent_str)
+                
+                # Get direct children for THIS specific slot
+                children = TreePlacement.objects(
+                    program='matrix',
+                    upline_id=parent_oid,
+                    slot_no=slot_no,
+                    is_active=True
+                )
+                
+                count = children.count()
+                
+                # Recursively count children's children in same slot
+                for child in children:
+                    count += count_recursive(child.user_id, depth + 1)
+                
+                return count
+            
+            # Start counting from root user's children in this slot
+            total = count_recursive(user_oid)
+            return total
+            
+        except Exception as e:
+            print(f"Error counting slot {slot_no} members: {e}")
             return 0
     
     def _get_matrix_team_members(self, tree) -> List[Dict[str, Any]]:

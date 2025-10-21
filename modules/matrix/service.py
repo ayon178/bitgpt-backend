@@ -203,11 +203,13 @@ class MatrixService:
             
             # 11. TREE PLACEMENT INTEGRATION - PROJECT_DOCUMENTATION.md Section 5
             # "Matrix Program (Required second) - Cannot join Global without Matrix"
-            # Create Matrix tree placement for the user
+            # Create Matrix tree placement for the user (CRITICAL FOR DREAM MATRIX API)
             tree_placement_result = None
             try:
                 from modules.tree.service import TreeService
                 tree_service = TreeService()
+                
+                print(f"🔍 Creating TreePlacement record for Matrix user {user_id} under {referrer_id}")
                 
                 # Place user in matrix tree under their referrer
                 matrix_placement = tree_service.place_user_in_tree(
@@ -219,14 +221,16 @@ class MatrixService:
                 
                 if matrix_placement:
                     tree_placement_result = {"success": True, "message": "Matrix tree placement created"}
-                    print(f"✅ Matrix tree placement created for user {user_id} under {referrer_id}")
+                    print(f"✅ Matrix TreePlacement created successfully for user {user_id} under {referrer_id}")
                 else:
                     tree_placement_result = {"success": False, "message": "Matrix tree placement failed"}
-                    print(f"⚠️ Matrix tree placement failed for user {user_id}")
+                    print(f"⚠️ Matrix TreePlacement creation returned False for user {user_id}")
                     
             except Exception as e:
                 tree_placement_result = {"success": False, "error": str(e)}
-                print(f"Error in matrix tree placement: {e}")
+                print(f"❌ Error creating Matrix TreePlacement: {e}")
+                import traceback
+                traceback.print_exc()
                 # Don't fail matrix join if tree placement fails
             
             return {

@@ -836,15 +836,19 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             
             # Update the new user's rank
             user_rank_result = rank_service.update_user_rank(str(user.id))
-            if user_rank_result["success"]:
-                print(f"✅ Updated rank for new user {user.uid}: {user_rank_result['new_rank']['name']}")
+            if user_rank_result.get("success"):
+                new_rank = user_rank_result.get('new_rank', {})
+                rank_name = new_rank.get('name', 'Unknown') if isinstance(new_rank, dict) else 'Unknown'
+                print(f"✅ Updated rank for new user {user.uid}: {rank_name}")
             else:
                 print(f"⚠️ Failed to update rank for new user: {user_rank_result.get('error', 'Unknown error')}")
                 
             # Update the referrer's rank
             referrer_rank_result = rank_service.update_user_rank(str(upline_user.id))
-            if referrer_rank_result["success"]:
-                print(f"✅ Updated rank for referrer {upline_user.uid}: {referrer_rank_result['new_rank']['name']}")
+            if referrer_rank_result.get("success"):
+                new_rank = referrer_rank_result.get('new_rank', {})
+                rank_name = new_rank.get('name', 'Unknown') if isinstance(new_rank, dict) else 'Unknown'
+                print(f"✅ Updated rank for referrer {upline_user.uid}: {rank_name}")
             else:
                 print(f"⚠️ Failed to update rank for referrer: {referrer_rank_result.get('error', 'Unknown error')}")
                 
@@ -1038,15 +1042,19 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 
                 # Update the new user's rank
                 user_rank_result = rank_service.update_user_rank(str(user.id))
-                if user_rank_result["success"]:
-                    print(f"✅ Updated rank for new user {user.uid}: {user_rank_result['new_rank']['name']}")
+                if user_rank_result.get("success"):
+                    new_rank = user_rank_result.get('new_rank', {})
+                    rank_name = new_rank.get('name', 'Unknown') if isinstance(new_rank, dict) else 'Unknown'
+                    print(f"✅ Updated rank for new user {user.uid}: {rank_name}")
                 else:
                     print(f"⚠️ Failed to update rank for new user: {user_rank_result.get('error', 'Unknown error')}")
                     
                 # Update the referrer's rank
                 referrer_rank_result = rank_service.update_user_rank(str(upline_user.id))
-                if referrer_rank_result["success"]:
-                    print(f"✅ Updated rank for referrer {upline_user.uid}: {referrer_rank_result['new_rank']['name']}")
+                if referrer_rank_result.get("success"):
+                    new_rank = referrer_rank_result.get('new_rank', {})
+                    rank_name = new_rank.get('name', 'Unknown') if isinstance(new_rank, dict) else 'Unknown'
+                    print(f"✅ Updated rank for referrer {upline_user.uid}: {rank_name}")
                 else:
                     print(f"⚠️ Failed to update rank for referrer: {referrer_rank_result.get('error', 'Unknown error')}")
                     
