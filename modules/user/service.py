@@ -829,6 +829,29 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             print(f"⚠️ Failed to update partners_count for referrer: {str(e)}")
             pass
         
+        # Update user's rank based on slot activations
+        try:
+            from ..rank.service import RankService
+            rank_service = RankService()
+            
+            # Update the new user's rank
+            user_rank_result = rank_service.update_user_rank(str(user.id))
+            if user_rank_result["success"]:
+                print(f"✅ Updated rank for new user {user.uid}: {user_rank_result['new_rank']['name']}")
+            else:
+                print(f"⚠️ Failed to update rank for new user: {user_rank_result.get('error', 'Unknown error')}")
+                
+            # Update the referrer's rank
+            referrer_rank_result = rank_service.update_user_rank(str(upline_user.id))
+            if referrer_rank_result["success"]:
+                print(f"✅ Updated rank for referrer {upline_user.uid}: {referrer_rank_result['new_rank']['name']}")
+            else:
+                print(f"⚠️ Failed to update rank for referrer: {referrer_rank_result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            print(f"⚠️ Failed to update ranks: {str(e)}")
+            pass
+        
         # Generate access token
         try:
             token_obj = authentication_service.create_access_token(data={"user_id": str(user.id)})
@@ -1007,6 +1030,29 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             )
             
             print(f"✅ Updated partners_count for referrer {upline_user.uid}: {total_direct_partners}")
+            
+            # Update user's rank based on slot activations
+            try:
+                from ..rank.service import RankService
+                rank_service = RankService()
+                
+                # Update the new user's rank
+                user_rank_result = rank_service.update_user_rank(str(user.id))
+                if user_rank_result["success"]:
+                    print(f"✅ Updated rank for new user {user.uid}: {user_rank_result['new_rank']['name']}")
+                else:
+                    print(f"⚠️ Failed to update rank for new user: {user_rank_result.get('error', 'Unknown error')}")
+                    
+                # Update the referrer's rank
+                referrer_rank_result = rank_service.update_user_rank(str(upline_user.id))
+                if referrer_rank_result["success"]:
+                    print(f"✅ Updated rank for referrer {upline_user.uid}: {referrer_rank_result['new_rank']['name']}")
+                else:
+                    print(f"⚠️ Failed to update rank for referrer: {referrer_rank_result.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                print(f"⚠️ Failed to update ranks: {str(e)}")
+                pass
             
             # Royal Captain / President counters on join (Matrix+Global for Royal Captain; direct invites for President)
             try:

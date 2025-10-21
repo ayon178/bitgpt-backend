@@ -302,6 +302,45 @@ class MatrixService:
                 completed_at=datetime.utcnow()
             )
             activation.save()
+            
+            # Create SlotActivation record for rank system
+            try:
+                from ..slot.model import SlotActivation
+                import random
+                import string
+                
+                # Generate unique tx_hash if not provided or empty
+                unique_tx_hash = tx_hash
+                if not unique_tx_hash or unique_tx_hash == "tx":
+                    unique_tx_hash = f"matrix_{user_id}_{slot_no}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}_{''.join(random.choices(string.ascii_lowercase+string.digits, k=6))}"
+                
+                print(f"🔍 Creating SlotActivation record for user {user_id}, slot {slot_no}, tx_hash: {unique_tx_hash}")
+                
+                slot_activation = SlotActivation(
+                    user_id=ObjectId(user_id),
+                    program='matrix',
+                    slot_no=slot_no,
+                    slot_name=slot_name,
+                    activation_type=activation_type,
+                    upgrade_source='auto' if activation_type == 'initial' else 'manual',
+                    status='completed',
+                    amount_paid=amount,
+                    currency='USDT',
+                    tx_hash=unique_tx_hash,
+                    activated_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow()
+                )
+                
+                print(f"🔍 SlotActivation object created, validating...")
+                slot_activation.validate()
+                print(f"🔍 SlotActivation validation passed, saving...")
+                slot_activation.save()
+                print(f"✅ SlotActivation record created for Matrix slot {slot_no} with tx_hash: {unique_tx_hash}")
+            except Exception as e:
+                print(f"⚠️ Failed to create SlotActivation record: {str(e)}")
+                import traceback
+                print(f"⚠️ Full error traceback: {traceback.format_exc()}")
+            
             return activation
         except Exception as e:
             raise ValueError(f"Failed to create matrix activation: {str(e)}")
