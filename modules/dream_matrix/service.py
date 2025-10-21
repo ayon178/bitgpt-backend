@@ -10,16 +10,18 @@ class DreamMatrixService:
     """Dream Matrix Business Logic Service"""
 
     def get_dream_matrix_earnings(self, user_id: str, slot_no: int = None, recycle_no: int = None) -> Dict[str, Any]:
-        """Return slot-wise Dream Matrix data:
-        - If slot_no is provided, return only that specific slot's data
-        - If slot_no is None, return all slots (1..15)
-        - For each Matrix slot:
-          - Include slot details (name/value)
-          - If the root user has upgraded up to that slot, include tree 'users' list
-            with only the root and downline users who have that slot upgraded.
-          - If not, include empty 'users'.
+        """
+        Return Dream Matrix tree overview with nested structure similar to Binary:
+        - tree: nested 3x3 matrix structure with directDownline arrays
+        - slots: 1..15 slot catalog with name/value and completion/progress info
         """
         try:
+                from ..tree.model import TreePlacement
+                from ..slot.model import SlotActivation, SlotCatalog
+                from ..user.model import User
+                
+                print(f"Getting Dream Matrix earnings for user: {user_id}")
+                
                 # Convert user_id to ObjectId
                 try:
                     user_oid = ObjectId(user_id)
@@ -30,85 +32,247 @@ class DreamMatrixService:
                 user_info = User.objects(id=user_oid).first()
                 if not user_info:
                     return {"success": False, "error": "User not found"}
-                # Slot catalog and limits
+                
+                # Build nested downline tree nodes (limited to 3 levels: 0, 1, 2)
+                # For 3x3 matrix: Level 0: 1, Level 1: 3, Level 2: 9 = 13 total
+                root_node, depth, total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3)
+                
+                # Calculate ACTUAL total team members (ALL levels, not just 3)
+                actual_total_team_members = self._count_all_matrix_team_members(user_oid)
+                
+                # Member requirements for each slot (from PROJECT_DOCUMENTATION.md)
+                # Matrix follows 3^Level pattern: 3, 9, 27, 81, 243
+                slot_member_requirements = {
+                    1: 3,      # Level 1
+                    2: 9,      # Level 2
+                    3: 27,     # Level 3
+                    4: 81,     # Level 4
+                    5: 243,    # Level 5
+                    6: 729,    # Level 6 (extrapolated)
+                    7: 2187,   # Level 7
+                    8: 6561,   # Level 8
+                    9: 19683,  # Level 9
+                    10: 59049, # Level 10
+                    11: 177147, # Level 11
+                    12: 531441, # Level 12
+                    13: 1594323, # Level 13
+                    14: 4782969, # Level 14
+                    15: 14348907 # Level 15
+                }
+                
+                # Gather slot catalog 1..15 for matrix
                 catalogs = SlotCatalog.objects(program='matrix').order_by('slot_no')
                 catalog_by_slot = {c.slot_no: c for c in catalogs}
-                max_catalog_slot = max(catalog_by_slot.keys()) if catalog_by_slot else 15
-                target_max_slot = max(15, max_catalog_slot)
-
-                # Root user's current (max) completed matrix slot
-                root_current_slot = self._get_user_max_matrix_slot(user_oid)
-
-                user_display_id = str(user_info.uid) if user_info and user_info.uid and user_info.uid != "ROOT" else str(user_oid)
-
-                matrix_tree_data = []
-
-                # Determine which slots to return
-                if slot_no is not None:
-                    # Return only specific slot
-                    slot_range = [slot_no]
-                else:
-                    # Return all slots
-                    slot_range = range(1, target_max_slot + 1)
-
-                # Build slot-wise items
-                for s in slot_range:
-                    catalog = catalog_by_slot.get(s)
-                    slot_name = catalog.name if catalog else f"Slot {s}"
-                    price = float(catalog.price) if catalog and catalog.price is not None else 0.0
-
-                    # Determine completion for root
-                    is_completed = s <= root_current_slot
-
-                    # Users list only if root has this slot - GET USERS FOR THIS SPECIFIC SLOT
-                    users_list: List[Dict[str, Any]] = []
+                max_slot_no = max(catalog_by_slot.keys()) if catalog_by_slot else 15
+                target_max_slot = max(15, max_slot_no)
+                
+                # Activated/completed slots for this user
+                activated = SlotActivation.objects(user_id=user_oid, program='matrix', status='completed')
+                completed_slots = {a.slot_no for a in activated}
+                
+                # Determine which slots are actually completed based on member count
+                member_completed_slots = set()
+                for slot_no in range(1, target_max_slot + 1):
+                    required_members = slot_member_requirements.get(slot_no, 0)
+                    if actual_total_team_members >= required_members:
+                        member_completed_slots.add(slot_no)
+                
+                # Combine both: slot is completed if either activated OR member requirement met
+                all_completed_slots = completed_slots.union(member_completed_slots)
+                
+                # Find highest completed slot
+                highest_completed_slot = max(all_completed_slots) if all_completed_slots else 0
+                
+                # Next slot for manual upgrade
+                next_manual_upgrade_slot = highest_completed_slot + 1 if highest_completed_slot < target_max_slot else None
+                
+                # Build slots summary array
+                slots_summary = []
+                for slot_no in range(1, target_max_slot + 1):
+                    catalog = catalog_by_slot.get(slot_no)
+                    slot_name = catalog.name if catalog else f"Slot {slot_no}"
+                    slot_value = float(catalog.price) if catalog and catalog.price is not None else 0.0
+                    
+                    # Check if slot is completed
+                    is_completed = slot_no in all_completed_slots
+                    
+                    # Check if this is the slot available for manual upgrade
+                    is_manual_upgrade = (slot_no == next_manual_upgrade_slot)
+                    
+                    # Calculate progress percentage
+                    required_members = slot_member_requirements.get(slot_no, 0)
                     if is_completed:
-                        # Add root user
-                        users_list.append({"id": 0, "type": "self", "userId": user_display_id})
-                        
-                        # Get downline users from TreePlacement for THIS SPECIFIC SLOT
-                        slot_downline_ids = self._get_downline_user_ids_for_slot(user_oid, s)
-                        
-                        idx = 1
-                        # Include all users in this slot's tree
-                        for did in slot_downline_ids:
-                            # Resolve uid
-                            try:
-                                du = User.objects(id=did).only('uid').first()
-                                duid = str(du.uid) if du and du.uid else str(did)
-                            except Exception:
-                                duid = str(did)
-                            users_list.append({"id": idx, "type": "downLine", "userId": duid})
-                            idx += 1
-                        
-                        # Optional cap to 39 to match 3x matrix tree size
-                        if len(users_list) > 39:
-                            users_list = users_list[:39]
-
-                    matrix_tree_data.append({
-                        "id": s,
-                        "price": price,
-                        "userId": user_display_id,
-                        "recycle": self._get_recycle_count(user_oid, s),
+                        progress_percent = 100
+                    elif slot_no == next_manual_upgrade_slot:
+                        if required_members > 0:
+                            progress_percent = int(min(100, (actual_total_team_members / required_members) * 100))
+                        else:
+                            progress_percent = 0
+                    else:
+                        progress_percent = 0
+                    
+                    slots_summary.append({
+                        "slot_no": slot_no,
+                        "slot_name": slot_name,
+                        "slot_value": slot_value,
                         "isCompleted": is_completed,
-                        "isProcess": False,
-                        "isAutoUpgrade": False,
-                        "isManualUpgrade": False,
-                        "processPercent": 0,
-                        "users": users_list
+                        "isManualUpgrade": is_manual_upgrade,
+                        "progressPercent": progress_percent
                     })
-
+                
+                # Build result with nested tree structure
                 result = {
-                    "matrixTreeData": matrix_tree_data,
-                    "totalSlots": len(matrix_tree_data),
+                    "tree": {
+                        "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
+                        "totalMembers": max(0, total_nodes_count - 1),  # Exclude the root user
+                        "levels": depth,
+                        "nodes": [root_node]  # Root node with nested directDownline structure
+                    },
+                    "slots": slots_summary,
+                    "totalSlots": len(slots_summary),
                     "user_id": str(user_id)
                 }
                 
+                print(f"Dream Matrix tree overview generated: nodes={total_nodes_count}, slots={len(slots_summary)}")
                 return {"success": True, "data": result}
                 
         except Exception as e:
+            print(f"Error in get_dream_matrix_earnings: {e}")
             return {"success": False, "error": str(e)}
 
+    def _build_nested_matrix_tree_limited(self, user_oid, max_levels: int = 3) -> (Dict[str, Any], int, int):
+        """
+        Build a nested tree structure with directDownline arrays for matrix program.
+        Limited to max_levels (default 3: level 0, 1, 2).
+        For 3x3 matrix: Level 0: 1, Level 1: 3, Level 2: 9 = 13 total maximum
+        Returns (root_node, max_depth, total_count).
+        Each node has: id, type, userId, level, position, directDownline (array of child nodes).
+        """
+        try:
+            from ..tree.model import TreePlacement
+            from ..user.model import User
+            
+            # Helper to get display id
+            def display_id(oid) -> str:
+                try:
+                    u = User.objects(id=oid).only('uid').first()
+                    return str(u.uid) if u and u.uid else str(oid)
+                except Exception:
+                    return str(oid)
+            
+            # Counter for node IDs
+            node_id_counter = [0]
+            total_count = [0]
+            
+            # Helper to build node recursively with level limit
+            def build_node(parent_oid, level: int, position: str) -> Dict[str, Any]:
+                # Stop if we've exceeded max levels
+                if level >= max_levels:
+                    return None
+                
+                # Increment total count
+                total_count[0] += 1
+                
+                # Get current node ID and increment counter
+                current_id = node_id_counter[0]
+                node_id_counter[0] += 1
+                
+                # Determine node type
+                node_type = "self" if level == 0 else "downLine"
+                
+                # Create the node
+                node = {
+                    "id": current_id,
+                    "type": node_type,
+                    "userId": display_id(parent_oid),
+                    "level": level,
+                    "position": position
+                }
+                
+                # Only get children if we're not at the last level
+                if level < max_levels - 1:
+                    # Get direct children from TreePlacement for matrix program
+                    # Matrix has 3 positions per level (3x3 structure)
+                    children = TreePlacement.objects(
+                        program='matrix',
+                        upline_id=parent_oid
+                    ).order_by('created_at').limit(3)
+                    
+                    # Build directDownline array
+                    direct_downline = []
+                    
+                    # Position names for matrix (3 positions)
+                    positions = ['left', 'middle', 'right']
+                    
+                    # Add children (max 3 for matrix)
+                    for idx, child in enumerate(children):
+                        child_position = positions[idx] if idx < len(positions) else f"pos{idx}"
+                        child_node = build_node(
+                            child.user_id,
+                            level + 1,
+                            child_position
+                        )
+                        if child_node:
+                            direct_downline.append(child_node)
+                    
+                    # Add directDownline array to node if there are children
+                    if direct_downline:
+                        node["directDownline"] = direct_downline
+                
+                return node
+            
+            # Start building from root
+            root_node = build_node(user_oid, 0, "root")
+            
+            # Calculate max depth by traversing the tree
+            def calculate_depth(node: Dict[str, Any]) -> int:
+                if not node or "directDownline" not in node or not node["directDownline"]:
+                    return node.get("level", 0) if node else 0
+                return max(calculate_depth(child) for child in node["directDownline"])
+            
+            max_depth = calculate_depth(root_node) if root_node else 0
+            
+            return root_node, max_depth, total_count[0]
+            
+        except Exception as e:
+            print(f"Error building nested matrix tree: {e}")
+            # Return empty root node
+            return {
+                "id": 0,
+                "type": "self",
+                "userId": str(user_oid),
+                "level": 0,
+                "position": "root"
+            }, 0, 1
+    
+    def _count_all_matrix_team_members(self, user_oid) -> int:
+        """Count ALL matrix team members recursively (all levels)"""
+        try:
+            from ..tree.model import TreePlacement
+            
+            def count_recursive(parent_oid) -> int:
+                # Get direct children
+                children = TreePlacement.objects(
+                    program='matrix',
+                    upline_id=parent_oid
+                )
+                
+                count = children.count()
+                
+                # Recursively count children's children
+                for child in children:
+                    count += count_recursive(child.user_id)
+                
+                return count
+            
+            # Start counting from root user's children
+            total = count_recursive(user_oid)
+            return total
+            
+        except Exception as e:
+            print(f"Error counting matrix team members: {e}")
+            return 0
+    
     def _get_matrix_team_members(self, tree) -> List[Dict[str, Any]]:
         """Get team members for matrix tree display"""
         try:
