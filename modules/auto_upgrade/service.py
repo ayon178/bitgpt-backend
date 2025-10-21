@@ -275,17 +275,17 @@ class AutoUpgradeService:
     def _calculate_binary_partner_earnings(self, user_id: str) -> Decimal:
         """Calculate earnings from first 2 partners in Binary"""
         try:
-            # Get user's direct partners
+            # Get user's direct partners (first 2 only)
             tree_placements = TreePlacement.objects(
                 parent_id=ObjectId(user_id),
                 program='binary',
                 is_active=True
-            ).limit(2)
+            ).order_by('created_at').limit(2)
             
             total_earnings = Decimal('0')
             for placement in tree_placements:
-                # Calculate earnings from this partner
-                partner_earnings = self._get_partner_earnings(str(placement.user_id), 'binary')
+                # Calculate earnings from this partner's slot activations
+                partner_earnings = self._get_binary_partner_slot_earnings(str(placement.user_id))
                 total_earnings += partner_earnings
             
             return total_earnings
@@ -327,6 +327,321 @@ class AutoUpgradeService:
         """Get earnings from a specific partner"""
         # This is simplified - in real implementation, you'd calculate actual earnings
         return Decimal('5.0')  # Mock earning
+    
+    def _get_binary_partner_slot_earnings(self, partner_id: str) -> Decimal:
+        """Calculate earnings from a partner's slot activations in Binary"""
+        try:
+            from ..slot.model import SlotActivation
+            
+            # Get partner's completed slot activations
+            completed_activations = SlotActivation.objects(
+                user_id=ObjectId(partner_id),
+                program='binary',
+                status='completed'
+            ).order_by('slot_no')
+            
+            total_earnings = Decimal('0')
+            
+            # Calculate earnings from each slot activation
+            for activation in completed_activations:
+                # 30% of slot value goes to upline (based on documentation)
+                slot_value = activation.slot_value or Decimal('0')
+                upline_earnings = slot_value * Decimal('0.30')  # 30%
+                total_earnings += upline_earnings
+            
+            return total_earnings
+            
+        except Exception as e:
+            print(f"Error calculating partner slot earnings: {e}")
+            return Decimal('0')
+    
+    def process_binary_slot_activation(self, user_id: str, slot_no: int, slot_value: Decimal) -> Dict[str, Any]:
+        """
+        Process binary slot activation and handle auto upgrade logic
+        
+        Key Logic:
+        1. Slot 1: Direct upline gets full fee
+        2. Slot 2+: Check if tree upline's 1st/2nd level user activated
+        3. If yes: Fund goes to tree upline's reserve for auto upgrade
+        4. If tree upline hasn't activated that slot: Fund goes to mother account
+        5. Auto upgrade when reserve reaches next slot cost
+        """
+        try:
+            from ..tree.model import TreePlacement
+            from ..slot.model import SlotActivation
+            from ..wallet.model import ReserveLedger
+            
+            # Get user's placement for this slot
+            user_placement = TreePlacement.objects(
+                user_id=ObjectId(user_id),
+                program='binary',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            if not user_placement:
+                return {"success": False, "error": "User placement not found for this slot"}
+            
+            # Determine fund distribution based on slot number
+            if slot_no == 1:
+                # Slot 1: Direct upline gets full fee
+                return self._process_slot_1_activation(user_id, slot_value)
+            else:
+                # Slot 2+: Check tree upline logic
+                return self._process_slot_2plus_activation(user_id, slot_no, slot_value, user_placement)
+                
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _process_slot_1_activation(self, user_id: str, slot_value: Decimal) -> Dict[str, Any]:
+        """Process Slot 1 activation - direct upline gets full fee"""
+        try:
+            from ..tree.model import TreePlacement
+            from ..wallet.model import WalletLedger
+            from ..slot.model import SlotActivation
+            
+            # Get user's direct upline (parent_id)
+            user_placement = TreePlacement.objects(
+                user_id=ObjectId(user_id),
+                program='binary',
+                slot_no=1,
+                is_active=True
+            ).first()
+            
+            if user_placement and user_placement.parent_id:
+                # Direct upline gets full fee
+                upline_id = user_placement.parent_id
+                
+                # Credit upline's wallet
+                WalletLedger(
+                    user_id=upline_id,
+                    type='credit',
+                    amount=slot_value,
+                    currency='BNB',
+                    reason='binary_slot_1_commission',
+                    balance_after=Decimal('0'),  # Will be calculated separately
+                    tx_hash=f"auto_slot_1_{user_id}_{int(datetime.utcnow().timestamp())}",
+                    created_at=datetime.utcnow()
+                ).save()
+                
+                # Create SlotActivation record for automatic activation
+                SlotActivation(
+                    user_id=ObjectId(user_id),
+                    program='binary',
+                    slot_no=1,
+                    slot_name='Explorer',
+                    slot_value=slot_value,
+                    currency='BNB',
+                    status='completed',
+                    activation_type='automatic',  # Mark as automatic activation
+                    activated_at=datetime.utcnow(),
+                    created_at=datetime.utcnow()
+                ).save()
+                
+                return {
+                    "success": True,
+                    "fund_destination": "direct_upline",
+                    "upline_id": str(upline_id),
+                    "amount": float(slot_value),
+                    "message": "Slot 1 commission paid to direct upline and slot activated"
+                }
+            
+            return {"success": False, "error": "No direct upline found"}
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _process_slot_2plus_activation(self, user_id: str, slot_no: int, slot_value: Decimal, user_placement) -> Dict[str, Any]:
+        """Process Slot 2+ activation - tree upline reserve logic"""
+        try:
+            from ..tree.model import TreePlacement
+            from ..wallet.model import ReserveLedger
+            from ..slot.model import SlotActivation
+            
+            # Find tree upline for this slot (the user who should get the reserve)
+            tree_upline = self._find_tree_upline_for_slot(user_placement, slot_no)
+            
+            if not tree_upline:
+                return {"success": False, "error": "Tree upline not found"}
+            
+            # Check if tree upline has activated this slot
+            tree_upline_activation = SlotActivation.objects(
+                user_id=tree_upline,
+                program='binary',
+                slot_no=slot_no,
+                status='completed'
+            ).first()
+            
+            if tree_upline_activation:
+                # Tree upline has this slot activated - fund goes to their reserve
+                reserve_amount = slot_value * Decimal('0.30')  # 30% to reserve
+                
+                # Add to tree upline's reserve
+                ReserveLedger(
+                    user_id=tree_upline,
+                    program='binary',
+                    slot_no=slot_no + 1,  # Reserve for next slot
+                    amount=reserve_amount,
+                    direction='credit',
+                    source='tree_upline_reserve',
+                    balance_after=Decimal('0'),  # Will be calculated separately
+                    created_at=datetime.utcnow()
+                ).save()
+                
+                # Create SlotActivation record for automatic activation
+                slot_names = ['Explorer', 'Contributor', 'Supporter', 'Promoter', 'Developer', 'Manager', 'Director', 'Executive', 'Leader', 'Master', 'Expert', 'Professional', 'Specialist', 'Consultant', 'Advisor', 'Partner']
+                slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
+                
+                SlotActivation(
+                    user_id=ObjectId(user_id),
+                    program='binary',
+                    slot_no=slot_no,
+                    slot_name=slot_name,
+                    slot_value=slot_value,
+                    currency='BNB',
+                    status='completed',
+                    activation_type='automatic',  # Mark as automatic activation
+                    activated_at=datetime.utcnow(),
+                    created_at=datetime.utcnow()
+                ).save()
+                
+                # Check if auto upgrade is possible
+                auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(tree_upline, slot_no + 1)
+                
+                return {
+                    "success": True,
+                    "fund_destination": "tree_upline_reserve",
+                    "tree_upline_id": str(tree_upline),
+                    "reserve_amount": float(reserve_amount),
+                    "next_slot": slot_no + 1,
+                    "auto_upgrade_triggered": auto_upgrade_result.get("auto_upgrade_triggered", False),
+                    "message": f"Fund added to tree upline reserve for slot {slot_no + 1} and slot activated"
+                }
+            else:
+                # Tree upline hasn't activated this slot - fund goes to mother account
+                return self._send_to_mother_account(slot_value, slot_no)
+                
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def _find_tree_upline_for_slot(self, user_placement, slot_no: int) -> ObjectId:
+        """
+        Find the tree upline who should receive the reserve for this slot
+        
+        Logic: Go up the tree to find the user who should have this slot activated
+        """
+        try:
+            current_user = user_placement.upline_id
+            
+            # Go up the tree until we find someone who should have this slot
+            while current_user:
+                # Check if current user should have this slot based on their level
+                current_placement = TreePlacement.objects(
+                    user_id=current_user,
+                    program='binary',
+                    slot_no=1,  # Check their base placement
+                    is_active=True
+                ).first()
+                
+                if current_placement:
+                    # This user should be the tree upline for this slot
+                    return current_user
+                
+                # Move to next upline
+                current_user = self._get_next_upline(current_user)
+            
+            return None
+            
+        except Exception:
+            return None
+    
+    def _get_next_upline(self, user_id: ObjectId) -> ObjectId:
+        """Get the next upline in the tree"""
+        try:
+            placement = TreePlacement.objects(
+                user_id=user_id,
+                program='binary',
+                slot_no=1,
+                is_active=True
+            ).first()
+            
+            if placement:
+                return placement.upline_id
+            
+            return None
+            
+        except Exception:
+            return None
+    
+    def _check_binary_auto_upgrade_from_reserve(self, user_id: ObjectId, target_slot_no: int) -> Dict[str, Any]:
+        """Check if auto upgrade is possible from reserve funds"""
+        try:
+            from ..wallet.model import ReserveLedger
+            
+            # Calculate total reserve for this user and slot
+            reserve_entries = ReserveLedger.objects(
+                user_id=user_id,
+                program='binary',
+                slot_no=target_slot_no,
+                direction='credit'
+            )
+            
+            total_reserve = sum(entry.amount for entry in reserve_entries)
+            
+            # Get target slot cost
+            target_slot_cost = self._get_binary_slot_cost(target_slot_no)
+            
+            if total_reserve >= target_slot_cost:
+                # Auto upgrade is possible
+                auto_upgrade_result = self.process_binary_auto_upgrade(str(user_id))
+                return {
+                    "auto_upgrade_triggered": True,
+                    "total_reserve": float(total_reserve),
+                    "target_slot_cost": float(target_slot_cost),
+                    "auto_upgrade_result": auto_upgrade_result
+                }
+            else:
+                return {
+                    "auto_upgrade_triggered": False,
+                    "total_reserve": float(total_reserve),
+                    "target_slot_cost": float(target_slot_cost),
+                    "message": "Reserve insufficient for auto upgrade"
+                }
+                
+        except Exception as e:
+            return {
+                "auto_upgrade_triggered": False,
+                "error": str(e)
+            }
+    
+    def _send_to_mother_account(self, amount: Decimal, slot_no: int) -> Dict[str, Any]:
+        """Send fund to mother account when tree upline hasn't activated slot"""
+        try:
+            # Get mother account ID (configured in settings)
+            # For now, using a placeholder
+            mother_account_id = ObjectId("000000000000000000000000")  # Replace with actual mother ID
+            
+            # Send to mother account
+            from ..wallet.model import WalletLedger
+            WalletLedger(
+                user_id=mother_account_id,
+                type='credit',
+                amount=amount,
+                currency='BNB',
+                reason=f'binary_mother_account_slot_{slot_no}',
+                created_at=datetime.utcnow()
+            ).save()
+            
+            return {
+                "success": True,
+                "fund_destination": "mother_account",
+                "mother_account_id": str(mother_account_id),
+                "amount": float(amount),
+                "message": f"Fund sent to mother account for slot {slot_no}"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
     def _process_upgrade_queue_entry(self, queue_entry: AutoUpgradeQueue) -> Dict[str, Any]:
         """Process a single upgrade queue entry"""

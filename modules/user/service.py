@@ -634,6 +634,63 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             pass
 
         # Auto-activate first two binary slots (Explorer=1, Contributor=2) and distribute funds
+        try:
+            # Import TreeService for binary tree placement
+            from modules.tree.service import TreeService
+            from modules.auto_upgrade.service import AutoUpgradeService
+            from decimal import Decimal
+            
+            # Create binary tree placement for the new user
+            tree_service = TreeService()
+            
+            # Place user in binary tree under their referrer
+            binary_placement = tree_service.place_user_in_tree(
+                user_id=user.id,
+                referrer_id=ObjectId(upline_id),
+                program='binary',
+                slot_no=1  # First slot
+            )
+            
+            if binary_placement:
+                print(f"✅ Binary tree placement created for temp user {user.id} under {upline_id}")
+                
+                # 🚀 AUTOMATIC BINARY SLOT ACTIVATION
+                # When user joins, automatically activate Slot 1 and Slot 2
+                auto_upgrade_service = AutoUpgradeService()
+                
+                # Slot costs from PROJECT_DOCUMENTATION.md
+                slot_costs = [0.0022, 0.0044, 0.0088, 0.0176, 0.0352, 0.0704, 0.1408, 0.2816, 0.5632, 1.1264, 2.2528, 4.5056, 9.0112, 18.0224, 36.0448, 72.0896]
+                
+                # Activate Slot 1 (Explorer)
+                slot_1_result = auto_upgrade_service.process_binary_slot_activation(
+                    user_id=str(user.id),
+                    slot_no=1,
+                    slot_value=Decimal(str(slot_costs[0]))  # 0.0022 BNB
+                )
+                
+                if slot_1_result["success"]:
+                    print(f"✅ Slot 1 (Explorer) activated for temp user {user.id}")
+                else:
+                    print(f"⚠️ Slot 1 activation failed: {slot_1_result.get('error', 'Unknown error')}")
+                
+                # Activate Slot 2 (Contributor)
+                slot_2_result = auto_upgrade_service.process_binary_slot_activation(
+                    user_id=str(user.id),
+                    slot_no=2,
+                    slot_value=Decimal(str(slot_costs[1]))  # 0.0044 BNB
+                )
+                
+                if slot_2_result["success"]:
+                    print(f"✅ Slot 2 (Contributor) activated for temp user {user.id}")
+                else:
+                    print(f"⚠️ Slot 2 activation failed: {slot_2_result.get('error', 'Unknown error')}")
+                    
+            else:
+                print(f"⚠️ Binary tree placement failed for temp user {user.id}")
+                
+        except Exception as e:
+            print(f"Error in temp user binary tree placement and slot activation: {e}")
+            # Don't fail user creation if tree placement fails
         # so that referrer receives partner incentive and pools-summary reflects changes
         try:
             commission_service = CommissionService()
@@ -1593,6 +1650,8 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
         try:
             # Import TreeService for binary tree placement
             from modules.tree.service import TreeService
+            from modules.auto_upgrade.service import AutoUpgradeService
+            from decimal import Decimal
             
             # Create binary tree placement for the new user
             tree_service = TreeService()
@@ -1607,11 +1666,43 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             
             if binary_placement:
                 print(f"✅ Binary tree placement created for user {user.id} under {upline_id}")
+                
+                # 🚀 AUTOMATIC BINARY SLOT ACTIVATION
+                # When user joins, automatically activate Slot 1 and Slot 2
+                auto_upgrade_service = AutoUpgradeService()
+                
+                # Slot costs from PROJECT_DOCUMENTATION.md
+                slot_costs = [0.0022, 0.0044, 0.0088, 0.0176, 0.0352, 0.0704, 0.1408, 0.2816, 0.5632, 1.1264, 2.2528, 4.5056, 9.0112, 18.0224, 36.0448, 72.0896]
+                
+                # Activate Slot 1 (Explorer)
+                slot_1_result = auto_upgrade_service.process_binary_slot_activation(
+                    user_id=str(user.id),
+                    slot_no=1,
+                    slot_value=Decimal(str(slot_costs[0]))  # 0.0022 BNB
+                )
+                
+                if slot_1_result["success"]:
+                    print(f"✅ Slot 1 (Explorer) activated for user {user.id}")
+                else:
+                    print(f"⚠️ Slot 1 activation failed: {slot_1_result.get('error', 'Unknown error')}")
+                
+                # Activate Slot 2 (Contributor)
+                slot_2_result = auto_upgrade_service.process_binary_slot_activation(
+                    user_id=str(user.id),
+                    slot_no=2,
+                    slot_value=Decimal(str(slot_costs[1]))  # 0.0044 BNB
+                )
+                
+                if slot_2_result["success"]:
+                    print(f"✅ Slot 2 (Contributor) activated for user {user.id}")
+                else:
+                    print(f"⚠️ Slot 2 activation failed: {slot_2_result.get('error', 'Unknown error')}")
+                    
             else:
                 print(f"⚠️ Binary tree placement failed for user {user.id}")
                 
         except Exception as e:
-            print(f"Error in binary tree placement: {e}")
+            print(f"Error in binary tree placement and slot activation: {e}")
             # Don't fail user creation if tree placement fails
 
         return {

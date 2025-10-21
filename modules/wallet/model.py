@@ -17,20 +17,20 @@ class UserWallet(Document):
     }
 
 class ReserveLedger(Document):
-    """Track reserve fund movements"""
+    """Track reserve fund movements for auto upgrade"""
     user_id = ObjectIdField(required=True)
     program = StringField(choices=['binary', 'matrix', 'global'], required=True)
-    slot_no = IntField(required=True)
+    slot_no = IntField(required=True)  # Target slot for auto upgrade
     amount = DecimalField(required=True, precision=8)
     direction = StringField(choices=['credit', 'debit'], required=True)
-    source = StringField(choices=['income', 'manual', 'transfer'], required=True)
-    balance_after = DecimalField(required=True, precision=8)
-    tx_hash = StringField(required=True)
+    source = StringField(choices=['tree_upline_reserve', 'income', 'manual', 'transfer'], required=True)
+    balance_after = DecimalField(precision=8, default=0)  # Optional for auto upgrade
+    tx_hash = StringField()  # Optional for auto upgrade
     created_at = DateTimeField(default=datetime.utcnow)
     
     meta = {
         'collection': 'reserve_ledger',
-        'indexes': [('user_id', 'program'), 'tx_hash', ('program', 'slot_no')]
+        'indexes': [('user_id', 'program'), 'tx_hash', ('program', 'slot_no'), ('user_id', 'program', 'slot_no')]
     }
 
 class WalletLedger(Document):

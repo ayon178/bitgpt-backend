@@ -1292,6 +1292,33 @@ class BinaryService:
             # This gives maximum 7 users: 1 + 2 + 4 = 7
             root_node, depth, total_nodes_count = self._build_nested_binary_tree_limited(user_oid, max_levels=3)
             
+            # Calculate ACTUAL total team members (ALL levels, not just 3)
+            # This is needed for slot progress calculation
+            actual_total_team_members = self._count_all_team_members(user_oid)
+            
+            # Member requirements for each slot (from PROJECT_DOCUMENTATION.md)
+            # Slot 1: no requirement (auto-activated)
+            # Slot 2: 2 members, Slot 3: 4 members, Slot 4: 8 members, etc. (2^level pattern)
+            slot_member_requirements = {
+                1: 0,      # Explorer - no requirement
+                2: 2,      # Contributor - Level 1
+                3: 4,      # Subscriber - Level 2
+                4: 8,      # Dreamer - Level 3
+                5: 16,     # Planner - Level 4
+                6: 32,     # Challenger - Level 5
+                7: 64,     # Adventurer - Level 6
+                8: 128,    # Game-Shifter - Level 7
+                9: 256,    # Organizer - Level 8
+                10: 512,   # Leader - Level 9
+                11: 1024,  # Vanguard - Level 10
+                12: 2048,  # Center - Level 11
+                13: 4096,  # Climax - Level 12
+                14: 8192,  # Eternity - Level 13
+                15: 16384, # King - Level 14
+                16: 32768, # Commander - Level 15
+                17: 65536  # CEO - Level 16 (extrapolated)
+            }
+            
             # Gather slot catalog 1..17 for binary
             catalogs = SlotCatalog.objects(program='binary').order_by('slot_no')
             catalog_by_slot = {c.slot_no: c for c in catalogs}
@@ -1303,32 +1330,21 @@ class BinaryService:
             activated = SlotActivation.objects(user_id=user_oid, program='binary', status='completed')
             completed_slots = {a.slot_no for a in activated}
             
-            # Current binary status for next-slot progress
-            binary_status = BinaryAutoUpgrade.objects(user_id=user_oid).first()
-            # Prefer the greater of stored current slot and the highest completed activation
-            current_slot_no = 0
-            stored_current = 0
-            if binary_status and getattr(binary_status, 'current_slot_no', None) is not None:
-                try:
-                    stored_current = int(binary_status.current_slot_no or 0)
-                except Exception:
-                    stored_current = 0
-            highest_completed = max(completed_slots) if completed_slots else 0
-            current_slot_no = max(stored_current, highest_completed)
-            # Clamp within [0, target_max_slot]
-            if current_slot_no < 0:
-                current_slot_no = 0
-            if current_slot_no > target_max_slot:
-                current_slot_no = target_max_slot
-            partners_required = binary_status.partners_required if binary_status else 2
-            partners_available = binary_status.partners_available if binary_status else 0
-            next_slot_no = current_slot_no + 1 if current_slot_no + 1 <= target_max_slot else None
-            next_progress = 0
-            if next_slot_no:
-                if partners_required and partners_required > 0:
-                    next_progress = int(min(100, (partners_available / partners_required) * 100))
-                else:
-                    next_progress = 0
+            # Determine which slots are actually completed based on member count
+            member_completed_slots = set()
+            for slot_no in range(1, target_max_slot + 1):
+                required_members = slot_member_requirements.get(slot_no, 0)
+                if actual_total_team_members >= required_members:
+                    member_completed_slots.add(slot_no)
+            
+            # Combine both: slot is completed if either activated OR member requirement met
+            all_completed_slots = completed_slots.union(member_completed_slots)
+            
+            # Find highest completed slot
+            highest_completed_slot = max(all_completed_slots) if all_completed_slots else 0
+            
+            # Next slot for manual upgrade (slot after highest completed)
+            next_manual_upgrade_slot = highest_completed_slot + 1 if highest_completed_slot < target_max_slot else None
             
             # Build slots summary array
             slots_summary = []
@@ -1336,22 +1352,34 @@ class BinaryService:
                 catalog = catalog_by_slot.get(slot_no)
                 slot_name = catalog.name if catalog else f"Slot {slot_no}"
                 slot_value = float(catalog.price) if catalog and catalog.price is not None else 0.0
-                is_completed = slot_no in completed_slots or slot_no <= current_slot_no
-                # Progress logic:
-                # - Slots below current: 100
-                # - Current slot: remaining percent to next upgrade (100 - next_progress)
-                # - Others: 0
-                if slot_no < current_slot_no:
+                
+                # Check if slot is completed
+                is_completed = slot_no in all_completed_slots
+                
+                # Check if this is the slot available for manual upgrade
+                is_manual_upgrade = (slot_no == next_manual_upgrade_slot)
+                
+                # Calculate progress percentage
+                required_members = slot_member_requirements.get(slot_no, 0)
+                if is_completed:
+                    # Completed slots show 100%
                     progress_percent = 100
-                elif slot_no == current_slot_no:
-                    progress_percent = max(0, 100 - next_progress) if next_slot_no else 0
+                elif slot_no == next_manual_upgrade_slot:
+                    # Next slot shows progress toward completion
+                    if required_members > 0:
+                        progress_percent = int(min(100, (actual_total_team_members / required_members) * 100))
+                    else:
+                        progress_percent = 0
                 else:
+                    # Other slots show 0%
                     progress_percent = 0
+                
                 slots_summary.append({
                     "slot_no": slot_no,
                     "slot_name": slot_name,
                     "slot_value": slot_value,
                     "isCompleted": is_completed,
+                    "isManualUpgrade": is_manual_upgrade,
                     "progressPercent": progress_percent
                 })
             
@@ -1551,6 +1579,40 @@ class BinaryService:
                 "level": 0,
                 "position": "root"
             }, 0, 1
+
+    def _count_all_team_members(self, user_oid) -> int:
+        """
+        Count ALL team members under a user recursively (all levels)
+        Used for slot progress calculation based on member requirements
+        """
+        try:
+            from ..tree.model import TreePlacement
+            
+            def count_recursive(parent_id) -> int:
+                """Recursively count all descendants"""
+                # Get direct children under this user (using upline_id for tree structure)
+                children = TreePlacement.objects(
+                    program='binary',
+                    upline_id=parent_id,
+                    is_active=True
+                )
+                
+                # Count direct children
+                count = children.count()
+                
+                # Recursively count all descendants of each child
+                for child in children:
+                    count += count_recursive(child.user_id)
+                
+                return count
+            
+            # Count all team members recursively
+            total_count = count_recursive(user_oid)
+            return total_count
+            
+        except Exception as e:
+            print(f"Error counting team members: {e}")
+            return 0
 
     def _get_duel_tree_team_members(self, user_oid, slot_no: int) -> List[Dict[str, Any]]:
         """Get team members for duel tree display based on tree_placement structure"""
