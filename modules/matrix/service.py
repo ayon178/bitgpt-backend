@@ -626,22 +626,41 @@ class MatrixService:
             pass
     
     def _find_bfs_placement_position(self, matrix_tree: MatrixTree) -> Optional[Dict[str, int]]:
-        """Find first available position using BFS algorithm"""
+        """Find first available position using SWEEPOVER BFS algorithm.
+        
+        Sweepover Logic (Wave Placement):
+        - Level 1: Fill positions 0, 1, 2 sequentially (left → middle → right)
+        - Level 2: Fill in waves across all L1 parents:
+          Wave 1 (first child of each L1): pos 0, 3, 6
+          Wave 2 (second child of each L1): pos 1, 4, 7
+          Wave 3 (third child of each L1): pos 2, 5, 8
+        - Level 3: Fill in waves across all L2 parents (same pattern)
+        """
         try:
-            # Level 1: Check positions 0, 1, 2 (left, middle, right)
+            # Level 1: Check positions 0, 1, 2 (left, middle, right) - Sequential
             for pos in range(3):
                 if not any(node.level == 1 and node.position == pos for node in matrix_tree.nodes):
                     return {"level": 1, "position": pos}
             
-            # Level 2: Check positions 0-8 (3 under each L1 parent)
-            for pos in range(9):
-                if not any(node.level == 2 and node.position == pos for node in matrix_tree.nodes):
-                    return {"level": 2, "position": pos}
+            # Level 2: Check positions 0-8 using SWEEPOVER (wave across L1 parents)
+            # Wave 1: first child of each L1 parent (positions 0, 3, 6)
+            # Wave 2: second child of each L1 parent (positions 1, 4, 7)
+            # Wave 3: third child of each L1 parent (positions 2, 5, 8)
+            for child_index in range(3):  # 0, 1, 2 (first, second, third child)
+                for parent_index in range(3):  # 0, 1, 2 (L1 positions)
+                    pos = parent_index * 3 + child_index
+                    if not any(node.level == 2 and node.position == pos for node in matrix_tree.nodes):
+                        return {"level": 2, "position": pos}
             
-            # Level 3: Check positions 0-26 (3 under each L2 parent)
-            for pos in range(27):
-                if not any(node.level == 3 and node.position == pos for node in matrix_tree.nodes):
-                    return {"level": 3, "position": pos}
+            # Level 3: Check positions 0-26 using SWEEPOVER (wave across L2 parents)
+            # Wave 1: first child of each L2 parent (positions 0, 3, 6, 9, 12, 15, 18, 21, 24)
+            # Wave 2: second child of each L2 parent (positions 1, 4, 7, 10, 13, 16, 19, 22, 25)
+            # Wave 3: third child of each L2 parent (positions 2, 5, 8, 11, 14, 17, 20, 23, 26)
+            for child_index in range(3):  # 0, 1, 2 (first, second, third child)
+                for parent_index in range(9):  # 0-8 (L2 positions)
+                    pos = parent_index * 3 + child_index
+                    if not any(node.level == 3 and node.position == pos for node in matrix_tree.nodes):
+                        return {"level": 3, "position": pos}
             
             return None  # No available positions
             
@@ -2513,18 +2532,6 @@ class MatrixService:
         except Exception as e:
             return {"success": True, "integrated": True}
 
-    def integrate_with_jackpot_program(self, user_id: str) -> dict:
-        try:
-            # Always return success in tests; avoid DB lookups
-            if hasattr(self, '_process_jackpot_program_distribution'):
-                try:
-                    _ = self._process_jackpot_program_distribution(user_id, 0, 1)
-                except Exception:
-                    pass
-            return {"success": True, "integrated": True}
-        except Exception as e:
-            return {"success": True, "integrated": True}
-
     def integrate_with_leadership_stipend(self, user_id: str) -> dict:
         try:
             if hasattr(self, '_process_leadership_stipend_distribution'):
@@ -2536,29 +2543,29 @@ class MatrixService:
         except Exception as e:
             return {"success": True, "integrated": True}
 
-    def integrate_with_newcomer_growth_support(self, user_id: str):
-        """Integrate Matrix user with Newcomer Growth Support (test-friendly)."""
-        try:
-            if hasattr(self, '_process_ngs_instant_bonus'):
-                try:
-                    _ = self._process_ngs_instant_bonus(user_id)
-                except Exception:
-                    pass
-            return {"success": True, "integrated": True}
-        except Exception:
-            return {"success": True, "integrated": True}
-
     def integrate_with_mentorship_bonus(self, user_id: str):
-        """Integrate Matrix user with Mentorship Bonus (test-friendly)."""
+        """Integrate Matrix user with Mentorship Bonus."""
         try:
-            if hasattr(self, '_process_mentorship_bonus_distribution'):
-                try:
-                    _ = self._process_mentorship_bonus_distribution(user_id, {"direct_of_direct_commission": 0})
-                except Exception:
-                    pass
-            return {"success": True, "integrated": True}
-        except Exception:
-            return {"success": True, "integrated": True}
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Calculate Mentorship benefits
+            mentorship_benefits = self._calculate_mentorship_bonus_benefits(matrix_slot)
+            
+            # Process mentorship bonus distribution
+            self._process_mentorship_bonus_distribution(user_id, mentorship_benefits)
+            
+            return {
+                "success": True,
+                "integrated": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "mentorship_benefits": mentorship_benefits
+            }
+        except Exception as e:
+            print(f"Error integrating with Mentorship Bonus: {e}")
+            return {"success": False, "error": str(e)}
 
     # Legacy/performance helpers expected by tests
     def _traverse_matrix_tree(self, tree):
@@ -2828,16 +2835,18 @@ class MatrixService:
     def _get_binary_slots_activated(self, user_id: str):
         """Get number of Binary slots activated for a user."""
         try:
-            # This would integrate with Binary program
-            # For now, return 0 as placeholder
-            # In real implementation, this would query Binary program data
+            from ..slot.model import SlotActivation
             
-            # Placeholder: Check if user has Binary tree
-            # In actual implementation, this would be:
-            # binary_tree = BinaryTree.objects(user_id=ObjectId(user_id)).first()
-            # return binary_tree.activated_slots if binary_tree else 0
+            # Query SlotActivation to count active binary slots
+            active_slots_count = SlotActivation.objects(
+                user_id=ObjectId(user_id),
+                program='binary',
+                is_active=True,
+                status='completed'
+            ).count()
             
-            return 0  # Placeholder for now
+            print(f"Binary slots activated for user {user_id}: {active_slots_count}")
+            return active_slots_count
         except Exception as e:
             print(f"Error getting binary slots: {e}")
             return 0
@@ -3510,16 +3519,33 @@ class MatrixService:
             print(f"Error in automatic Leadership Stipend integration: {e}")
     
     def integrate_with_jackpot_program(self, user_id: str):
-        """Integrate Matrix user with Jackpot Program (test-friendly)."""
+        """Integrate Matrix user with Jackpot Program."""
         try:
-            if hasattr(self, '_process_jackpot_program_distribution'):
-                try:
-                    _ = self._process_jackpot_program_distribution(user_id, 0, 5)
-                except Exception:
-                    pass
-            return {"success": True, "integrated": True}
-        except Exception:
-            return {"success": True, "integrated": True}
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Calculate Jackpot contribution (2% of Matrix slot value)
+            jackpot_contribution = self._calculate_jackpot_program_contribution(matrix_slot)
+            
+            # Process jackpot distribution
+            distribution_result = self._process_jackpot_program_distribution(user_id, jackpot_contribution, matrix_slot)
+            
+            # Award free coupons for slots 5-16
+            coupon_result = self._award_jackpot_coupons(user_id, matrix_slot)
+            
+            return {
+                "success": True,
+                "integrated": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "jackpot_contribution": jackpot_contribution,
+                "distribution_result": distribution_result,
+                "coupon_result": coupon_result
+            }
+        except Exception as e:
+            print(f"Error integrating with Jackpot Program: {e}")
+            return {"success": False, "error": str(e)}
     
     def _check_jackpot_program_eligibility(self, matrix_slot: int):
         """Check if user is eligible for Jackpot Program."""
@@ -3830,16 +3856,34 @@ class MatrixService:
             print(f"Error in automatic Jackpot Program integration: {e}")
     
     def integrate_with_newcomer_growth_support(self, user_id: str):
-        """Integrate Matrix user with Newcomer Growth Support (test-friendly)."""
+        """Integrate Matrix user with Newcomer Growth Support."""
         try:
-            if hasattr(self, '_process_ngs_instant_bonus'):
-                try:
-                    _ = self._process_ngs_instant_bonus(user_id, {"instant_bonus": 0})
-                except Exception:
-                    pass
-            return {"success": True, "integrated": True}
-        except Exception:
-            return {"success": True, "integrated": True}
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Calculate NGS benefits
+            ngs_benefits = self._calculate_ngs_benefits(matrix_slot)
+            
+            # Process NGS instant bonus
+            self._process_ngs_instant_bonus(user_id, ngs_benefits)
+            
+            # Process NGS extra earning
+            self._process_ngs_extra_earning(user_id, ngs_benefits)
+            
+            # Process NGS upline rank bonus
+            self._process_ngs_upline_rank_bonus(user_id, ngs_benefits)
+            
+            return {
+                "success": True,
+                "integrated": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "ngs_benefits": ngs_benefits
+            }
+        except Exception as e:
+            print(f"Error integrating with NGS: {e}")
+            return {"success": False, "error": str(e)}
     
     def _check_ngs_eligibility(self, matrix_slot: int):
         """Check if user is eligible for Newcomer Growth Support."""
@@ -4070,16 +4114,28 @@ class MatrixService:
             print(f"Error in automatic NGS integration: {e}")
     
     def integrate_with_mentorship_bonus(self, user_id: str):
-        """Integrate Matrix user with Mentorship Bonus (test-friendly)."""
+        """Integrate Matrix user with Mentorship Bonus."""
         try:
-            if hasattr(self, '_process_mentorship_bonus_distribution'):
-                try:
-                    _ = self._process_mentorship_bonus_distribution(user_id, {"direct_of_direct_commission": 0})
-                except Exception:
-                    pass
-            return {"success": True, "integrated": True}
-        except Exception:
-            return {"success": True, "integrated": True}
+            # Get Matrix slot info
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            matrix_slot = matrix_tree.current_slot if matrix_tree else 1
+            
+            # Calculate Mentorship benefits
+            mentorship_benefits = self._calculate_mentorship_bonus_benefits(matrix_slot)
+            
+            # Process mentorship bonus distribution
+            self._process_mentorship_bonus_distribution(user_id, mentorship_benefits)
+            
+            return {
+                "success": True,
+                "integrated": True,
+                "user_id": user_id,
+                "matrix_slot": matrix_slot,
+                "mentorship_benefits": mentorship_benefits
+            }
+        except Exception as e:
+            print(f"Error integrating with Mentorship Bonus: {e}")
+            return {"success": False, "error": str(e)}
     
     def _check_mentorship_bonus_eligibility(self, matrix_slot: int):
         """Check if user is eligible for Mentorship Bonus."""
