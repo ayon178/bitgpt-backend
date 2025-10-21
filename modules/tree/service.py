@@ -16,9 +16,12 @@ class TreeService:
     def place_user_in_tree(self, user_id: ObjectId, referrer_id: ObjectId, program: str, slot_no: int) -> bool:
         """
         Simplified tree placement method for user creation integration
+        Uses BFS to find next available position (handles spillover)
         Returns True if placement successful, False otherwise
         """
         try:
+            from collections import deque
+            
             # Check if user already has placement in this program and slot
             existing_placement = TreePlacement.objects(
                 user_id=user_id,
@@ -31,7 +34,7 @@ class TreeService:
                 print(f"User {user_id} already has placement in {program} slot {slot_no}")
                 return True
             
-            # Calculate level based on referrer's level
+            # Get referrer's placement
             referrer_placement = TreePlacement.objects(
                 user_id=referrer_id,
                 program=program,
@@ -39,55 +42,143 @@ class TreeService:
                 is_active=True
             ).first()
             
-            level = 1
-            if referrer_placement:
-                level = referrer_placement.level + 1
+            if not referrer_placement:
+                print(f"❌ Referrer {referrer_id} not found in tree")
+                return False
             
-            # Find available position under referrer
-            position = 'left'  # Default to left position
-            
-            # Check if referrer already has children
-            existing_children = TreePlacement.objects(
-                parent_id=referrer_id,
+            # Use BFS to find next available position starting from referrer
+            # Check referrer's direct positions first
+            left_child = TreePlacement.objects(
                 program=program,
+                upline_id=referrer_id,
+                position='left',
                 slot_no=slot_no,
                 is_active=True
-            )
+            ).first()
             
-            if existing_children.count() > 0:
-                # Find next available position
-                if existing_children.count() == 1:
-                    position = 'right'
-                else:
-                    # Use spillover logic - find next available position
-                    position = 'left'
-            
-            # Create TreePlacement record
-            # Set both parent_id (direct referrer) and upline_id (tree placement)
-            # For now, upline_id = parent_id (no spillover in this simple method)
-            placement = TreePlacement(
-                user_id=user_id,
+            right_child = TreePlacement.objects(
                 program=program,
-                parent_id=referrer_id,
-                upline_id=referrer_id,  # ← CRITICAL: Set upline_id for tree queries
-                position=position,
-                level=level,
+                upline_id=referrer_id,
+                position='right',
                 slot_no=slot_no,
-                is_active=True,
-                created_at=datetime.utcnow()
-            )
-            placement.save()
+                is_active=True
+            ).first()
             
-            # Update referrer's children count
-            if referrer_placement:
-                referrer_placement.children_count = (referrer_placement.children_count or 0) + 1
-                referrer_placement.save()
+            # Direct placement under referrer if space available
+            if not left_child:
+                # Place on left
+                placement = TreePlacement(
+                    user_id=user_id,
+                    program=program,
+                    parent_id=referrer_id,
+                    upline_id=referrer_id,
+                    position='left',
+                    level=referrer_placement.level + 1,
+                    slot_no=slot_no,
+                    is_active=True,
+                    created_at=datetime.utcnow()
+                )
+                placement.save()
+                print(f"✅ Created {program} tree placement: User {user_id} at Level {referrer_placement.level + 1}, Position left under {referrer_id}")
+                return True
+            elif not right_child:
+                # Place on right
+                placement = TreePlacement(
+                    user_id=user_id,
+                    program=program,
+                    parent_id=referrer_id,
+                    upline_id=referrer_id,
+                    position='right',
+                    level=referrer_placement.level + 1,
+                    slot_no=slot_no,
+                    is_active=True,
+                    created_at=datetime.utcnow()
+                )
+                placement.save()
+                print(f"✅ Created {program} tree placement: User {user_id} at Level {referrer_placement.level + 1}, Position right under {referrer_id}")
+                return True
             
-            print(f"✅ Created {program} tree placement: User {user_id} at Level {level}, Position {position} under {referrer_id}")
-            return True
+            # Both direct positions filled - use BFS for spillover
+            queue = deque([(referrer_id, referrer_placement.level)])
+            visited = set()
+            
+            while queue:
+                current_user_id, current_level = queue.popleft()
+                
+                user_id_str = str(current_user_id)
+                if user_id_str in visited:
+                    continue
+                visited.add(user_id_str)
+                
+                # Check left position
+                left_child = TreePlacement.objects(
+                    program=program,
+                    upline_id=current_user_id,
+                    position='left',
+                    slot_no=slot_no,
+                    is_active=True
+                ).first()
+                
+                if not left_child:
+                    # Found available left position - spillover placement
+                    placement = TreePlacement(
+                        user_id=user_id,
+                        program=program,
+                        parent_id=referrer_id,  # Direct referrer stays same
+                        upline_id=current_user_id,  # Actual placement parent
+                        position='left',
+                        level=current_level + 1,
+                        slot_no=slot_no,
+                        is_spillover=True,
+                        spillover_from=referrer_id,
+                        is_active=True,
+                        created_at=datetime.utcnow()
+                    )
+                    placement.save()
+                    print(f"✅ Created {program} SPILLOVER placement: User {user_id} at Level {current_level + 1}, Position left under {current_user_id} (referred by {referrer_id})")
+                    return True
+                
+                # Check right position
+                right_child = TreePlacement.objects(
+                    program=program,
+                    upline_id=current_user_id,
+                    position='right',
+                    slot_no=slot_no,
+                    is_active=True
+                ).first()
+                
+                if not right_child:
+                    # Found available right position - spillover placement
+                    placement = TreePlacement(
+                        user_id=user_id,
+                        program=program,
+                        parent_id=referrer_id,  # Direct referrer stays same
+                        upline_id=current_user_id,  # Actual placement parent
+                        position='right',
+                        level=current_level + 1,
+                        slot_no=slot_no,
+                        is_spillover=True,
+                        spillover_from=referrer_id,
+                        is_active=True,
+                        created_at=datetime.utcnow()
+                    )
+                    placement.save()
+                    print(f"✅ Created {program} SPILLOVER placement: User {user_id} at Level {current_level + 1}, Position right under {current_user_id} (referred by {referrer_id})")
+                    return True
+                
+                # Both positions filled, add children to queue
+                if left_child:
+                    queue.append((left_child.user_id, current_level + 1))
+                if right_child:
+                    queue.append((right_child.user_id, current_level + 1))
+            
+            print(f"❌ No available position found in tree (shouldn't happen)")
+            return False
             
         except Exception as e:
             print(f"❌ Error creating tree placement: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     @staticmethod
@@ -259,102 +350,170 @@ class TreeService:
     ) -> Optional[TreePlacement]:
         """
         Handle indirect referral placement logic (spillover)
-        Find lowest level available position
+        Use BFS to find the next available position starting from referrer's downline
+        
+        Important: parent_id = direct referrer (never changes)
+                   upline_id = actual placement parent (where user is placed in tree)
         """
-        # Get all placements in this program and slot
-        all_placements = TreePlacement.objects(
+        # Use BFS to find next available position starting from referrer
+        available_slot = await TreeService._find_next_available_position_bfs(
+            referrer_id, program, slot_no
+        )
+        
+        if not available_slot:
+            return None
+        
+        upline_user_id = available_slot['upline_id']
+        position = available_slot['position']
+        level = available_slot['level']
+        
+        # Create placement with:
+        # - parent_id: direct referrer (who actually referred this user)
+        # - upline_id: where they're placed in the tree (spillover parent)
+        # - is_spillover: True (since this is spillover placement)
+        placement = TreePlacement(
+            user_id=user_id,
+            program=program,
+            parent_id=referrer_id,  # Direct referrer - NEVER CHANGES
+            upline_id=upline_user_id,  # Actual tree placement parent
+            position=position,
+            level=level,
+            slot_no=slot_no,
+            is_spillover=True,  # Mark as spillover
+            spillover_from=referrer_id,  # Track original referrer
+            is_active=True,
+            created_at=datetime.utcnow()
+        )
+        placement.save()
+        
+        # Update the direct referrer's (parent_id) BinaryAutoUpgrade partner count
+        # This is important: direct referrer still gets credit for the partner
+        try:
+            referrer_status = BinaryAutoUpgrade.objects(user_id=referrer_id).first()
+            if referrer_status:
+                referrer_status.partners_available = (referrer_status.partners_available or 0) + 1
+                if str(user_id) not in [str(pid) for pid in (referrer_status.partner_ids or [])]:
+                    referrer_status.partner_ids = (referrer_status.partner_ids or []) + [user_id]
+                referrer_status.last_check_at = datetime.utcnow()
+                referrer_status.save()
+                # Attempt binary auto-upgrade for direct referrer
+                try:
+                    AutoUpgradeService().process_binary_auto_upgrade(user_id=str(referrer_id))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
+        # Global phase progression for direct referrer (if global program)
+        try:
+            if program == 'global':
+                parent_progress = GlobalPhaseProgression.objects(user_id=referrer_id).first()
+                if parent_progress:
+                    if parent_progress.current_phase == 'PHASE-1':
+                        parent_progress.phase_1_members_current = int(parent_progress.phase_1_members_current or 0) + 1
+                        if parent_progress.phase_1_members_current >= int(parent_progress.phase_1_members_required or 4):
+                            AutoUpgradeService().process_global_phase_progression(user_id=str(referrer_id))
+                    else:
+                        parent_progress.phase_2_members_current = int(parent_progress.phase_2_members_current or 0) + 1
+                        if parent_progress.phase_2_members_current >= int(parent_progress.phase_2_members_required or 8):
+                            AutoUpgradeService().process_global_phase_progression(user_id=str(referrer_id))
+                    parent_progress.global_team_size = int(parent_progress.global_team_size or 0) + 1
+                    members = parent_progress.global_team_members or []
+                    if user_id not in members:
+                        members.append(user_id)
+                    parent_progress.global_team_members = members
+                    parent_progress.updated_at = datetime.utcnow()
+                    parent_progress.save()
+        except Exception:
+            pass
+        
+        return placement
+    
+    @staticmethod
+    async def _find_next_available_position_bfs(
+        referrer_id: ObjectId,
+        program: str,
+        slot_no: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Use BFS (Breadth-First Search) to find the next available position in the binary tree
+        starting from the referrer's position.
+        
+        Returns: {
+            'upline_id': ObjectId of the parent where user will be placed,
+            'position': 'left' or 'right',
+            'level': level number
+        }
+        """
+        from collections import deque
+        
+        # Get referrer's placement to start BFS
+        referrer_placement = TreePlacement.objects(
+            user_id=referrer_id,
             program=program,
             slot_no=slot_no,
             is_active=True
-        ).order_by('level', 'position')
+        ).first()
         
-        # Find the lowest level
-        max_level = 0
-        if all_placements:
-            max_level = all_placements.aggregate([
-                {'$group': {'_id': None, 'max_level': {'$max': '$level'}}}
-            ]).next()['max_level']
+        if not referrer_placement:
+            return None
         
-        # Find available position at lowest level
-        for level in range(1, max_level + 2):  # +2 to include next level
-            level_placements = all_placements.filter(level=level)
+        # Initialize BFS queue with the referrer
+        # Queue contains tuples of (user_id, level)
+        queue = deque([(referrer_id, referrer_placement.level)])
+        visited = set()
+        
+        while queue:
+            current_user_id, current_level = queue.popleft()
             
-            # Check first position (left)
-            left_position = level_placements.filter(position='left').first()
-            if not left_position:
-                # Find parent for this position
-                parent = await TreeService._find_parent_for_position(level, 'left', program, slot_no)
-                if parent:
-                    placement = TreePlacement(
-                        user_id=user_id,
-                        program=program,
-                        parent_id=parent,
-                        upline_id=parent,  # Set upline_id for tree queries
-                        position='left',
-                        level=level,
-                        slot_no=slot_no,
-                        is_active=True
-                    )
-                    placement.save()
-                    # Update referrer's BinaryAutoUpgrade partner count for spillover root
-                    try:
-                        status = BinaryAutoUpgrade.objects(user_id=parent).first()
-                        if status:
-                            status.partners_available = (status.partners_available or 0) + 1
-                            if str(user_id) not in [str(pid) for pid in (status.partner_ids or [])]:
-                                status.partner_ids = (status.partner_ids or []) + [user_id]
-                            status.last_check_at = datetime.utcnow()
-                            status.save()
-                            # Attempt binary auto-upgrade for this parent as spillover root may benefit
-                            try:
-                                AutoUpgradeService().process_binary_auto_upgrade(user_id=str(parent))
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-                    # Global phase progression for spillover parent
-                    try:
-                        if program == 'global':
-                            parent_progress = GlobalPhaseProgression.objects(user_id=parent).first()
-                            if parent_progress:
-                                if parent_progress.current_phase == 'PHASE-1':
-                                    parent_progress.phase_1_members_current = int(parent_progress.phase_1_members_current or 0) + 1
-                                    if parent_progress.phase_1_members_current >= int(parent_progress.phase_1_members_required or 4):
-                                        AutoUpgradeService().process_global_phase_progression(user_id=str(parent))
-                                else:
-                                    parent_progress.phase_2_members_current = int(parent_progress.phase_2_members_current or 0) + 1
-                                    if parent_progress.phase_2_members_current >= int(parent_progress.phase_2_members_required or 8):
-                                        AutoUpgradeService().process_global_phase_progression(user_id=str(parent))
-                                parent_progress.global_team_size = int(parent_progress.global_team_size or 0) + 1
-                                members = parent_progress.global_team_members or []
-                                if user_id not in members:
-                                    members.append(user_id)
-                                parent_progress.global_team_members = members
-                                parent_progress.updated_at = datetime.utcnow()
-                                parent_progress.save()
-                    except Exception:
-                        pass
-                    return placement
+            # Skip if already visited
+            user_id_str = str(current_user_id)
+            if user_id_str in visited:
+                continue
+            visited.add(user_id_str)
             
-            # Check last position (right)
-            right_position = level_placements.filter(position='right').first()
-            if not right_position:
-                # Find parent for this position
-                parent = await TreeService._find_parent_for_position(level, 'right', program, slot_no)
-                if parent:
-                    placement = TreePlacement(
-                        user_id=user_id,
-                        program=program,
-                        parent_id=parent,
-                        upline_id=parent,  # Set upline_id for tree queries
-                        position='right',
-                        level=level,
-                        slot_no=slot_no,
-                        is_active=True
-                    )
-                    placement.save()
-                    return placement
+            # Check if current node has available positions
+            # Check left position first
+            left_child = TreePlacement.objects(
+                program=program,
+                upline_id=current_user_id,
+                position='left',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            if not left_child:
+                # Found available left position!
+                return {
+                    'upline_id': current_user_id,
+                    'position': 'left',
+                    'level': current_level + 1
+                }
+            
+            # Check right position
+            right_child = TreePlacement.objects(
+                program=program,
+                upline_id=current_user_id,
+                position='right',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            if not right_child:
+                # Found available right position!
+                return {
+                    'upline_id': current_user_id,
+                    'position': 'right',
+                    'level': current_level + 1
+                }
+            
+            # Both positions are filled, add children to queue for next level
+            if left_child:
+                queue.append((left_child.user_id, current_level + 1))
+            if right_child:
+                queue.append((right_child.user_id, current_level + 1))
         
+        # No available position found (shouldn't happen in practice)
         return None
     
     @staticmethod
