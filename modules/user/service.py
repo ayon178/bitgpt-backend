@@ -813,6 +813,22 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
         except Exception:
             pass
         
+        # Update referrer's partners_count in User collection
+        try:
+            # Count total direct partners for the referrer
+            total_direct_partners = User.objects(refered_by=ObjectId(upline_user.id)).count()
+            
+            # Update the referrer's partners_count
+            User.objects(id=ObjectId(upline_user.id)).update_one(
+                set__partners_count=total_direct_partners,
+                set__updated_at=datetime.utcnow()
+            )
+            
+            print(f"✅ Updated partners_count for referrer {upline_user.uid}: {total_direct_partners}")
+        except Exception as e:
+            print(f"⚠️ Failed to update partners_count for referrer: {str(e)}")
+            pass
+        
         # Generate access token
         try:
             token_obj = authentication_service.create_access_token(data={"user_id": str(user.id)})
@@ -979,6 +995,19 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 ref_pg.directs_count_by_program['global'] = int(ref_pg.directs_count_by_program.get('global', 0)) + 1
             ref_pg.last_updated = datetime.utcnow()
             ref_pg.save()
+            
+            # Update referrer's partners_count in User collection
+            # Count total direct partners for the referrer
+            total_direct_partners = User.objects(refered_by=ObjectId(upline_user.id)).count()
+            
+            # Update the referrer's partners_count
+            User.objects(id=ObjectId(upline_user.id)).update_one(
+                set__partners_count=total_direct_partners,
+                set__updated_at=datetime.utcnow()
+            )
+            
+            print(f"✅ Updated partners_count for referrer {upline_user.uid}: {total_direct_partners}")
+            
             # Royal Captain / President counters on join (Matrix+Global for Royal Captain; direct invites for President)
             try:
                 # Royal Captain Bonus Tracking
