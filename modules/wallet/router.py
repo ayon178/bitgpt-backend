@@ -260,10 +260,26 @@ async def get_dream_matrix_earnings_list(
 
 
 @router.get("/dream-matrix-partner-incentive")
-async def get_dream_matrix_partner_incentive(currency: str = 'USDT', page: int = 1, limit: int = 50):
+async def get_dream_matrix_partner_incentive(
+    currency: str = 'USDT', 
+    page: int = 1, 
+    limit: int = 50,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
     try:
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
         service = WalletService()
-        result = service.get_dream_matrix_partner_incentive(currency=currency, page=page, limit=limit)
+        result = service.get_dream_matrix_partner_incentive(user_id=user_id, currency=currency, page=page, limit=limit)
         if result.get("success"):
             return success_response(result["data"], "Dream Matrix partner incentive fetched successfully")
         else:

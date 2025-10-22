@@ -854,80 +854,69 @@ class WalletService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_dream_matrix_partner_incentive(self, currency: str = "USDT", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+    def get_dream_matrix_partner_incentive(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 50) -> Dict[str, Any]:
         """
-        Return a paginated list of DISTINCT users who received Dream Matrix Partner Incentive-type earnings.
-        Columns: uid (receiver), upline_uid (from latest tx), total_amount, time (latest earning).
+        Return a paginated list of Dream Matrix Partner Incentive earnings for a specific user.
+        Columns: uid (receiver), upline_uid, amount, time, reason, tx_hash.
         Reasons counted: matrix_partner_incentive, dream_matrix_partner_incentive, dream_matrix_commission, dream_matrix_*, matrix_partner_* (credits only).
         """
         try:
-            import re
             from ..user.model import User
+            from bson import ObjectId
+            from mongoengine import Q
 
-            # Aggregate by user: sum amounts, pick latest created_at and latest tx_hash
-            pipeline = [
-                {"$match": {
-                    "type": "credit",
-                    "currency": currency.upper(),
-                    "$or": [
-                        {"reason": {"$in": ["matrix_partner_incentive", "dream_matrix_partner_incentive", "dream_matrix_commission"]}},
-                        {"reason": {"$regex": "^dream_matrix_"}},
-                        {"reason": {"$regex": "^matrix_partner_"}}
-                    ]
-                }},
-                {"$sort": {"created_at": -1}},  # so $first gets latest tx
-                {"$group": {
-                    "_id": "$user_id",
-                    "total_amount": {"$sum": "$amount"},
-                    "latest_at": {"$first": "$created_at"},
-                    "latest_tx": {"$first": "$tx_hash"}
-                }},
-                {"$sort": {"latest_at": -1}}
-            ]
-            agg = list(WalletLedger.objects.aggregate(pipeline))
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
 
+            # Get wallet ledger entries for this specific user
+            # Include all Dream Matrix Partner Incentive related reasons
+            base_filter = Q(user_id=user_oid) & Q(type="credit") & Q(currency=currency.upper())
+            reason_filter = (
+                Q(reason__in=["matrix_partner_incentive", "dream_matrix_partner_incentive", "dream_matrix_commission"]) |
+                Q(reason__startswith="dream_matrix_") |
+                Q(reason__startswith="matrix_partner_")
+            )
+            query = base_filter & reason_filter
+            
+            # Count total entries
+            total = WalletLedger.objects(query).count()
+            
             # Pagination
             page = max(1, int(page or 1))
             limit = max(1, min(100, int(limit or 50)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_rows = agg[start:end]
-            total = len(agg)
+            skip = (page - 1) * limit
+            
+            # Get paginated entries, sorted by created_at desc
+            entries = WalletLedger.objects(query).order_by('-created_at').skip(skip).limit(limit)
 
-            # Fetch users and uplines
-            user_ids = [r.get("_id") for r in page_rows if r.get("_id")]
-            users_map = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by')}
-            # Collect possible uplines (from referrer fallback)
-            ref_ids = []
-            for u in users_map.values():
-                rid = getattr(u, 'refered_by', None)
-                if rid:
-                    ref_ids.append(rid)
-            ref_map = {str(u.id): u for u in User.objects(id__in=ref_ids).only('uid')}
+            # Get user info
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get upline info
+            ref = getattr(user, 'refered_by', None)
+            upline_uid = None
+            if ref:
+                upline = User.objects(id=ref).only('uid').first()
+                if upline:
+                    upline_uid = getattr(upline, 'uid', None)
+            if not upline_uid:
+                upline_uid = 'ROOT'
 
-            # Parse upline from latest tx_hash if present
-            hex24 = re.compile(r"[0-9a-fA-F]{24}")
+            # Build rows from ledger entries
             rows = []
-            for r in page_rows:
-                uid_oid = r.get("_id")
-                u = users_map.get(str(uid_oid))
-                if not u:
-                    continue
-                latest_tx = str(r.get("latest_tx") or '')
-                m = hex24.search(latest_tx)
-                upline_uid = None
-                if m and ref_map.get(m.group(0)):
-                    upline_uid = getattr(ref_map[m.group(0)], 'uid', None)
-                if not upline_uid and getattr(u, 'refered_by', None):
-                    rid = str(getattr(u, 'refered_by'))
-                    if rid in ref_map:
-                        upline_uid = getattr(ref_map[rid], 'uid', None)
-
+            for entry in entries:
                 rows.append({
-                    "uid": getattr(u, 'uid', None),
-                    "upline_uid": upline_uid or 'ROOT',
-                    "amount": float(r.get("total_amount") or 0),
-                    "time": r.get("latest_at").isoformat() if r.get("latest_at") else None
+                    "uid": getattr(user, 'uid', None),
+                    "upline_uid": upline_uid,
+                    "amount": float(entry.amount) if entry.amount else 0,
+                    "time": entry.created_at.isoformat() if entry.created_at else None,
+                    "reason": entry.reason,
+                    "tx_hash": entry.tx_hash or ""
                 })
 
             return {
