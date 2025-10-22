@@ -12,9 +12,9 @@ class DreamMatrixService:
 
     def get_dream_matrix_earnings(self, user_id: str, slot_no: int = None, recycle_no: int = None) -> Dict[str, Any]:
         """
-        Return Dream Matrix tree overview with nested structure similar to Binary:
-        - tree: nested 3x3 matrix structure with directDownline arrays
-        - slots: 1..15 slot catalog with name/value and completion/progress info
+        Return Dream Matrix tree overview with slot-wise nested structure:
+        - slots: Each slot contains its own tree structure with directDownline arrays
+        - Each slot shows its specific downline members and progress
         """
         try:
                 from ..tree.model import TreePlacement
@@ -33,22 +33,6 @@ class DreamMatrixService:
                 user_info = User.objects(id=user_oid).first()
                 if not user_info:
                     return {"success": False, "error": "User not found"}
-                
-                # Build nested downline tree nodes (limited to 3 levels: 0, 1, 2)
-                # For 3x3 matrix: Level 0: 1, Level 1: 3, Level 2: 9 = 13 total
-                try:
-                    root_node, depth, total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3)
-                except Exception as tree_error:
-                    print(f"Error building matrix tree: {tree_error}")
-                    import traceback
-                    traceback.print_exc()
-                    # Return empty tree on error
-                    root_node = {"id": 0, "type": "self", "userId": str(user_info.uid) if user_info else str(user_oid), "level": 0, "position": "root"}
-                    depth = 0
-                    total_nodes_count = 1
-                
-                # Calculate ACTUAL total team members (ALL levels, not just 3)
-                actual_total_team_members = self._count_all_matrix_team_members(user_oid)
                 
                 # Member requirements for each slot to UPGRADE to next slot
                 # Matrix recycle system: Each slot completes with 39 members (3 + 9 + 27)
@@ -114,7 +98,7 @@ class DreamMatrixService:
                 # Next slot for manual upgrade
                 next_manual_upgrade_slot = highest_completed_slot + 1 if highest_completed_slot < target_max_slot else None
                 
-                # Build slots summary array
+                # Build slots summary array with individual tree structures
                 slots_summary = []
                 for slot_no in range(1, target_max_slot + 1):
                     catalog = catalog_by_slot.get(slot_no)
@@ -152,36 +136,63 @@ class DreamMatrixService:
                         # Future slots (not yet reached) show 0%
                         progress_percent = 0
                     
-                    slots_summary.append({
+                    # Build slot object
+                    slot_obj = {
                         "slot_no": slot_no,
                         "slot_name": slot_name,
                         "slot_value": slot_value,
                         "isCompleted": is_completed,
                         "isManualUpgrade": is_manual_upgrade,
                         "progressPercent": progress_percent
-                    })
+                    }
+                    
+                    # Only add tree structure if slot is completed
+                    if is_completed:
+                        try:
+                            slot_root_node, slot_depth, slot_total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3, slot_no=slot_no)
+                        except Exception as tree_error:
+                            print(f"Error building matrix tree for slot {slot_no}: {tree_error}")
+                            import traceback
+                            traceback.print_exc()
+                            # Return empty tree on error
+                            slot_root_node = {
+                                "id": 0, 
+                                "type": "self", 
+                                "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
+                                "objectId": str(user_oid),
+                                "level": 0, 
+                                "position": "root"
+                            }
+                            slot_depth = 0
+                            slot_total_nodes_count = 1
+                        
+                        # Build tree structure for this slot
+                        slot_tree = {
+                            "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
+                            "totalMembers": max(0, slot_total_nodes_count - 1),  # Exclude the root user
+                            "levels": slot_depth,
+                            "nodes": [slot_root_node]  # Root node with nested directDownline structure
+                        }
+                        
+                        slot_obj["tree"] = slot_tree
+                    
+                    slots_summary.append(slot_obj)
                 
-                # Build result with nested tree structure
+                # Build result with slot-wise tree structures
                 result = {
-                    "tree": {
-                        "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
-                        "totalMembers": max(0, total_nodes_count - 1),  # Exclude the root user
-                        "levels": depth,
-                        "nodes": [root_node]  # Root node with nested directDownline structure
-                    },
                     "slots": slots_summary,
                     "totalSlots": len(slots_summary),
                     "user_id": str(user_id)
                 }
                 
-                print(f"Dream Matrix tree overview generated: nodes={total_nodes_count}, slots={len(slots_summary)}")
+                print(f"Dream Matrix slot-wise tree overview generated: slots={len(slots_summary)}")
                 return {"success": True, "data": result}
                 
         except Exception as e:
             print(f"Error in get_dream_matrix_earnings: {e}")
             return {"success": False, "error": str(e)}
 
-    def _build_nested_matrix_tree_limited(self, user_oid, max_levels: int = 3) -> (Dict[str, Any], int, int):
+    def _build_nested_matrix_tree_limited(self, user_oid, max_levels: int = 3, slot_no: int = None) -> (Dict[str, Any], int, int):
         """
         Build a nested tree structure with directDownline arrays for matrix program.
         Uses TreePlacement model (same as Binary).
@@ -189,18 +200,31 @@ class DreamMatrixService:
         For 3x3 matrix: Level 0: 1, Level 1: 3, Level 2: 9 = 13 total maximum
         Returns (root_node, max_depth, total_count).
         Each node has: id, type, userId, level, position, directDownline (array of child nodes).
+        If slot_no is provided, only shows members from that specific slot.
         """
         try:
             from ..tree.model import TreePlacement
             from ..user.model import User
             
-            # Helper to get display id
-            def display_id(oid) -> str:
+            # Helper to get user uid and object id
+            def get_user_info(oid) -> dict:
                 try:
                     u = User.objects(id=oid).only('uid').first()
-                    return str(u.uid) if u and u.uid else str(oid)
+                    if u and u.uid:
+                        return {
+                            "uid": str(u.uid),
+                            "object_id": str(oid)
+                        }
+                    else:
+                        return {
+                            "uid": str(oid),
+                            "object_id": str(oid)
+                        }
                 except Exception:
-                    return str(oid)
+                    return {
+                        "uid": str(oid),
+                        "object_id": str(oid)
+                    }
             
             # Counter for node IDs
             node_id_counter = [0]
@@ -222,25 +246,36 @@ class DreamMatrixService:
                 # Determine node type
                 node_type = "self" if level == 0 else "downLine"
                 
+                # Get user info
+                user_info = get_user_info(parent_oid)
+                
                 # Create the node
                 node = {
                     "id": current_id,
                     "type": node_type,
-                    "userId": display_id(parent_oid),
+                    "userId": user_info["uid"],
+                    "objectId": user_info["object_id"],
                     "level": level,
                     "position": position
                 }
                 
                 # Only get children if we're not at the last level
                 if level < max_levels - 1:
+                    # Build query filter for TreePlacement
+                    query_filter = {
+                        "program": 'matrix',
+                        "upline_id": parent_oid,
+                        "user_id__ne": parent_oid  # Exclude self
+                    }
+                    
+                    # Add slot filter if slot_no is provided
+                    if slot_no is not None:
+                        query_filter["slot_no"] = slot_no
+                        query_filter["is_active"] = True
+                    
                     # Get direct children from TreePlacement for matrix program
                     # Matrix has 3 positions per level (3x3 structure)
-                    # IMPORTANT: Exclude self (user_id != parent_oid) to avoid root appearing as child
-                    children = TreePlacement.objects(
-                        program='matrix',
-                        upline_id=parent_oid,
-                        user_id__ne=parent_oid  # Exclude self
-                    ).order_by('created_at').limit(3)
+                    children = TreePlacement.objects(**query_filter).order_by('created_at').limit(3)
                     
                     # Build directDownline array
                     direct_downline = []
@@ -282,11 +317,13 @@ class DreamMatrixService:
             print(f"❌ Error building nested matrix tree: {e}")
             import traceback
             traceback.print_exc()
-            # Return empty root node
+            # Return empty root node with user info
+            user_info = get_user_info(user_oid)
             return {
                 "id": 0,
                 "type": "self",
-                "userId": str(user_oid),
+                "userId": user_info["uid"],
+                "objectId": user_info["object_id"],
                 "level": 0,
                 "position": "root"
             }, 0, 1
