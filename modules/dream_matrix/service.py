@@ -75,14 +75,14 @@ class DreamMatrixService:
                 
                 # Determine which slots are actually completed based on member count in each specific slot
                 member_completed_slots = set()
-                for slot_no in range(1, target_max_slot + 1):
+                for check_slot_no in range(1, target_max_slot + 1):
                     # Count members in THIS specific slot's tree
-                    slot_specific_members = self._count_slot_specific_members(user_oid, slot_no)
-                    required_members = slot_member_requirements.get(slot_no, 39)
+                    slot_specific_members = self._count_slot_specific_members(user_oid, check_slot_no)
+                    required_members = slot_member_requirements.get(check_slot_no, 39)
                     
                     # Slot is completed if it has 39 members (recycle triggered)
                     if slot_specific_members >= required_members:
-                        member_completed_slots.add(slot_no)
+                        member_completed_slots.add(check_slot_no)
                 
                 # Combine both: slot is completed if either activated OR member requirement met
                 all_completed_slots = completed_slots.union(member_completed_slots)
@@ -100,16 +100,33 @@ class DreamMatrixService:
                 
                 # Build slots summary array with individual tree structures
                 slots_summary = []
-                for slot_no in range(1, target_max_slot + 1):
-                    catalog = catalog_by_slot.get(slot_no)
-                    slot_name = catalog.name if catalog else f"Slot {slot_no}"
+                
+                # Store original slot_no parameter to avoid variable conflicts
+                requested_slot_no = slot_no
+                
+                # If slot_no parameter is provided, only process that specific slot
+                if requested_slot_no is not None:
+                    try:
+                        slot_no_int = int(requested_slot_no)
+                        if 1 <= slot_no_int <= target_max_slot:
+                            slot_range = [slot_no_int]
+                        else:
+                            slot_range = []
+                    except (ValueError, TypeError):
+                        slot_range = []
+                else:
+                    slot_range = range(1, target_max_slot + 1)
+                
+                for current_slot_no in slot_range:
+                    catalog = catalog_by_slot.get(current_slot_no)
+                    slot_name = catalog.name if catalog else f"Slot {current_slot_no}"
                     slot_value = float(catalog.price) if catalog and catalog.price is not None else 0.0
                     
                     # Check if slot is completed
-                    is_completed = slot_no in all_completed_slots
+                    is_completed = current_slot_no in all_completed_slots
                     
                     # Check if this is the slot available for manual upgrade
-                    is_manual_upgrade = (slot_no == next_manual_upgrade_slot)
+                    is_manual_upgrade = (current_slot_no == next_manual_upgrade_slot)
                     
                     # Calculate progress percentage for each slot
                     # Progress shows: (current members in this slot / 39) * 100
@@ -119,11 +136,11 @@ class DreamMatrixService:
                     if is_completed:
                         # Completed/past slots always show 100%
                         progress_percent = 100
-                    elif slot_no == user_current_slot:
+                    elif current_slot_no == user_current_slot:
                         # This is the CURRENT ACTIVE slot - show real-time progress
                         # Count members in THIS specific slot's tree
-                        current_slot_members = self._count_slot_specific_members(user_oid, slot_no)
-                        required_members = slot_member_requirements.get(slot_no, 39)  # Always 39 for Matrix
+                        current_slot_members = self._count_slot_specific_members(user_oid, current_slot_no)
+                        required_members = slot_member_requirements.get(current_slot_no, 39)  # Always 39 for Matrix
                         
                         if required_members > 0:
                             progress_percent = int(min(100, (current_slot_members / required_members) * 100))
@@ -131,14 +148,14 @@ class DreamMatrixService:
                             progress_percent = 0
                         
                         # Debug log
-                        print(f"📊 Slot {slot_no} Progress: {current_slot_members}/{required_members} members = {progress_percent}%")
+                        print(f"📊 Slot {current_slot_no} Progress: {current_slot_members}/{required_members} members = {progress_percent}%")
                     else:
                         # Future slots (not yet reached) show 0%
                         progress_percent = 0
                     
                     # Build slot object
                     slot_obj = {
-                        "slot_no": slot_no,
+                        "slot_no": current_slot_no,
                         "slot_name": slot_name,
                         "slot_value": slot_value,
                         "isCompleted": is_completed,
@@ -149,9 +166,9 @@ class DreamMatrixService:
                     # Only add tree structure if slot is completed
                     if is_completed:
                         try:
-                            slot_root_node, slot_depth, slot_total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3, slot_no=slot_no)
+                            slot_root_node, slot_depth, slot_total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3, slot_no=current_slot_no)
                         except Exception as tree_error:
-                            print(f"Error building matrix tree for slot {slot_no}: {tree_error}")
+                            print(f"Error building matrix tree for slot {current_slot_no}: {tree_error}")
                             import traceback
                             traceback.print_exc()
                             # Return empty tree on error
