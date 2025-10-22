@@ -930,6 +930,82 @@ class WalletService:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_newcomer_growth_support_income(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """
+        Return a paginated list of Newcomer Growth Support earnings for a specific user.
+        Fetches from IncomeEvent collection (consistent with pools_summary).
+        Income type: newcomer_support
+        """
+        try:
+            from ..user.model import User
+            from ..income.model import IncomeEvent
+            from bson import ObjectId
+
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
+
+            # Get IncomeEvent entries for this specific user (matching pools_summary logic)
+            query_filter = {
+                "user_id": user_oid,
+                "income_type": "newcomer_support",
+                "status__in": ["pending", "completed"]
+            }
+            
+            # Count total entries
+            total = IncomeEvent.objects(**query_filter).count()
+            
+            # Pagination
+            page = max(1, int(page or 1))
+            limit = max(1, min(100, int(limit or 50)))
+            skip = (page - 1) * limit
+            
+            # Get paginated entries, sorted by created_at desc
+            entries = IncomeEvent.objects(**query_filter).order_by('-created_at').skip(skip).limit(limit)
+
+            # Get user info
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get upline info
+            ref = getattr(user, 'refered_by', None)
+            upline_uid = None
+            if ref:
+                upline = User.objects(id=ref).only('uid').first()
+                if upline:
+                    upline_uid = getattr(upline, 'uid', None)
+            if not upline_uid:
+                upline_uid = 'ROOT'
+
+            # Build rows from income events
+            rows = []
+            for entry in entries:
+                rows.append({
+                    "uid": getattr(user, 'uid', None),
+                    "upline_uid": upline_uid,
+                    "amount": float(entry.amount) if entry.amount else 0,
+                    "time": entry.created_at.isoformat() if entry.created_at else None,
+                    "income_type": entry.income_type,
+                    "status": entry.status,
+                    "description": getattr(entry, 'description', '') or ""
+                })
+
+            return {
+                "success": True,
+                "data": {
+                    "page": page,
+                    "limit": limit,
+                    "total": total,
+                    "items": rows
+                }
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def get_phase_1_income(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
         """Get Global Program Phase-1 income data for all users - following dream matrix pattern"""
         try:

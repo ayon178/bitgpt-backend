@@ -294,12 +294,25 @@ async def get_dream_matrix_partner_incentive(
 async def get_newcomer_growth_support_income(
     currency: str = Query("USDT", description="Currency type"),
     page: int = Query(1, description="Page number"),
-    limit: int = Query(10, description="Items per page")
+    limit: int = Query(10, description="Items per page"),
+    current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get Newcomer Growth Support income data for all users WITHOUT authentication"""
+    """Get Newcomer Growth Support income data for authenticated user from IncomeEvent (consistent with pools-summary)"""
     try:
-        service = NewcomerSupportService()
-        result = service.get_all_newcomer_support_income(currency, page, limit)
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
+        # Use WalletService to fetch from WalletLedger (consistent with pools_summary)
+        service = WalletService()
+        result = service.get_newcomer_growth_support_income(user_id=user_id, currency=currency, page=page, limit=limit)
 
         if result["success"]:
             return success_response(result["data"], "Newcomer Growth Support income data fetched successfully")
