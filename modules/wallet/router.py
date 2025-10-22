@@ -167,10 +167,26 @@ async def get_claim_history(
 
 
 @router.get("/duel-tree-earnings")
-async def get_duel_tree_earnings(currency: str = 'BNB', page: int = 1, limit: int = 50):
+async def get_duel_tree_earnings(
+    currency: str = 'BNB', 
+    page: int = 1, 
+    limit: int = 50,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
     try:
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
         service = WalletService()
-        result = service.get_duel_tree_earnings(currency=currency, page=page, limit=limit)
+        result = service.get_duel_tree_earnings(user_id=user_id, currency=currency, page=page, limit=limit)
         if result.get("success"):
             return success_response(result["data"], "Duel tree earnings fetched successfully")
         else:
@@ -182,10 +198,26 @@ async def get_duel_tree_earnings(currency: str = 'BNB', page: int = 1, limit: in
 
 
 @router.get("/binary-partner-incentive")
-async def get_binary_partner_incentive(currency: str = 'BNB', page: int = 1, limit: int = 50):
+async def get_binary_partner_incentive(
+    currency: str = 'BNB', 
+    page: int = 1, 
+    limit: int = 50,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
     try:
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
         service = WalletService()
-        result = service.get_binary_partner_incentive(currency=currency, page=page, limit=limit)
+        result = service.get_binary_partner_incentive(user_id=user_id, currency=currency, page=page, limit=limit)
         if result.get("success"):
             return success_response(result["data"], "Binary partner incentive fetched successfully")
         else:

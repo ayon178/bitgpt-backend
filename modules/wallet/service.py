@@ -400,7 +400,8 @@ class WalletService:
                 r = (reason or "").lower()
                 if r.startswith("binary_dual_tree_"):
                     return "duel_tree"
-                if r == "binary_partner_incentive":
+                # Binary Partner Incentive includes: joining commission, partner incentive, and upgrade commissions
+                if r == "binary_partner_incentive" or r == "binary_joining_commission" or r.startswith("binary_upgrade_"):
                     return "binary_partner_incentive"
                 if r == "matrix_partner_incentive":
                     return "matrix_partner_incentive"
@@ -628,73 +629,72 @@ class WalletService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_duel_tree_earnings(self, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+    def get_duel_tree_earnings(self, user_id: str, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
         """
-        Return a paginated list of DISTINCT users who received Duel Tree earnings (binary_dual_tree_* credits),
-        one row per user, sorted by latest earning time (desc).
-        Columns: uid, time (latest), upline uid, partner count, rank.
+        Return a paginated list of Duel Tree earnings for a specific user (binary_dual_tree_* credits),
+        sorted by earning time (desc).
+        Columns: uid, time, upline uid, partner count, rank, amount, reason.
         """
         try:
             from ..user.model import User, PartnerGraph
+            from bson import ObjectId
 
-            # Aggregate distinct users with latest created_at
-            pipeline = [
-                {"$match": {
-                    "type": "credit",
-                    "reason": {"$regex": "^binary_dual_tree_"},
-                    "currency": currency.upper()
-                }},
-                {"$group": {
-                    "_id": "$user_id",
-                    "latest_at": {"$max": "$created_at"},
-                    "count": {"$sum": 1}
-                }},
-                {"$sort": {"latest_at": -1}}
-            ]
-            agg = list(WalletLedger.objects.aggregate(pipeline))
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
 
-            # Pagination over aggregated distinct users
+            # Get wallet ledger entries for this specific user
+            match_filter = {
+                "user_id": user_oid,
+                "type": "credit",
+                "reason": {"$regex": "^binary_dual_tree_"},
+                "currency": currency.upper()
+            }
+            
+            # Count total entries
+            total = WalletLedger.objects(**match_filter).count()
+            
+            # Paginate
             page = max(1, int(page or 1))
             limit = max(1, min(100, int(limit or 50)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_rows = agg[start:end]
-            total = len(agg)
+            skip = (page - 1) * limit
+            
+            # Get paginated entries, sorted by created_at desc
+            entries = WalletLedger.objects(**match_filter).order_by('-created_at').skip(skip).limit(limit)
 
-            user_ids = [r.get("_id") for r in page_rows if r.get("_id")]
-            users = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by', 'current_rank')}
-            graphs = {str(g.user_id): g for g in PartnerGraph.objects(user_id__in=user_ids).only('user_id', 'directs')}
+            # Get user info
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get partner graph for partner count
+            pg = PartnerGraph.objects(user_id=user_oid).first()
+            partner_count = len(getattr(pg, 'directs', []) if pg else [])
+            
+            # Get upline info
+            ref = getattr(user, 'refered_by', None)
+            upline_uid = None
+            if ref:
+                upline = User.objects(id=ref).only('uid').first()
+                if upline:
+                    upline_uid = getattr(upline, 'uid', None)
+            if not upline_uid:
+                upline_uid = 'ROOT'
 
-            # Prefetch uplines
-            upline_ids = []
-            for u in users.values():
-                rid = getattr(u, 'refered_by', None)
-                if rid:
-                    upline_ids.append(rid)
-            upline_map = {str(u.id): u for u in User.objects(id__in=upline_ids).only('uid')}
-
+            # Build rows from ledger entries
             rows = []
-            for r in page_rows:
-                uid_oid = r.get("_id")
-                latest_at = r.get("latest_at")
-                u = users.get(str(uid_oid))
-                if not u:
-                    continue
-                pg = graphs.get(str(uid_oid))
-                partner_count = len(getattr(pg, 'directs', []) if pg else [])
-                ref = getattr(u, 'refered_by', None)
-                upline_uid = None
-                if ref and str(ref) in upline_map:
-                    upline_uid = getattr(upline_map[str(ref)], 'uid', None)
-                if not upline_uid:
-                    upline_uid = 'ROOT'
-
+            for entry in entries:
                 rows.append({
-                    "uid": getattr(u, 'uid', None),
-                    "time": latest_at.isoformat() if latest_at else None,
+                    "uid": getattr(user, 'uid', None),
+                    "time": entry.created_at.isoformat() if entry.created_at else None,
                     "upline_uid": upline_uid,
                     "partner_count": partner_count,
-                    "rank": getattr(u, 'current_rank', None)
+                    "rank": getattr(user, 'current_rank', None),
+                    "amount": float(entry.amount) if entry.amount else 0,
+                    "reason": entry.reason,
+                    "tx_hash": entry.tx_hash or ""
                 })
 
             return {
@@ -709,79 +709,68 @@ class WalletService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_binary_partner_incentive(self, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+    def get_binary_partner_incentive(self, user_id: str, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
         """
-        Return a paginated list of DISTINCT users who received Binary Partner Incentive-type earnings.
-        Columns: uid (receiver), upline_uid (from latest tx), total_amount, time (latest earning).
-        Reasons counted: binary_partner_incentive, binary_joining_commission, binary_upgrade_* (credits only).
+        Return a paginated list of Binary Partner Incentive earnings for a specific user.
+        Per PROJECT_DOCUMENTATION.md Section 8: Binary Partner Incentive includes:
+        - binary_joining_commission (10% from joining)
+        - binary_partner_incentive (partner incentive)
+        - binary_upgrade_* (10% from each slot upgrade)
+        Columns: uid (receiver), upline_uid, amount, time, reason, tx_hash.
         """
         try:
-            import re
             from ..user.model import User
+            from bson import ObjectId
+            from mongoengine import Q
 
-            # Aggregate by user: sum amounts, pick latest created_at and latest tx_hash
-            pipeline = [
-                {"$match": {
-                    "type": "credit",
-                    "currency": currency.upper(),
-                    "$or": [
-                        {"reason": {"$in": ["binary_partner_incentive", "binary_joining_commission"]}},
-                        {"reason": {"$regex": "^binary_upgrade_"}}
-                    ]
-                }},
-                {"$sort": {"created_at": -1}},  # so $first gets latest tx
-                {"$group": {
-                    "_id": "$user_id",
-                    "total_amount": {"$sum": "$amount"},
-                    "latest_at": {"$first": "$created_at"},
-                    "latest_tx": {"$first": "$tx_hash"}
-                }},
-                {"$sort": {"latest_at": -1}}
-            ]
-            agg = list(WalletLedger.objects.aggregate(pipeline))
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
 
+            # Get wallet ledger entries for this specific user
+            # Include all Binary Partner Incentive related reasons per documentation
+            base_filter = Q(user_id=user_oid) & Q(type="credit") & Q(currency=currency.upper())
+            reason_filter = Q(reason="binary_partner_incentive") | Q(reason="binary_joining_commission") | Q(reason__startswith="binary_upgrade_")
+            query = base_filter & reason_filter
+            
+            # Count total entries
+            total = WalletLedger.objects(query).count()
+            
             # Pagination
             page = max(1, int(page or 1))
             limit = max(1, min(100, int(limit or 50)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_rows = agg[start:end]
-            total = len(agg)
+            skip = (page - 1) * limit
+            
+            # Get paginated entries, sorted by created_at desc
+            entries = WalletLedger.objects(query).order_by('-created_at').skip(skip).limit(limit)
 
-            # Fetch users and uplines
-            user_ids = [r.get("_id") for r in page_rows if r.get("_id")]
-            users_map = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by')}
-            # Collect possible uplines (from referrer fallback)
-            ref_ids = []
-            for u in users_map.values():
-                rid = getattr(u, 'refered_by', None)
-                if rid:
-                    ref_ids.append(rid)
-            ref_map = {str(u.id): u for u in User.objects(id__in=ref_ids).only('uid')}
+            # Get user info
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get upline info
+            ref = getattr(user, 'refered_by', None)
+            upline_uid = None
+            if ref:
+                upline = User.objects(id=ref).only('uid').first()
+                if upline:
+                    upline_uid = getattr(upline, 'uid', None)
+            if not upline_uid:
+                upline_uid = 'ROOT'
 
-            # Parse upline from latest tx_hash if present
-            hex24 = re.compile(r"[0-9a-fA-F]{24}")
+            # Build rows from ledger entries
             rows = []
-            for r in page_rows:
-                uid_oid = r.get("_id")
-                u = users_map.get(str(uid_oid))
-                if not u:
-                    continue
-                latest_tx = str(r.get("latest_tx") or '')
-                m = hex24.search(latest_tx)
-                upline_uid = None
-                if m and ref_map.get(m.group(0)):
-                    upline_uid = getattr(ref_map[m.group(0)], 'uid', None)
-                if not upline_uid and getattr(u, 'refered_by', None):
-                    rid = str(getattr(u, 'refered_by'))
-                    if rid in ref_map:
-                        upline_uid = getattr(ref_map[rid], 'uid', None)
-
+            for entry in entries:
                 rows.append({
-                    "uid": getattr(u, 'uid', None),
-                    "upline_uid": upline_uid or 'ROOT',
-                    "amount": float(r.get("total_amount") or 0),
-                    "time": r.get("latest_at").isoformat() if r.get("latest_at") else None
+                    "uid": getattr(user, 'uid', None),
+                    "upline_uid": upline_uid,
+                    "amount": float(entry.amount) if entry.amount else 0,
+                    "time": entry.created_at.isoformat() if entry.created_at else None,
+                    "reason": entry.reason,
+                    "tx_hash": entry.tx_hash or ""
                 })
 
             return {
