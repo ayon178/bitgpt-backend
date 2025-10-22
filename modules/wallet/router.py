@@ -364,12 +364,24 @@ async def get_mentorship_bonus(
 async def get_phase_1_income(
     currency: str = Query("USDT", description="Currency type"),
     page: int = Query(1, description="Page number"),
-    limit: int = Query(10, description="Items per page")
+    limit: int = Query(10, description="Items per page"),
+    current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get Global Program Phase-1 income data for all users WITHOUT authentication"""
+    """Get Global Program Phase-1 income data for authenticated user"""
     try:
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
         service = WalletService()
-        result = service.get_phase_1_income(currency, page, limit)
+        result = service.get_phase_1_income(user_id=user_id, currency=currency, page=page, limit=limit)
 
         if result["success"]:
             return success_response(result["data"], "Phase-1 income data fetched successfully")
@@ -386,12 +398,24 @@ async def get_phase_1_income(
 async def get_phase_2_income(
     currency: str = Query("USDT", description="Currency type"),
     page: int = Query(1, description="Page number"),
-    limit: int = Query(10, description="Items per page")
+    limit: int = Query(10, description="Items per page"),
+    current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get Global Program Phase-2 income data for all users WITHOUT authentication"""
+    """Get Global Program Phase-2 income data for authenticated user"""
     try:
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
         service = WalletService()
-        result = service.get_phase_2_income(currency, page, limit)
+        result = service.get_phase_2_income(user_id=user_id, currency=currency, page=page, limit=limit)
 
         if result["success"]:
             return success_response(result["data"], "Phase-2 income data fetched successfully")
@@ -408,12 +432,24 @@ async def get_phase_2_income(
 async def get_global_partner_incentive(
     currency: str = Query("USDT", description="Currency type"),
     page: int = Query(1, description="Page number"),
-    limit: int = Query(10, description="Items per page")
+    limit: int = Query(10, description="Items per page"),
+    current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get Global Partner Incentive data for all users WITHOUT authentication"""
+    """Get Global Partner Incentive data for authenticated user"""
     try:
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
         service = WalletService()
-        result = service.get_global_partner_incentive(currency, page, limit)
+        result = service.get_global_partner_incentive(user_id=user_id, currency=currency, page=page, limit=limit)
 
         if result["success"]:
             return success_response(result["data"], "Global Partner Incentive data fetched successfully")

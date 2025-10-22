@@ -1086,13 +1086,21 @@ class WalletService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_phase_1_income(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Global Program Phase-1 income data for all users - following dream matrix pattern"""
+    def get_phase_1_income(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Global Program Phase-1 income data for a specific user"""
         try:
             from ..user.model import User
+            from bson import ObjectId
             
-            # Get all Phase-1 income entries from WalletLedger
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
+            
+            # Get Phase-1 income entries for specific user from WalletLedger
             phase_1_entries = WalletLedger.objects(
+                user_id=user_oid,
                 type="credit",
                 currency=currency.upper(),
                 reason__regex="^global_phase_1"
@@ -1102,38 +1110,35 @@ class WalletService:
             
             # Pagination
             page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 10)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_entries = phase_1_entries[start:end]
+            limit = max(1, min(100, int(limit or 50)))
+            skip = (page - 1) * limit
+            page_entries = phase_1_entries.skip(skip).limit(limit)
             
-            # Format income data exactly like the image (User ID, Partner, Rank, USDT, Time & Date)
+            # Get user info once (since filtering by single user)
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get upline info
+            ref = getattr(user, 'refered_by', None)
+            upline_uid = None
+            if ref:
+                upline = User.objects(id=ref).only('uid').first()
+                if upline:
+                    upline_uid = getattr(upline, 'uid', None)
+            if not upline_uid:
+                upline_uid = 'ROOT'
+            
+            # Build rows from ledger entries
             items = []
-            for i, entry in enumerate(page_entries):
-                # Format date exactly like image (DD Mon YYYY (HH:MM))
-                created_date = entry.created_at.strftime("%d %b %Y")
-                created_time = entry.created_at.strftime("(%H:%M)")
-                time_date = f"{created_date} {created_time}"
-                
-                # Get user info
-                user = User.objects(id=entry.user_id).first()
-                user_id = user.uid if user and hasattr(user, 'uid') else "Unknown"
-                
-                # Get partner count (direct referrals)
-                partner_count = 0
-                if user and hasattr(user, 'referrals'):
-                    partner_count = len(user.referrals) if user.referrals else 0
-                
-                # Get rank (this would need to be calculated based on business logic)
-                # For now, using a simple calculation based on partner count
-                rank = min(partner_count + 1, 5) if partner_count > 0 else 1
-                
+            for entry in page_entries:
                 items.append({
-                    "user_id": user_id,
-                    "partner": partner_count,
-                    "rank": rank,
-                    "usdt": float(entry.amount),
-                    "time_date": time_date
+                    "uid": getattr(user, 'uid', None),
+                    "upline_uid": upline_uid,
+                    "amount": float(entry.amount) if entry.amount else 0,
+                    "time": entry.created_at.isoformat() if entry.created_at else None,
+                    "reason": entry.reason,
+                    "tx_hash": entry.tx_hash or ""
                 })
             
             return {
@@ -1148,13 +1153,22 @@ class WalletService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
-    def get_phase_2_income(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Global Program Phase-2 income data for all users - following dream matrix pattern"""
+
+    def get_phase_2_income(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Global Program Phase-2 income data for a specific user"""
         try:
             from ..user.model import User
+            from bson import ObjectId
             
-            # Get all Phase-2 income entries from WalletLedger
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
+            
+            # Get Phase-2 income entries for specific user from WalletLedger
             phase_2_entries = WalletLedger.objects(
+                user_id=user_oid,
                 type="credit",
                 currency=currency.upper(),
                 reason__regex="^global_phase_2"
@@ -1164,38 +1178,35 @@ class WalletService:
             
             # Pagination
             page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 10)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_entries = phase_2_entries[start:end]
+            limit = max(1, min(100, int(limit or 50)))
+            skip = (page - 1) * limit
+            page_entries = phase_2_entries.skip(skip).limit(limit)
             
-            # Format income data exactly like the image (User ID, Partner, Rank, USDT, Time & Date)
+            # Get user info once (since filtering by single user)
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get upline info
+            ref = getattr(user, 'refered_by', None)
+            upline_uid = None
+            if ref:
+                upline = User.objects(id=ref).only('uid').first()
+                if upline:
+                    upline_uid = getattr(upline, 'uid', None)
+            if not upline_uid:
+                upline_uid = 'ROOT'
+            
+            # Build rows from ledger entries
             items = []
-            for i, entry in enumerate(page_entries):
-                # Format date exactly like image (DD Mon YYYY (HH:MM))
-                created_date = entry.created_at.strftime("%d %b %Y")
-                created_time = entry.created_at.strftime("(%H:%M)")
-                time_date = f"{created_date} {created_time}"
-                
-                # Get user info
-                user = User.objects(id=entry.user_id).first()
-                user_id = user.uid if user and hasattr(user, 'uid') else "Unknown"
-                
-                # Get partner count (direct referrals)
-                partner_count = 0
-                if user and hasattr(user, 'referrals'):
-                    partner_count = len(user.referrals) if user.referrals else 0
-                
-                # Get rank (this would need to be calculated based on business logic)
-                # For now, using a simple calculation based on partner count
-                rank = min(partner_count + 1, 5) if partner_count > 0 else 1
-                
+            for entry in page_entries:
                 items.append({
-                    "user_id": user_id,
-                    "partner": partner_count,
-                    "rank": rank,
-                    "usdt": float(entry.amount),
-                    "time_date": time_date
+                    "uid": getattr(user, 'uid', None),
+                    "upline_uid": upline_uid,
+                    "amount": float(entry.amount) if entry.amount else 0,
+                    "time": entry.created_at.isoformat() if entry.created_at else None,
+                    "reason": entry.reason,
+                    "tx_hash": entry.tx_hash or ""
                 })
             
             return {
@@ -1210,13 +1221,22 @@ class WalletService:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
-    def get_global_partner_incentive(self, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Global Partner Incentive data for all users - following dream matrix pattern"""
+
+    def get_global_partner_incentive(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        """Get Global Partner Incentive data for a specific user"""
         try:
             from ..user.model import User
+            from bson import ObjectId
             
-            # Get all Global Partner Incentive entries from WalletLedger
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
+            
+            # Get Global Partner Incentive entries for specific user from WalletLedger
             incentive_entries = WalletLedger.objects(
+                user_id=user_oid,
                 type="credit",
                 currency=currency.upper(),
                 reason="global_partner_incentive"
@@ -1226,36 +1246,35 @@ class WalletService:
             
             # Pagination
             page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 10)))
-            start = (page - 1) * limit
-            end = start + limit
-            page_entries = incentive_entries[start:end]
+            limit = max(1, min(100, int(limit or 50)))
+            skip = (page - 1) * limit
+            page_entries = incentive_entries.skip(skip).limit(limit)
             
-            # Format income data exactly like the image (SL.No, ID, Upline, USDT, Time & Date)
+            # Get user info once (since filtering by single user)
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get upline info
+            ref = getattr(user, 'refered_by', None)
+            upline_uid = None
+            if ref:
+                upline = User.objects(id=ref).only('uid').first()
+                if upline:
+                    upline_uid = getattr(upline, 'uid', None)
+            if not upline_uid:
+                upline_uid = 'ROOT'
+            
+            # Build rows from ledger entries
             items = []
-            for i, entry in enumerate(page_entries):
-                # Format date exactly like image (DD Mon YYYY (HH:MM))
-                created_date = entry.created_at.strftime("%d %b %Y")
-                created_time = entry.created_at.strftime("(%H:%M)")
-                time_date = f"{created_date} {created_time}"
-                
-                # Get user info
-                user = User.objects(id=entry.user_id).first()
-                user_id = user.uid if user and hasattr(user, 'uid') else "Unknown"
-                
-                # Get upline info (referrer of the user)
-                upline_id = None
-                if user and hasattr(user, 'refered_by') and user.refered_by:
-                    upline = User.objects(id=user.refered_by).first()
-                    if upline and hasattr(upline, 'uid'):
-                        upline_id = upline.uid
-                
+            for entry in page_entries:
                 items.append({
-                    "sl_no": start + i + 1,  # Sequential number starting from page offset
-                    "id": user_id,
-                    "upline": upline_id or "ROOT",
-                    "usdt": float(entry.amount),
-                    "time_date": time_date
+                    "uid": getattr(user, 'uid', None),
+                    "upline_uid": upline_uid,
+                    "amount": float(entry.amount) if entry.amount else 0,
+                    "time": entry.created_at.isoformat() if entry.created_at else None,
+                    "reason": entry.reason,
+                    "tx_hash": entry.tx_hash or ""
                 })
             
             return {
