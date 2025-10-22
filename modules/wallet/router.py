@@ -329,12 +329,25 @@ async def get_newcomer_growth_support_income(
 async def get_mentorship_bonus(
     currency: str = Query("USDT", description="Currency type"),
     page: int = Query(1, description="Page number"),
-    limit: int = Query(10, description="Items per page")
+    limit: int = Query(10, description="Items per page"),
+    current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get Mentorship Bonus data for all users WITHOUT authentication"""
+    """Get Mentorship Bonus data for authenticated user from IncomeEvent (consistent with pools-summary)"""
     try:
-        service = MentorshipService()
-        result = service.get_mentorship_bonus_income(currency, page, limit)
+        # Extract user_id from authenticated user
+        user_id = None
+        user_id_keys = ["user_id", "_id", "id"]
+        for key in user_id_keys:
+            if current_user and current_user.get(key):
+                user_id = str(current_user[key])
+                break
+        
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+        
+        # Use WalletService to fetch from IncomeEvent (consistent with pools_summary)
+        service = WalletService()
+        result = service.get_mentorship_bonus_income(user_id=user_id, currency=currency, page=page, limit=limit)
 
         if result["success"]:
             return success_response(result["data"], "Mentorship Bonus data fetched successfully")
