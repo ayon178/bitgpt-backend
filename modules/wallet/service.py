@@ -785,19 +785,27 @@ class WalletService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_dream_matrix_earnings_list(self, currency: str = "USDT", page: int = 1, limit: int = 50, days: int = 30) -> Dict[str, Any]:
+    def get_dream_matrix_earnings_list(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 50, days: int = 30) -> Dict[str, Any]:
         """
-        Return a paginated list of Dream Matrix earnings events (not aggregated).
+        Return a paginated list of Dream Matrix earnings events for a specific user.
         Columns: uid (receiver), upline_uid (source_user), time, partner_count, rank.
         Data source: DreamMatrixCommission (payment_status in pending/processing/paid).
         """
         try:
             from ..dream_matrix.model import DreamMatrixCommission
             from ..user.model import User, PartnerGraph
+            from bson import ObjectId
+
+            # Convert user_id to ObjectId if needed
+            try:
+                user_oid = ObjectId(user_id)
+            except:
+                user_oid = user_id
 
             from datetime import datetime, timedelta
             since = datetime.utcnow() - timedelta(days=max(1, int(days or 30)))
             qs = DreamMatrixCommission.objects(
+                user_id=user_oid,
                 payment_status__in=['pending', 'processing', 'paid'],
                 created_at__gte=since
             ).only('user_id', 'source_user_id', 'created_at').order_by('-created_at')
@@ -808,27 +816,29 @@ class WalletService:
             entries = list(qs.skip(skip).limit(limit))
             total = qs.count()
 
-            user_ids = [e.user_id for e in entries if getattr(e, 'user_id', None)]
-            src_ids = [e.source_user_id for e in entries if getattr(e, 'source_user_id', None)]
+            # Get user info (single user since we're filtering by user_id)
+            user = User.objects(id=user_oid).first()
+            if not user:
+                return {"success": False, "error": "User not found"}
+            
+            # Get partner graph for partner count
+            pg = PartnerGraph.objects(user_id=user_oid).first()
+            partner_count = len(getattr(pg, 'directs', []) if pg else [])
 
-            users = {str(u.id): u for u in User.objects(id__in=user_ids).only('uid', 'refered_by', 'current_rank')}
+            # Get all unique source users (uplines) from entries
+            src_ids = list(set([e.source_user_id for e in entries if getattr(e, 'source_user_id', None)]))
             sources = {str(u.id): u for u in User.objects(id__in=src_ids).only('uid')}
-            graphs = {str(g.user_id): g for g in PartnerGraph.objects(user_id__in=user_ids).only('user_id', 'directs')}
 
             rows = []
             for e in entries:
-                recv = users.get(str(getattr(e, 'user_id', '')))
-                if not recv:
-                    continue
                 src = sources.get(str(getattr(e, 'source_user_id', '')))
-                pg = graphs.get(str(getattr(e, 'user_id', '')))
-                partner_count = len(getattr(pg, 'directs', []) if pg else [])
                 rows.append({
-                    "uid": getattr(recv, 'uid', None),
+                    "uid": getattr(user, 'uid', None),
                     "upline_uid": getattr(src, 'uid', None) or 'ROOT',
                     "time": getattr(e, 'created_at', None).isoformat() if getattr(e, 'created_at', None) else None,
                     "partner_count": partner_count,
-                    "rank": getattr(recv, 'current_rank', None)
+                    "rank": getattr(user, 'current_rank', None),
+                    "amount": float(getattr(e, 'amount', 0)) if hasattr(e, 'amount') else 0
                 })
 
             return {
