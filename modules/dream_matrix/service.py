@@ -52,26 +52,27 @@ class DreamMatrixService:
                 
                 # Member requirements for each slot to UPGRADE to next slot
                 # Matrix recycle system: Each slot completes with 39 members (3 + 9 + 27)
-                # To upgrade from Slot N to Slot N+1, you need to complete Slot N tree
-                # Slot 1 → Slot 2: Need 3 members in Slot 1
-                # Slot 2 → Slot 3: Need 9 members in Slot 2
-                # Slot 3 → Slot 4: Need 27 members in Slot 3
+                # ALL SLOTS complete at 39 members - then automatic recycle happens
+                # Level 1: 3 members, Level 2: 9 members, Level 3: 27 members = Total 39
+                # This is SAME for ALL slots (1-15)
+                MEMBERS_PER_SLOT = 39  # Universal completion requirement for all Matrix slots
+                
                 slot_member_requirements = {
-                    1: 3,      # Slot 1: Need 3 members to upgrade to Slot 2
-                    2: 9,      # Slot 2: Need 9 members to upgrade to Slot 3
-                    3: 27,     # Slot 3: Need 27 members to upgrade to Slot 4
-                    4: 81,     # Slot 4: Need 81 members to upgrade to Slot 5
-                    5: 243,    # Slot 5: Need 243 members to upgrade to Slot 6
-                    6: 729,    # Slot 6: Need 729 members to upgrade to Slot 7
-                    7: 2187,   # Slot 7: Need 2187 members to upgrade to Slot 8
-                    8: 6561,   # Slot 8: Need 6561 members to upgrade to Slot 9
-                    9: 19683,  # Slot 9: Need 19683 members to upgrade to Slot 10
-                    10: 59049, # Slot 10: Need 59049 members to upgrade to Slot 11
-                    11: 177147, # Slot 11: Need 177147 members to upgrade to Slot 12
-                    12: 531441, # Slot 12: Need 531441 members to upgrade to Slot 13
-                    13: 1594323, # Slot 13: Need 1594323 members to upgrade to Slot 14
-                    14: 4782969, # Slot 14: Need 4782969 members to upgrade to Slot 15
-                    15: 14348907 # Slot 15: Maximum slot
+                    1: MEMBERS_PER_SLOT,   # Slot 1: Need 39 members to complete/recycle
+                    2: MEMBERS_PER_SLOT,   # Slot 2: Need 39 members to complete/recycle
+                    3: MEMBERS_PER_SLOT,   # Slot 3: Need 39 members to complete/recycle
+                    4: MEMBERS_PER_SLOT,   # Slot 4: Need 39 members to complete/recycle
+                    5: MEMBERS_PER_SLOT,   # Slot 5: Need 39 members to complete/recycle
+                    6: MEMBERS_PER_SLOT,   # Slot 6: Need 39 members to complete/recycle
+                    7: MEMBERS_PER_SLOT,   # Slot 7: Need 39 members to complete/recycle
+                    8: MEMBERS_PER_SLOT,   # Slot 8: Need 39 members to complete/recycle
+                    9: MEMBERS_PER_SLOT,   # Slot 9: Need 39 members to complete/recycle
+                    10: MEMBERS_PER_SLOT,  # Slot 10: Need 39 members to complete/recycle
+                    11: MEMBERS_PER_SLOT,  # Slot 11: Need 39 members to complete/recycle
+                    12: MEMBERS_PER_SLOT,  # Slot 12: Need 39 members to complete/recycle
+                    13: MEMBERS_PER_SLOT,  # Slot 13: Need 39 members to complete/recycle
+                    14: MEMBERS_PER_SLOT,  # Slot 14: Need 39 members to complete/recycle
+                    15: MEMBERS_PER_SLOT   # Slot 15: Need 39 members to complete/recycle
                 }
                 
                 # Gather slot catalog 1..15 for matrix
@@ -80,22 +81,35 @@ class DreamMatrixService:
                 max_slot_no = max(catalog_by_slot.keys()) if catalog_by_slot else 15
                 target_max_slot = max(15, max_slot_no)
                 
-                # Activated/completed slots for this user
+                # Get user's current active Matrix slot from MatrixTree
+                matrix_tree_obj = MatrixTree.objects(user_id=user_oid).first()
+                user_current_slot = matrix_tree_obj.current_slot if matrix_tree_obj else 1
+                
+                # Activated/completed slots for this user (from slot activations)
                 activated = SlotActivation.objects(user_id=user_oid, program='matrix', status='completed')
                 completed_slots = {a.slot_no for a in activated}
                 
-                # Determine which slots are actually completed based on member count
+                # Determine which slots are actually completed based on member count in each specific slot
                 member_completed_slots = set()
                 for slot_no in range(1, target_max_slot + 1):
-                    required_members = slot_member_requirements.get(slot_no, 0)
-                    if actual_total_team_members >= required_members:
+                    # Count members in THIS specific slot's tree
+                    slot_specific_members = self._count_slot_specific_members(user_oid, slot_no)
+                    required_members = slot_member_requirements.get(slot_no, 39)
+                    
+                    # Slot is completed if it has 39 members (recycle triggered)
+                    if slot_specific_members >= required_members:
                         member_completed_slots.add(slot_no)
                 
                 # Combine both: slot is completed if either activated OR member requirement met
                 all_completed_slots = completed_slots.union(member_completed_slots)
                 
-                # Find highest completed slot
-                highest_completed_slot = max(all_completed_slots) if all_completed_slots else 0
+                # Use user's current active slot from MatrixTree as the baseline
+                # If user is on slot N, then slots 1 to N-1 are completed
+                for s in range(1, user_current_slot):
+                    all_completed_slots.add(s)
+                
+                # Find highest completed slot (but don't exceed user's current slot)
+                highest_completed_slot = user_current_slot - 1 if user_current_slot > 1 else 0
                 
                 # Next slot for manual upgrade
                 next_manual_upgrade_slot = highest_completed_slot + 1 if highest_completed_slot < target_max_slot else None
@@ -113,26 +127,29 @@ class DreamMatrixService:
                     # Check if this is the slot available for manual upgrade
                     is_manual_upgrade = (slot_no == next_manual_upgrade_slot)
                     
-                    # Calculate progress percentage for CURRENT ACTIVE SLOT
-                    # If user is in Slot N, progress shows how many members joined in Slot N tree
-                    # to upgrade to Slot N+1
+                    # Calculate progress percentage for each slot
+                    # Progress shows: (current members in this slot / 39) * 100
+                    # User's CURRENT ACTIVE slot (from MatrixTree.current_slot) shows real-time progress
                     progress_percent = 0
                     
                     if is_completed:
-                        # Completed slots always show 100%
+                        # Completed/past slots always show 100%
                         progress_percent = 100
-                    elif slot_no == highest_completed_slot + 1:
-                        # This is the current active slot
+                    elif slot_no == user_current_slot:
+                        # This is the CURRENT ACTIVE slot - show real-time progress
                         # Count members in THIS specific slot's tree
                         current_slot_members = self._count_slot_specific_members(user_oid, slot_no)
-                        required_members = slot_member_requirements.get(slot_no, 0)
+                        required_members = slot_member_requirements.get(slot_no, 39)  # Always 39 for Matrix
                         
                         if required_members > 0:
                             progress_percent = int(min(100, (current_slot_members / required_members) * 100))
                         else:
                             progress_percent = 0
+                        
+                        # Debug log
+                        print(f"📊 Slot {slot_no} Progress: {current_slot_members}/{required_members} members = {progress_percent}%")
                     else:
-                        # Future slots show 0%
+                        # Future slots (not yet reached) show 0%
                         progress_percent = 0
                     
                     slots_summary.append({
