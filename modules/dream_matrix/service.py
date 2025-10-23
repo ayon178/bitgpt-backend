@@ -267,16 +267,15 @@ class DreamMatrixService:
                 
                 # Get parent_id from TreePlacement for this user
                 parent_id = None
-                if level > 0:  # Only for downline users, not root
-                    try:
-                        user_placement = TreePlacement.objects(
-                            user_id=parent_oid,
-                            program='matrix'
-                        ).first()
-                        if user_placement:
-                            parent_id = str(user_placement.parent_id)
-                    except Exception:
-                        pass
+                try:
+                    user_placement = TreePlacement.objects(
+                        user_id=parent_oid,
+                        program='matrix'
+                    ).first()
+                    if user_placement:
+                        parent_id = str(user_placement.parent_id)
+                except Exception:
+                    pass
                 
                 # Create the node
                 node = {
