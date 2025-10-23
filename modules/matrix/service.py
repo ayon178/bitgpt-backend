@@ -2833,7 +2833,7 @@ class MatrixService:
             
             # Log blockchain event
             self._log_blockchain_event(
-                tx_hash=f"rank_update_{user_id}",
+                tx_hash=f"rank_update_{user_id}_{int(datetime.utcnow().timestamp())}",
                 event_type='rank_update',
                 event_data={
                     'program': 'rank_system',
@@ -2869,7 +2869,6 @@ class MatrixService:
             active_slots_count = SlotActivation.objects(
                 user_id=ObjectId(user_id),
                 program='binary',
-                is_active=True,
                 status='completed'
             ).count()
             

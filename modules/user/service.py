@@ -643,6 +643,31 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             # Create binary tree placement for the new user
             tree_service = TreeService()
             
+            # First, ensure referrer has TreePlacement record for binary
+            referrer_placement = TreePlacement.objects(
+                user_id=ObjectId(upline_id),
+                program='binary',
+                slot_no=1,
+                is_active=True
+            ).first()
+            
+            if not referrer_placement:
+                print(f"⚠️ Referrer {upline_id} doesn't have Binary TreePlacement record, creating one...")
+                # Create TreePlacement for referrer (assuming they are root level)
+                referrer_placement = TreePlacement(
+                    user_id=ObjectId(upline_id),
+                    program='binary',
+                    parent_id=ObjectId(upline_id),
+                    upline_id=ObjectId(upline_id),
+                    position='root',
+                    level=0,
+                    slot_no=1,
+                    is_active=True,
+                    created_at=datetime.utcnow()
+                )
+                referrer_placement.save()
+                print(f"✅ Created Binary TreePlacement for referrer {upline_id}")
+            
             # Place user in binary tree under their referrer
             binary_placement = tree_service.place_user_in_tree(
                 user_id=user.id,

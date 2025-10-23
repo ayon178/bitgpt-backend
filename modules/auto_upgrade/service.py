@@ -430,11 +430,14 @@ class AutoUpgradeService:
                     program='binary',
                     slot_no=1,
                     slot_name='Explorer',
-                    slot_value=slot_value,
+                    amount_paid=slot_value,
                     currency='BNB',
                     status='completed',
                     activation_type='automatic',  # Mark as automatic activation
+                    upgrade_source='auto',
+                    tx_hash=f"auto_slot_1_{user_id}_{int(datetime.utcnow().timestamp())}",
                     activated_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow(),
                     created_at=datetime.utcnow()
                 ).save()
                 
@@ -497,11 +500,14 @@ class AutoUpgradeService:
                     program='binary',
                     slot_no=slot_no,
                     slot_name=slot_name,
-                    slot_value=slot_value,
+                    amount_paid=slot_value,
                     currency='BNB',
                     status='completed',
                     activation_type='automatic',  # Mark as automatic activation
+                    upgrade_source='auto',
+                    tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
                     activated_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow(),
                     created_at=datetime.utcnow()
                 ).save()
                 
