@@ -207,11 +207,39 @@ class MatrixService:
             tree_placement_result = None
             try:
                 from modules.tree.service import TreeService
+                from modules.tree.model import TreePlacement
+                from datetime import datetime
+                
                 tree_service = TreeService()
                 
                 print(f"🔍 Creating TreePlacement record for Matrix user {user_id} under {referrer_id}")
                 
-                # Place user in matrix tree under their referrer
+                # First, ensure referrer has TreePlacement record
+                referrer_placement = TreePlacement.objects(
+                    user_id=ObjectId(referrer_id),
+                    program='matrix',
+                    slot_no=1,
+                    is_active=True
+                ).first()
+                
+                if not referrer_placement:
+                    print(f"⚠️ Referrer {referrer_id} doesn't have TreePlacement record, creating one...")
+                    # Create TreePlacement for referrer (assuming they are root level)
+                    referrer_placement = TreePlacement(
+                        user_id=ObjectId(referrer_id),
+                        program='matrix',
+                        parent_id=ObjectId(referrer_id),
+                        upline_id=ObjectId(referrer_id),
+                        position='root',
+                        level=0,
+                        slot_no=1,
+                        is_active=True,
+                        created_at=datetime.utcnow()
+                    )
+                    referrer_placement.save()
+                    print(f"✅ Created TreePlacement for referrer {referrer_id}")
+                
+                # Now place user in matrix tree under their referrer
                 matrix_placement = tree_service.place_user_in_tree(
                     user_id=ObjectId(user_id),
                     referrer_id=ObjectId(referrer_id),
@@ -1683,7 +1711,7 @@ class MatrixService:
             
             if not user_placement or not user_placement.upline_id:
                 print(f"  No upline found for user {user_id}")
-            return None
+                return None
             
             # Get the upline's user_id (whose tree this user was placed in)
             upline_id = str(user_placement.upline_id)
