@@ -41,6 +41,40 @@ class RankMilestoneRequest(BaseModel):
 
 # API Endpoints
 
+@router.get("/debug-achievements/{user_id}")
+async def debug_user_achievements(user_id: str):
+    """Debug user achievements for rank calculation."""
+    try:
+        from .service import RankService
+        
+        rank_service = RankService()
+        achievements = rank_service._get_user_achievements(user_id)
+        
+        return success_response({
+            "user_id": user_id,
+            "achievements": achievements
+        }, "User achievements retrieved successfully")
+        
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/force-update/{user_id}")
+async def force_update_user_rank(user_id: str):
+    """Force update user rank directly."""
+    try:
+        from .service import RankService
+        
+        rank_service = RankService()
+        result = rank_service.update_user_rank(user_id, force_update=True)
+        
+        return success_response({
+            "user_id": user_id,
+            "result": result
+        }, "User rank updated successfully")
+        
+    except Exception as e:
+        return error_response(str(e))
+
 @router.get("/list")
 async def get_all_ranks():
     """Get all 15 special ranks"""

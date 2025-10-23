@@ -453,11 +453,33 @@ class RankService:
                 status="completed"
             ).count()
             
-            matrix_activations = SlotActivation.objects(
+            # Get matrix activations from both SlotActivation and MatrixActivation
+            matrix_slot_activations = SlotActivation.objects(
                 user_id=ObjectId(user_id),
                 program="matrix",
                 status="completed"
             ).count()
+            
+            # Also check MatrixActivation table
+            from ..matrix.model import MatrixActivation, MatrixTree
+            matrix_activations = MatrixActivation.objects(
+                user_id=ObjectId(user_id),
+                status="completed"
+            ).count()
+            
+            print(f"🔍 DEBUG: MatrixActivation count for user {user_id}: {matrix_activations}")
+            
+            # Also check MatrixTree.current_slot as fallback
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            if matrix_tree and matrix_tree.current_slot:
+                print(f"🔍 DEBUG: MatrixTree current_slot for user {user_id}: {matrix_tree.current_slot}")
+                matrix_activations = max(matrix_activations, matrix_tree.current_slot)
+            else:
+                print(f"🔍 DEBUG: No MatrixTree found for user {user_id}")
+            
+            # Use the higher count (in case both tables have records)
+            matrix_activations = max(matrix_slot_activations, matrix_activations)
+            print(f"🔍 DEBUG: Final matrix_activations count: {matrix_activations}")
             
             global_activations = SlotActivation.objects(
                 user_id=ObjectId(user_id),

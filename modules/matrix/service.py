@@ -109,10 +109,23 @@ class MatrixService:
             matrix_tree = self._create_matrix_tree(user_id)
             
             # 2. Activate Slot-1 (STARTER) - $11 USDT
-            activation = self._create_matrix_activation(
-                user_id, 1, self.MATRIX_SLOTS[1]['name'], 
-                'initial', amount, tx_hash
-            )
+            # Check if MatrixActivation already exists
+            existing_activation = MatrixActivation.objects(
+                user_id=ObjectId(user_id),
+                slot_no=1,
+                status='completed'
+            ).first()
+            
+            if existing_activation:
+                print(f"⚠️ MatrixActivation already exists for user {user_id}, slot 1")
+                activation = existing_activation
+            else:
+                print(f"🔍 Creating MatrixActivation for user {user_id}, slot 1...")
+                activation = self._create_matrix_activation(
+                    user_id, 1, self.MATRIX_SLOTS[1]['name'], 
+                    'initial', amount, tx_hash
+                )
+                print(f"✅ Created MatrixActivation for user {user_id}, slot 1")
             
             # 3. Place user in upline tree with sweepover-aware BFS (slot 1 at join)
             # Place under the direct referrer tree, with sweepover escalation as needed

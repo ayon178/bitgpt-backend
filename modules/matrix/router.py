@@ -1218,6 +1218,56 @@ async def update_user_rank_endpoint(
     except Exception as e:
         return error_response(str(e))
 
+@router.post("/create-activation/{user_id}")
+async def create_matrix_activation_endpoint(user_id: str):
+    """Create MatrixActivation record for user."""
+    try:
+        from ..matrix.model import MatrixActivation
+        from bson import ObjectId
+        from datetime import datetime
+        from decimal import Decimal
+        
+        # Check if record already exists
+        existing = MatrixActivation.objects(user_id=ObjectId(user_id)).first()
+        if existing:
+            return success_response({
+                "user_id": user_id,
+                "existing_record": {
+                    "slot_no": existing.slot_no,
+                    "status": existing.status,
+                    "tx_hash": existing.tx_hash
+                }
+            }, "MatrixActivation record already exists")
+        
+        # Create new MatrixActivation record
+        activation = MatrixActivation(
+            user_id=ObjectId(user_id),
+            slot_no=1,
+            slot_name='STARTER',
+            activation_type='initial',
+            upgrade_source='manual',
+            amount_paid=Decimal('11.0'),
+            currency='USDT',
+            tx_hash=f'create_activation_{user_id}_{int(datetime.utcnow().timestamp())}',
+            is_auto_upgrade=False,
+            status='completed',
+            activated_at=datetime.utcnow(),
+            completed_at=datetime.utcnow()
+        )
+        activation.save()
+        
+        return success_response({
+            "user_id": user_id,
+            "created_record": {
+                "slot_no": activation.slot_no,
+                "status": activation.status,
+                "tx_hash": activation.tx_hash
+            }
+        }, "MatrixActivation record created successfully")
+        
+    except Exception as e:
+        return error_response(str(e))
+
 @router.get("/rank-system-info")
 async def get_rank_system_info_endpoint(
     current_user: dict = Depends(_auth_dependency)
