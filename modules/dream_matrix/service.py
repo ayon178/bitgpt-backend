@@ -265,6 +265,19 @@ class DreamMatrixService:
                 # Get user info
                 user_info = get_user_info(parent_oid)
                 
+                # Get parent_id from TreePlacement for this user
+                parent_id = None
+                if level > 0:  # Only for downline users, not root
+                    try:
+                        user_placement = TreePlacement.objects(
+                            user_id=parent_oid,
+                            program='matrix'
+                        ).first()
+                        if user_placement:
+                            parent_id = str(user_placement.parent_id)
+                    except Exception:
+                        pass
+                
                 # Create the node
                 node = {
                     "id": current_id,
@@ -274,6 +287,10 @@ class DreamMatrixService:
                     "level": level,
                     "position": position
                 }
+                
+                # Add parent_id if available
+                if parent_id:
+                    node["parent_id"] = parent_id
                 
                 # Only get children if we're not at the last level
                 if level < max_levels - 1:
