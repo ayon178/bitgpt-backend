@@ -73,19 +73,18 @@ class DreamMatrixService:
                 activated = SlotActivation.objects(user_id=user_oid, program='matrix', status='completed')
                 completed_slots = {a.slot_no for a in activated}
                 
-                # Determine which slots are actually completed based on member count in each specific slot
-                member_completed_slots = set()
-                for check_slot_no in range(1, target_max_slot + 1):
-                    # Count members in THIS specific slot's tree
-                    slot_specific_members = self._count_slot_specific_members(user_oid, check_slot_no)
-                    required_members = slot_member_requirements.get(check_slot_no, 39)
-                    
-                    # Slot is completed if it has 39 members (recycle triggered)
-                    if slot_specific_members >= required_members:
-                        member_completed_slots.add(check_slot_no)
+                # Determine which slots are actually completed based on user's own progress
+                # A slot is completed if:
+                # 1. User has SlotActivation with status 'completed' for that slot
+                # 2. User's current slot (from MatrixTree) is higher than the slot being checked
+                # 3. User has MatrixActivation with status 'completed' for that slot
                 
-                # Combine both: slot is completed if either activated OR member requirement met
-                all_completed_slots = completed_slots.union(member_completed_slots)
+                # Get MatrixActivation completed slots
+                matrix_activations = MatrixActivation.objects(user_id=user_oid, status='completed')
+                matrix_completed_slots = {a.slot_no for a in matrix_activations}
+                
+                # Combine all completion sources
+                all_completed_slots = completed_slots.union(matrix_completed_slots)
                 
                 # Use user's current active slot from MatrixTree as the baseline
                 # If user is on slot N, then slots 1 to N-1 are completed
