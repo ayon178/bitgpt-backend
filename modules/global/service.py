@@ -70,6 +70,84 @@ class GlobalService:
             print(f"Parent-child relationship validation failed for user {user_id}: {str(e)}")
             return False
 
+    def _find_current_root_in_phase1(self) -> ObjectId | None:
+        """
+        Find the current root user in Phase 1.
+        Root is the user with no parent (parent_id=None) in Phase 1.
+        """
+        try:
+            # Find the root user in Phase 1 (user with no parent)
+            root_user = TreePlacement.objects(
+                program='global', 
+                phase='PHASE-1', 
+                is_active=True,
+                parent_id=None
+            ).first()
+            
+            if root_user:
+                print(f"Found current root user in Phase 1: {root_user.user_id}")
+                return root_user.user_id
+            else:
+                print("No root user found in Phase 1")
+                return None
+            
+        except Exception as e:
+            print(f"Error finding current root in Phase 1: {str(e)}")
+            return None
+
+    def _update_root_position_in_phase1(self) -> Dict[str, Any]:
+        """
+        Update root position in Phase 1 when current root moves to Phase 2.
+        The second user (first downline) becomes the new root.
+        """
+        try:
+            # Find the first downline of the moved root user
+            # This will be the new root in Phase 1
+            new_root_placement = TreePlacement.objects(
+                program='global',
+                phase='PHASE-1',
+                is_active=True
+            ).order_by('created_at').first()
+            
+            if new_root_placement:
+                # Update the new root's parent_id to None (making it root)
+                new_root_placement.parent_id = None
+                new_root_placement.upline_id = None
+                new_root_placement.level = 1
+                new_root_placement.position = "1"
+                new_root_placement.phase_position = 1
+                new_root_placement.save()
+                
+                print(f"Updated root position: User {new_root_placement.user_id} is now root in Phase 1")
+                
+                # Update all remaining Phase-1 users to be under the new root
+                remaining_users = TreePlacement.objects(
+                    program='global',
+                    phase='PHASE-1',
+                    is_active=True,
+                    parent_id__ne=None  # Exclude the new root
+                )
+                
+                for user in remaining_users:
+                    user.parent_id = new_root_placement.user_id
+                    user.upline_id = new_root_placement.user_id
+                    user.level = 2
+                    user.save()
+                    print(f"  - Updated user {user.user_id} to be under new root")
+                
+                return {
+                    "success": True,
+                    "new_root_id": str(new_root_placement.user_id),
+                    "message": f"User {new_root_placement.user_id} is now root in Phase 1"
+                }
+            else:
+                print("No user found to become new root in Phase 1")
+                return {"success": False, "error": "No user found to become new root"}
+                
+        except Exception as e:
+            print(f"Error updating root position in Phase 1: {str(e)}")
+            return {"success": False, "error": str(e)}
+
     def _find_phase1_parent_bfs(self) -> ObjectId | None:
         """
         Find the earliest Global participant whose PHASE-1 has < 4 children using proper BFS algorithm
@@ -179,84 +257,76 @@ class GlobalService:
 
     def _place_in_phase1(self, user_id: str) -> Dict[str, Any]:
         """
-        1.1.4 Phase-1 BFS Placement - Section 1.1.4 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
-        - Place user in Phase-1 tree using BFS algorithm
-        - Find eligible upline with available Phase-1 positions
-        - Escalate up to 60 levels if needed
-        - Fallback to Mother ID if no eligible upline found
+        Global Phase-1 Placement Logic according to business requirements:
+        1. First user becomes root in Phase 1 Slot 1
+        2. Subsequent users join serially under the most recent user in current phase
+        3. When Phase 1 is full (4 users), first user moves to Phase 2
+        4. New users then join under the next available user in Phase 1
         """
         try:
             user_oid = ObjectId(user_id)
             
             # Check if this is the first user (ROOT user)
             existing_users = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
+            print(f"DEBUG: Existing users in Phase-1: {existing_users}")
+            
             if existing_users == 0:
                 print(f"User {user_id} is the first Global user, will be ROOT user")
                 parent_id = None
+                level = 1
+                position = 1
             else:
-                # Find eligible upline with available Phase-1 positions using BFS
-                parent_id = self._find_phase1_parent_bfs()
+                print(f"User {user_id} is not the first user, finding current root")
+                # Find the current root user in Phase 1
+                parent_id = self._find_current_root_in_phase1()
                 
-                # If no eligible upline found, escalate up to 60 levels
                 if not parent_id:
-                    parent_id = self._find_phase1_parent_escalation(user_id)
+                    print(f"No root user found in Phase 1 for user {user_id}")
+                    return {"success": False, "error": "No root user found in Phase 1"}
                 
-                # Fallback to Mother ID if no eligible upline found
-                if not parent_id:
-                    parent_id = self._get_mother_id()
-                    print(f"No eligible upline found for user {user_id}, using Mother ID: {parent_id}")
+                # Determine level and position
+                if parent_id:
+                    parent_node = TreePlacement.objects(user_id=parent_id, program='global', phase='PHASE-1').first()
+                    level = (parent_node.level + 1) if parent_node else 2
+                    # Count existing downlines for this parent to determine position
+                    existing_downlines = TreePlacement.objects(parent_id=parent_id, program='global', phase='PHASE-1', is_active=True).count()
+                    position = existing_downlines + 1
+                else:
+                    level = 1
+                    position = 1
             
             # Validate parent-child relationship before proceeding
             if not self._validate_parent_child_relationship(user_id, parent_id):
                 return {"success": False, "error": "Invalid parent-child relationship detected"}
             
-            # Determine position index for UI (1..4) - Global sequential positions
-            # Count total existing users in PHASE-1 to get next sequential position
-            total_phase1_users = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
-            next_position = total_phase1_users + 1
-            
-            position_label = f'position_{next_position}'
-            
-            if parent_id:
-                # infer parent level
-                parent_node = TreePlacement.objects(user_id=parent_id, program='global', phase='PHASE-1').first()
-                level = (parent_node.level + 1) if parent_node else 2
-                print(f"Placing user {user_id} under parent {parent_id} at {position_label}, level {level}")
-            else:
-                # For ROOT users (first user), level 1
-                level = 1
-                print(f"Placing user {user_id} as ROOT at {position_label}, level {level}")
+            print(f"Placing user {user_id} under parent {parent_id} at level {level}, position {position}")
             
             # Create placement record
-            # Calculate correct phase_position from position_label
-            phase_position = int(position_label.split('_')[1])
-            
             placement = TreePlacement(
                 user_id=user_oid,
                 program='global',
+                phase='PHASE-1',
+                slot_no=1,
                 parent_id=parent_id if parent_id and parent_id != user_oid else None,  # Don't self-parent
                 upline_id=parent_id if parent_id and parent_id != user_oid else None,  # Set upline_id
-                position=position_label,
+                position=str(position),
                 level=level,
-                slot_no=1,
-                phase='PHASE-1',
-                phase_position=phase_position,
+                phase_position=position,
                 is_active=True,
                 is_activated=True,
                 activation_date=datetime.utcnow()
             )
             placement.save()
-            print(f"Created TreePlacement for user {user_id} with parent {parent_id if parent_id and parent_id != user_oid else 'null'}, position {position_label}, level {level}, phase_position {phase_position}")
+            print(f"Created TreePlacement for user {user_id} with parent {parent_id if parent_id and parent_id != user_oid else 'null'}, position {position}, level {level}")
             
             # Create GlobalTeamMember record
             try:
-                position_in_phase = int(position_label.split('_')[1])
                 team_member = GlobalTeamMember(
                     user_id=user_oid,
                     parent_user_id=parent_id if parent_id else None,  # No parent for root users
                     phase='PHASE-1',
                     slot_number=1,
-                    position_in_phase=position_in_phase,
+                    position_in_phase=position,
                     level_in_tree=level,
                     direct_downlines=[],
                     total_downlines=[],
@@ -413,6 +483,253 @@ class GlobalService:
             return {"success": True, "parent_id": str(parent_id) if parent_id else None}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def _handle_phase_progression(self, user_id: str) -> Dict[str, Any]:
+        """
+        Handle phase progression according to business logic:
+        1. When Phase 1 is full (4 users), first user moves to Phase 2
+        2. When Phase 2 is full (8 users), first user upgrades to next slot in Phase 1
+        3. Users in Phase 2 have their upline changed to the original Phase 1 upline
+        """
+        try:
+            # Check if Phase 1 is now full (4 users)
+            phase1_users = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
+            
+            print(f"Phase-1 completion check: {phase1_users}/4 users")
+            
+            if phase1_users >= 4:
+                print(f"Phase-1 is now full ({phase1_users}/4), triggering progression")
+                
+                # Find the first user (root user) in Phase 1
+                first_user_placement = TreePlacement.objects(
+                    program='global', 
+                    phase='PHASE-1', 
+                    is_active=True,
+                    parent_id=None  # Root user has no parent
+                ).first()
+                
+                if first_user_placement:
+                    first_user_id = str(first_user_placement.user_id)
+                    print(f"Moving first user {first_user_id} from Phase-1 to Phase-2")
+                    
+                    # Move first user to Phase 2
+                    result = self._move_user_to_phase2(first_user_id)
+                    
+                    if result.get("success"):
+                        # Downlines stay in Phase-1, only root moves to Phase-2
+                        # Update root position: First downline becomes new root in Phase 1
+                        self._update_root_position_in_phase1()
+                        
+                        return {
+                            "success": True,
+                            "progression": "phase1_to_phase2",
+                            "first_user_id": first_user_id,
+                            "message": "First user moved to Phase 2, downlines stay in Phase-1"
+                        }
+                    else:
+                        return {"success": False, "error": f"Failed to move first user to Phase 2: {result.get('error')}"}
+            
+            # Check if Phase 2 is now full (8 users)
+            phase2_users = TreePlacement.objects(program='global', phase='PHASE-2', is_active=True).count()
+            
+            if phase2_users >= 8:
+                print(f"Phase-2 is now full ({phase2_users}/8), triggering slot upgrade")
+                
+                # Find the first user in Phase 2
+                first_user_placement = TreePlacement.objects(
+                    program='global', 
+                    phase='PHASE-2', 
+                    is_active=True,
+                    parent_id=None  # Root user has no parent
+                ).first()
+                
+                if first_user_placement:
+                    first_user_id = str(first_user_placement.user_id)
+                    current_slot = first_user_placement.slot_no
+                    next_slot = current_slot + 1
+                    
+                    print(f"Upgrading first user {first_user_id} from Slot {current_slot} to Slot {next_slot}")
+                    
+                    # Move first user to next slot in Phase 1
+                    result = self._upgrade_user_to_next_slot(first_user_id, next_slot)
+                    
+                    if result.get("success"):
+                        return {
+                            "success": True,
+                            "progression": "slot_upgrade",
+                            "first_user_id": first_user_id,
+                            "new_slot": next_slot,
+                            "message": f"First user upgraded to Slot {next_slot}"
+                        }
+                    else:
+                        return {"success": False, "error": f"Failed to upgrade first user: {result.get('error')}"}
+            
+            return {
+                "success": True,
+                "progression": "none",
+                "phase1_users": phase1_users,
+                "phase2_users": phase2_users,
+                "message": "No progression needed"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Phase progression failed: {str(e)}"}
+    
+    def _move_user_to_phase2(self, user_id: str) -> Dict[str, Any]:
+        """Move user from Phase 1 to Phase 2"""
+        try:
+            user_oid = ObjectId(user_id)
+            
+            # Deactivate current Phase 1 placement
+            phase1_placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='global',
+                phase='PHASE-1',
+                is_active=True
+            ).first()
+            
+            if phase1_placement:
+                phase1_placement.is_active = False
+                phase1_placement.save()
+                
+                # Create new Phase 2 placement
+                phase2_placement = TreePlacement(
+                    user_id=user_oid,
+                    program='global',
+                    phase='PHASE-2',
+                    slot_no=1,
+                    parent_id=None,  # First user has no parent
+                    upline_id=None,
+                    position="1",
+                    level=1,
+                    phase_position=1,
+                    is_active=True,
+                    is_activated=True,
+                    activation_date=datetime.utcnow()
+                )
+                phase2_placement.save()
+                
+                # Update GlobalTeamMember record
+                team_member = GlobalTeamMember.objects(user_id=user_oid).first()
+                if team_member:
+                    team_member.phase = 'PHASE-2'
+                    team_member.slot_number = 1
+                    team_member.position_in_phase = 1
+                    team_member.last_activity_at = datetime.utcnow()
+                    team_member.save()
+                
+                print(f"Successfully moved user {user_id} to Phase 2")
+                return {"success": True, "message": "User moved to Phase 2"}
+            else:
+                return {"success": False, "error": "Phase 1 placement not found"}
+                
+        except Exception as e:
+            return {"success": False, "error": f"Failed to move user to Phase 2: {str(e)}"}
+    
+    def _move_phase1_downlines_to_phase2(self, first_user_id: str) -> Dict[str, Any]:
+        """Move all Phase 1 downlines to Phase 2 under the first user"""
+        try:
+            first_user_oid = ObjectId(first_user_id)
+            
+            # Get all Phase 1 downlines of the first user
+            phase1_downlines = TreePlacement.objects(
+                parent_id=first_user_oid,
+                program='global',
+                phase='PHASE-1',
+                is_active=True
+            )
+            
+            moved_count = 0
+            for downline in phase1_downlines:
+                # Deactivate Phase 1 placement
+                downline.is_active = False
+                downline.save()
+                
+                # Create Phase 2 placement under first user
+                phase2_placement = TreePlacement(
+                    user_id=downline.user_id,
+                    program='global',
+                    phase='PHASE-2',
+                    slot_no=1,
+                    parent_id=first_user_oid,  # Under first user
+                    upline_id=first_user_oid,   # Upline is first user
+                    position=downline.position,
+                    level=2,  # Level 2 in Phase 2
+                    phase_position=int(downline.position),
+                    is_active=True,
+                    is_activated=True,
+                    activation_date=datetime.utcnow()
+                )
+                phase2_placement.save()
+                
+                # Update GlobalTeamMember record
+                team_member = GlobalTeamMember.objects(user_id=downline.user_id).first()
+                if team_member:
+                    team_member.phase = 'PHASE-2'
+                    team_member.slot_number = 1
+                    team_member.parent_user_id = first_user_oid  # Upline changes to first user
+                    team_member.level_in_tree = 2
+                    team_member.last_activity_at = datetime.utcnow()
+                    team_member.save()
+                
+                moved_count += 1
+            
+            print(f"Successfully moved {moved_count} downlines to Phase 2")
+            return {"success": True, "moved_count": moved_count}
+            
+        except Exception as e:
+            return {"success": False, "error": f"Failed to move downlines to Phase 2: {str(e)}"}
+    
+    def _upgrade_user_to_next_slot(self, user_id: str, next_slot: int) -> Dict[str, Any]:
+        """Upgrade user to next slot in Phase 1"""
+        try:
+            user_oid = ObjectId(user_id)
+            
+            # Deactivate current Phase 2 placement
+            phase2_placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='global',
+                phase='PHASE-2',
+                is_active=True
+            ).first()
+            
+            if phase2_placement:
+                phase2_placement.is_active = False
+                phase2_placement.save()
+                
+                # Create new Phase 1 placement in next slot
+                phase1_placement = TreePlacement(
+                    user_id=user_oid,
+                    program='global',
+                    phase='PHASE-1',
+                    slot_no=next_slot,
+                    parent_id=None,  # First user has no parent
+                    upline_id=None,
+                    position="1",
+                    level=1,
+                    phase_position=1,
+                    is_active=True,
+                    is_activated=True,
+                    activation_date=datetime.utcnow()
+                )
+                phase1_placement.save()
+                
+                # Update GlobalTeamMember record
+                team_member = GlobalTeamMember.objects(user_id=user_oid).first()
+                if team_member:
+                    team_member.phase = 'PHASE-1'
+                    team_member.slot_number = next_slot
+                    team_member.position_in_phase = 1
+                    team_member.last_activity_at = datetime.utcnow()
+                    team_member.save()
+                
+                print(f"Successfully upgraded user {user_id} to Slot {next_slot}")
+                return {"success": True, "message": f"User upgraded to Slot {next_slot}"}
+            else:
+                return {"success": False, "error": "Phase 2 placement not found"}
+                
+        except Exception as e:
+            return {"success": False, "error": f"Failed to upgrade user to next slot: {str(e)}"}
 
     def _place_in_phase2(self, user_id: str) -> Dict[str, Any]:
         """Place user into PHASE-2 tree under earliest PHASE-2 parent with <8 seats.
@@ -644,36 +961,20 @@ class GlobalService:
                 print(f"Global Phase Progression setup for user {user.id}: PHASE-1, Slot-1")
 
             # 1.1.4 Phase Placement - Section 1.1.4 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
-            # Check if Phase-1 is full (4 users), if so, place in Phase-2
-            total_phase1_users = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
+            # Always place new users in Phase-1 first, then handle progression
+            print(f"Placing user {user_id} in Phase-1")
             
-            if total_phase1_users >= 4:
-                print(f"Phase-1 is full ({total_phase1_users}/4), placing user {user_id} in Phase-2")
-                # Place user in Phase-2
-                placement_result = self._place_in_phase2(user_id)
-                if not placement_result.get("success"):
-                    return {"success": False, "error": f"Phase-2 placement failed: {placement_result.get('error')}"}
-            else:
-                # Place user in Phase-1 tree using BFS algorithm
-                placement_result = self._place_in_phase1(user_id)
-                if not placement_result.get("success"):
-                    return {"success": False, "error": f"Phase-1 placement failed: {placement_result.get('error')}"}
-                
-                # Check if Phase-1 is now full (4 users) and trigger automatic progression
-                total_phase1_users_after = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).count()
-                if total_phase1_users_after == 4:
-                    print(f"Phase-1 is now full ({total_phase1_users_after}/4), triggering automatic progression for first user")
-                    # Find the first user in Phase-1 (oldest by creation date)
-                    first_user_placement = TreePlacement.objects(program='global', phase='PHASE-1', is_active=True).order_by('created_at').first()
-                    if first_user_placement:
-                        first_user_id = str(first_user_placement.user_id)
-                        print(f"Triggering Phase-1 to Phase-2 progression for first user: {first_user_id}")
-                        # Process automatic progression for the first user
-                        progression_result = self.process_phase_progression(first_user_id)
-                        if progression_result.get("success"):
-                            print(f"Successfully progressed first user {first_user_id} from Phase-1 to Phase-2")
-                        else:
-                            print(f"Failed to progress first user {first_user_id}: {progression_result.get('error')}")
+            # Place user in Phase-1 tree using BFS algorithm
+            placement_result = self._place_in_phase1(user_id)
+            if not placement_result.get("success"):
+                return {"success": False, "error": f"Phase-1 placement failed: {placement_result.get('error')}"}
+            
+            # Check for phase progression using new logic
+            progression_result = self._handle_phase_progression(user_id)
+            if progression_result.get("success") and progression_result.get("progression") != "none":
+                print(f"Phase progression triggered: {progression_result.get('message')}")
+            elif not progression_result.get("success"):
+                print(f"Phase progression failed: {progression_result.get('error')}")
             
             # Log placement result
             parent_id = placement_result.get("parent_id")
@@ -4380,6 +4681,204 @@ class GlobalService:
         except Exception as e:
             print(f"Error in get_team_statistics: {e}")
             return {"success": False, "error": str(e)}
+
+    def get_global_earnings_slots(self, user_id: str, phase: str = None) -> Dict[str, Any]:
+        """
+        Get Global program earnings data organized by slots array.
+        Returns detailed information for each slot including tree structure.
+        """
+        try:
+            # Convert user_id to ObjectId
+            try:
+                user_oid = ObjectId(user_id)
+                print(f"Converted user_id {user_id} to ObjectId: {user_oid}")
+            except Exception as e:
+                user_oid = user_id
+                print(f"Could not convert to ObjectId, using string: {user_id}, Error: {e}")
+            
+            # Get user info
+            user_info = User.objects(id=user_oid).first()
+            if not user_info:
+                return {"success": False, "error": "User not found"}
+            
+            # Define phases to process
+            phases_to_process = []
+            if phase:
+                if phase.upper() in ['PHASE-1', 'PHASE-2']:
+                    phases_to_process = [phase.upper()]
+                else:
+                    return {"success": False, "error": f"Invalid phase: {phase}. Must be PHASE-1 or PHASE-2"}
+            else:
+                phases_to_process = ['PHASE-1', 'PHASE-2']
+            
+            # Get all slots for the user
+            slots_data = []
+            
+            for phase_name in phases_to_process:
+                print(f"[DEBUG] Processing {phase_name} for user: {user_id}")
+                
+                # Get all placements for this user in the specified phase
+                user_placements = TreePlacement.objects(
+                    user_id=user_oid,
+                    program='global',
+                    phase=phase_name,
+                    is_active=True
+                ).order_by('slot_no', 'created_at')
+                
+                # Group by slot
+                slots_by_number = {}
+                for placement in user_placements:
+                    slot_no = placement.slot_no
+                    if slot_no not in slots_by_number:
+                        slots_by_number[slot_no] = []
+                    slots_by_number[slot_no].append(placement)
+                
+                # Create slot data for each slot
+                for slot_no, placements in slots_by_number.items():
+                    slot_data = self._create_slot_data(user_oid, slot_no, phase_name, placements)
+                    slots_data.append(slot_data)
+            
+            # Sort slots by slot number
+            slots_data.sort(key=lambda x: x['slot_number'])
+            
+            return {
+                "success": True,
+                "data": {
+                    "user_id": str(user_oid),
+                    "user_info": {
+                        "uid": user_info.uid,
+                        "name": getattr(user_info, 'name', ''),
+                        "email": getattr(user_info, 'email', '')
+                    },
+                    "slots": slots_data,
+                    "total_slots": len(slots_data),
+                    "phases_processed": phases_to_process
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Failed to get global earnings slots: {str(e)}"}
+    
+    def _create_slot_data(self, user_oid: ObjectId, slot_no: int, phase: str, placements: List) -> Dict[str, Any]:
+        """
+        Create detailed slot data including tree structure
+        """
+        try:
+            # Get the main placement (first one for this slot/phase)
+            main_placement = placements[0] if placements else None
+            
+            if not main_placement:
+                return {
+                    "slot_number": slot_no,
+                    "phase": phase,
+                    "status": "empty",
+                    "tree_structure": None,
+                    "member_count": 0,
+                    "total_earnings": 0,
+                    "created_at": None
+                }
+            
+            # Get tree structure for this slot
+            tree_structure = self._get_slot_tree_structure(user_oid, slot_no, phase)
+            
+            # Calculate member count
+            member_count = len(placements)
+            
+            # Calculate total earnings (placeholder - you can implement actual earnings calculation)
+            total_earnings = 0  # TODO: Implement actual earnings calculation
+            
+            return {
+                "slot_number": slot_no,
+                "phase": phase,
+                "status": "active" if main_placement.is_active else "inactive",
+                "tree_structure": tree_structure,
+                "member_count": member_count,
+                "total_earnings": total_earnings,
+                "created_at": main_placement.created_at.isoformat() if main_placement.created_at else None,
+                "slot_details": {
+                    "level": main_placement.level,
+                    "position": main_placement.position,
+                    "parent_id": str(main_placement.parent_id) if main_placement.parent_id else None,
+                    "upline_id": str(main_placement.upline_id) if main_placement.upline_id else None
+                }
+            }
+            
+        except Exception as e:
+            print(f"Error creating slot data: {str(e)}")
+            return {
+                "slot_number": slot_no,
+                "phase": phase,
+                "status": "error",
+                "tree_structure": None,
+                "member_count": 0,
+                "total_earnings": 0,
+                "created_at": None,
+                "error": str(e)
+            }
+    
+    def _get_slot_tree_structure(self, user_oid: ObjectId, slot_no: int, phase: str) -> Dict[str, Any]:
+        """
+        Get tree structure for a specific slot
+        """
+        try:
+            # Get all placements in this slot/phase
+            placements = TreePlacement.objects(
+                program='global',
+                phase=phase,
+                slot_no=slot_no,
+                is_active=True
+            ).order_by('created_at')
+            
+            if not placements:
+                return None
+            
+            # Build tree structure
+            tree_nodes = []
+            
+            for placement in placements:
+                # Get user info
+                user = User.objects(id=placement.user_id).first()
+                
+                node_data = {
+                    "user_id": str(placement.user_id),
+                    "user_info": {
+                        "uid": user.uid if user else "Unknown",
+                        "name": getattr(user, 'name', '') if user else '',
+                        "email": getattr(user, 'email', '') if user else ''
+                    },
+                    "placement_info": {
+                        "level": placement.level,
+                        "position": placement.position,
+                        "parent_id": str(placement.parent_id) if placement.parent_id else None,
+                        "upline_id": str(placement.upline_id) if placement.upline_id else None,
+                        "created_at": placement.created_at.isoformat() if placement.created_at else None
+                    },
+                    "children": []  # Will be populated if needed
+                }
+                
+                tree_nodes.append(node_data)
+            
+            # Organize tree structure (root -> children)
+            root_nodes = [node for node in tree_nodes if node["placement_info"]["parent_id"] is None]
+            child_nodes = [node for node in tree_nodes if node["placement_info"]["parent_id"] is not None]
+            
+            # Build parent-child relationships
+            for child in child_nodes:
+                parent_id = child["placement_info"]["parent_id"]
+                for parent in tree_nodes:
+                    if parent["user_id"] == parent_id:
+                        parent["children"].append(child)
+                        break
+            
+            return {
+                "root_nodes": root_nodes,
+                "total_nodes": len(tree_nodes),
+                "max_level": max([node["placement_info"]["level"] for node in tree_nodes]) if tree_nodes else 0
+            }
+            
+        except Exception as e:
+            print(f"Error getting slot tree structure: {str(e)}")
+            return None
 
     def get_global_earnings(self, user_id: str, phase: str = None) -> Dict[str, Any]:
         """

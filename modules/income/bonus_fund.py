@@ -7,7 +7,7 @@ class BonusFund(Document):
     fund_type = StringField(choices=[
         'spark_bonus', 'royal_captain', 'president_reward', 
         'leadership_stipend', 'jackpot_entry', 'partner_incentive',
-        'shareholders', 'newcomer_support', 'mentorship_bonus'
+        'shareholders', 'newcomer_support', 'mentorship_bonus', 'triple_entry'
     ], required=True)
     program = StringField(choices=['binary', 'matrix', 'global'], required=True)
     total_collected = DecimalField(default=Decimal('0.00'), precision=8)

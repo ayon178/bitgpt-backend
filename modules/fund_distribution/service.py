@@ -353,7 +353,7 @@ class FundDistributionService:
             should_credit_wallet = (income_type == 'partner_incentive' or is_level_dist)
             
             # Debug logging
-            if not fund_type:
+            if not fund_type and income_type not in ['global_phase_1', 'global_phase_2']:
                 print(f"⚠️ No mapping for income_type: {income_type}")
             elif is_level_dist:
                 pass  # Don't log level dist skips
