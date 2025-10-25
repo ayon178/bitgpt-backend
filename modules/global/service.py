@@ -4686,6 +4686,8 @@ class GlobalService:
         """
         Get Global program earnings data organized by slots array.
         Returns detailed information for each slot including tree structure.
+        Each slot contains phase-wise data and downlines if user is root.
+        If user is not in a specific slot, that slot will show empty or inactive state.
         """
         try:
             # Convert user_id to ObjectId
@@ -4711,48 +4713,221 @@ class GlobalService:
             else:
                 phases_to_process = ['PHASE-1', 'PHASE-2']
             
-            # Get all slots for the user
+            # Get all slots for the user across all phases
+            all_user_placements = TreePlacement.objects(
+                user_id=user_oid,
+                program='global',
+                is_active=True
+            ).order_by('slot_no')
+            
+            user_slots = set()
+            for placement in all_user_placements:
+                user_slots.add(placement.slot_no)
+            
+            print(f"[DEBUG] User {user_id} is in slots: {sorted(user_slots)}")
+            
+            # Define slot catalog information
+            slot_catalog_info = {
+                1: {"name": "Slot 1", "value": 33.00, "phase_1_req": 4, "phase_2_req": 8},
+                2: {"name": "Slot 2", "value": 36.00, "phase_1_req": 4, "phase_2_req": 8},
+                3: {"name": "Slot 3", "value": 86.00, "phase_1_req": 4, "phase_2_req": 8},
+                4: {"name": "Slot 4", "value": 203.00, "phase_1_req": 4, "phase_2_req": 8},
+                5: {"name": "Slot 5", "value": 468.00, "phase_1_req": 4, "phase_2_req": 8},
+            }
+            
             slots_data = []
             
-            for phase_name in phases_to_process:
-                print(f"[DEBUG] Processing {phase_name} for user: {user_id}")
+            # Process each slot (show slots user is in, max up to slot 5)
+            for slot_no in range(1, 6):
+                slot_info = slot_catalog_info.get(slot_no, {})
                 
-                # Get all placements for this user in the specified phase
-                user_placements = TreePlacement.objects(
+                # Check if user is in this slot
+                user_in_this_slot = slot_no in user_slots
+                
+                slot_data = {
+                    "slot_no": slot_no,
+                    "slot_name": slot_info.get("name", f"Slot {slot_no}"),
+                    "slot_value": slot_info.get("value", 0),
+                    "is_active": user_in_this_slot,
+                    "phases": {}
+                }
+                
+                # If user is not in this slot, mark as inactive and skip phase data
+                if not user_in_this_slot:
+                    slot_data["progress"] = {
+                        "phase_1": {"joined": 0, "required": 4, "remaining": 4},
+                        "phase_2": {"joined": 0, "required": 8, "remaining": 8}
+                    }
+                    slot_data["tree"] = {
+                        "user": None,
+                        "downlines": []
+                    }
+                    slots_data.append(slot_data)
+                    continue
+                
+                # Process each phase for this slot (user is in this slot)
+                for phase_name in phases_to_process:
+                    print(f"[DEBUG] Processing Slot {slot_no}, {phase_name} for user: {user_id}")
+                    
+                    # Get user's placement in this slot and phase
+                    user_placement = TreePlacement.objects(
+                        user_id=user_oid,
+                        program='global',
+                        phase=phase_name,
+                        slot_no=slot_no,
+                        is_active=True
+                    ).first()
+                    
+                    phase_data = {
+                        "phase": phase_name,
+                        "user_position": None,
+                        "is_root": False,
+                        "downlines": []
+                    }
+                    
+                    if user_placement:
+                        phase_data["user_position"] = {
+                            "level": user_placement.level,
+                            "position": user_placement.position,
+                            "parent_id": str(user_placement.parent_id) if user_placement.parent_id else None,
+                            "upline_id": str(user_placement.upline_id) if user_placement.upline_id else None,
+                            "activation_date": user_placement.activation_date.isoformat() if user_placement.activation_date else None
+                        }
+                        
+                        # Check if user is root in this phase and slot
+                        is_root = user_placement.parent_id is None
+                        phase_data["is_root"] = is_root
+                        
+                        if is_root:
+                            print(f"[DEBUG] User {user_id} is ROOT in Slot {slot_no}, {phase_name}")
+                            # Get all downlines under this user in this specific slot and phase
+                            downlines = TreePlacement.objects(
+                                parent_id=user_oid,
+                                program='global',
+                                phase=phase_name,
+                                slot_no=slot_no,
+                                is_active=True
+                            ).order_by('created_at')
+                            
+                            downlines_data = []
+                            for downline in downlines:
+                                downline_user = User.objects(id=downline.user_id).first()
+                                downline_data = {
+                                    "user_id": str(downline.user_id),
+                                    "uid": downline_user.uid if downline_user else "Unknown",
+                                    "name": downline_user.name if downline_user else "Unknown",
+                                    "email": downline_user.email if downline_user else "Unknown",
+                                    "level": downline.level,
+                                    "position": downline.position,
+                                    "activation_date": downline.activation_date.isoformat() if downline.activation_date else None
+                                }
+                                downlines_data.append(downline_data)
+                            
+                            phase_data["downlines"] = downlines_data
+                            print(f"[DEBUG] Found {len(downlines_data)} downlines under root user in Slot {slot_no}, {phase_name}")
+                        else:
+                            print(f"[DEBUG] User {user_id} is NOT root in Slot {slot_no}, {phase_name}")
+                    
+                    slot_data["phases"][phase_name] = phase_data
+                
+                # Calculate progress for this slot based on user's current phase
+                current_user_placement = TreePlacement.objects(
                     user_id=user_oid,
                     program='global',
-                    phase=phase_name,
+                    slot_no=slot_no,
                     is_active=True
-                ).order_by('slot_no', 'created_at')
+                ).order_by('-created_at').first()  # Get the latest placement
                 
-                # Group by slot
-                slots_by_number = {}
-                for placement in user_placements:
-                    slot_no = placement.slot_no
-                    if slot_no not in slots_by_number:
-                        slots_by_number[slot_no] = []
-                    slots_by_number[slot_no].append(placement)
+                phase_1_joined = 0
+                phase_2_joined = 0
                 
-                # Create slot data for each slot
-                for slot_no, placements in slots_by_number.items():
-                    slot_data = self._create_slot_data(user_oid, slot_no, phase_name, placements)
-                    slots_data.append(slot_data)
-            
-            # Sort slots by slot number
-            slots_data.sort(key=lambda x: x['slot_number'])
+                if current_user_placement:
+                    # User is root only if parent_id is None
+                    is_user_root = current_user_placement.parent_id is None
+                    
+                    if is_user_root:
+                        # Count downlines in PHASE-1
+                        phase_1_downlines = TreePlacement.objects(
+                            parent_id=user_oid,
+                            program='global',
+                            phase='PHASE-1',
+                            slot_no=slot_no,
+                            is_active=True
+                        ).count()
+                        phase_1_joined = phase_1_downlines
+                        
+                        # Count downlines in PHASE-2
+                        phase_2_downlines = TreePlacement.objects(
+                            parent_id=user_oid,
+                            program='global',
+                            phase='PHASE-2',
+                            slot_no=slot_no,
+                            is_active=True
+                        ).count()
+                        phase_2_joined = phase_2_downlines
+                
+                slot_data["progress"] = {
+                    "phase_1": {
+                        "joined": phase_1_joined,
+                        "required": 4,
+                        "remaining": max(0, 4 - phase_1_joined)
+                    },
+                    "phase_2": {
+                        "joined": phase_2_joined,
+                        "required": 8,
+                        "remaining": max(0, 8 - phase_2_joined)
+                    }
+                }
+                
+                # Build tree structure
+                tree_structure = {
+                    "user": None,
+                    "downlines": []
+                }
+                
+                if current_user_placement:
+                    tree_structure["user"] = {
+                        "user_id": str(user_oid),
+                        "uid": user_info.uid,
+                        "name": user_info.name,
+                        "level": current_user_placement.level,
+                        "position": current_user_placement.position,
+                        "is_root": current_user_placement.parent_id is None
+                    }
+                    
+                    # Get downlines if user is root
+                    if current_user_placement.parent_id is None:  # User is root
+                        downlines = TreePlacement.objects(
+                            parent_id=user_oid,
+                            program='global',
+                            phase=current_user_placement.phase,
+                            slot_no=slot_no,
+                            is_active=True
+                        ).order_by('created_at')
+                        
+                        for downline in downlines:
+                            downline_user = User.objects(id=downline.user_id).first()
+                            downline_data = {
+                                "user_id": str(downline.user_id),
+                                "uid": downline_user.uid if downline_user else "Unknown",
+                                "name": downline_user.name if downline_user else "Unknown",
+                                "level": downline.level,
+                                "position": downline.position
+                            }
+                            tree_structure["downlines"].append(downline_data)
+                
+                slot_data["tree"] = tree_structure
+                slots_data.append(slot_data)
             
             return {
                 "success": True,
                 "data": {
                     "user_id": str(user_oid),
-                    "user_info": {
-                        "uid": user_info.uid,
-                        "name": getattr(user_info, 'name', ''),
-                        "email": getattr(user_info, 'email', '')
-                    },
+                    "user_name": user_info.name,
+                    "user_email": user_info.email,
+                    "user_uid": user_info.uid,
                     "slots": slots_data,
-                    "total_slots": len(slots_data),
-                    "phases_processed": phases_to_process
+                    "total_slots": len(slots_data)
                 }
             }
             

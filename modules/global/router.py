@@ -286,7 +286,7 @@ async def get_global_earnings(
     phase: str = None,
     # current_user: dict = Depends(authentication_service.verify_authentication)
 ):
-    """Get Global program earnings data matching frontend matrixData.js structure"""
+    """Get Global program earnings data organized by slots array with phase-wise downlines"""
     try:
         # Extract user ID from current_user with fallback options
         # authenticated_user_id = None
@@ -302,7 +302,7 @@ async def get_global_earnings(
         #     raise HTTPException(status_code=403, detail="Unauthorized to view this user's Global earnings")
 
         service = GlobalService()
-        result = service.get_global_earnings(user_id, phase)
+        result = service.get_global_earnings_slots(user_id, phase)
 
         if result["success"]:
             return success_response(result["data"])
