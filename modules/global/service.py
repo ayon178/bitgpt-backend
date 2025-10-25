@@ -694,6 +694,16 @@ class GlobalService:
             ).first()
             
             if phase2_placement:
+                # Get slot info for Phase-2 Slot 1
+                slot_catalog = SlotCatalog.objects(program='global', slot_no=1, is_active=True).first()
+                if not slot_catalog:
+                    return {"success": False, "error": "Slot catalog not found"}
+                
+                slot_value = Decimal(str(slot_catalog.price or 0))
+                
+                # PHASE-2 completion income distribution
+                self._distribute_phase2_completion_income(user_id, slot_value, phase2_placement.slot_no)
+                
                 phase2_placement.is_active = False
                 phase2_placement.save()
                 
@@ -1780,6 +1790,131 @@ class GlobalService:
                 "distribution_record_id": str(distribution_record.id)
             }
         except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _distribute_phase2_completion_income(self, user_id: str, slot_value: Decimal, slot_no: int) -> Dict[str, Any]:
+        """
+        Distribute Phase-2 completion income to the user.
+        This is called when user completes Phase-2 (8 members under them).
+        Distribution per PROJECT_DOCUMENTATION.md Section 26:
+        - Tree Upline Wallet: 30%
+        - Partner Incentive: 10%
+        - Royal Captain Bonus: 10%
+        - President Reward: 10%
+        - Shareholders: 5%
+        - Triple Entry Reward: 5%
+        """
+        try:
+            from modules.wallet.model import WalletLedger
+            
+            user_oid = ObjectId(user_id)
+            
+            # Calculate distribution amounts per PROJECT_DOCUMENTATION.md Section 26
+            tree_upline_wallet = slot_value * Decimal('0.30')  # 30%
+            partner_incentive = slot_value * Decimal('0.10')    # 10%
+            royal_captain_bonus = slot_value * Decimal('0.10')  # 10%
+            president_reward = slot_value * Decimal('0.10')     # 10%
+            triple_entry_reward = slot_value * Decimal('0.05')  # 5%
+            shareholders = slot_value * Decimal('0.05')         # 5%
+            
+            # Credit to user's wallet (Tree Upline Wallet 30%)
+            tree_wallet_reason = f"global_phase_2_slot_{slot_no}_completion_tree_wallet"
+            WalletLedger(
+                user_id=user_oid,
+                type='credit',
+                amount=float(tree_upline_wallet),
+                currency='USDT',
+                reason=tree_wallet_reason,
+                description=f'Global Phase-2 Slot {slot_no} completion - Tree Upline Wallet',
+                status='completed',
+                tx_hash=f'GLB-P2-S{slot_no}-COMP-{user_id}-{int(datetime.utcnow().timestamp())}'
+            ).save()
+            
+            # Partner Incentive (10%) - Goes to direct referrer
+            try:
+                user = User.objects(id=user_oid).first()
+                if user and user.refered_by:
+                    referrer_reason = f"global_phase_2_slot_{slot_no}_completion_partner_incentive"
+                    WalletLedger(
+                        user_id=user.refered_by,
+                        type='credit',
+                        amount=float(partner_incentive),
+                        currency='USDT',
+                        reason=referrer_reason,
+                        description=f'Global Phase-2 Slot {slot_no} completion - Partner Incentive',
+                        status='completed',
+                        tx_hash=f'GLB-P2-S{slot_no}-PI-{user.refered_by}-{int(datetime.utcnow().timestamp())}'
+                    ).save()
+            except Exception as e:
+                print(f"Failed to credit partner incentive: {str(e)}")
+            
+            # Royal Captain Bonus (10%)
+            try:
+                rc_fund = RoyalCaptainFund.objects(is_active=True).first()
+                if not rc_fund:
+                    rc_fund = RoyalCaptainFund()
+                rc_fund.total_fund_amount += float(royal_captain_bonus)
+                rc_fund.available_amount += float(royal_captain_bonus)
+                rc_fund.fund_sources['global_phase_2_completion'] = rc_fund.fund_sources.get('global_phase_2_completion', 0.0) + float(royal_captain_bonus)
+                rc_fund.last_updated = datetime.utcnow()
+                rc_fund.save()
+            except Exception as e:
+                print(f"Failed to credit Royal Captain Bonus: {str(e)}")
+            
+            # President Reward (10%)
+            try:
+                pr_fund = PresidentRewardFund.objects(is_active=True).first()
+                if not pr_fund:
+                    pr_fund = PresidentRewardFund()
+                pr_fund.total_fund_amount += float(president_reward)
+                pr_fund.available_amount += float(president_reward)
+                pr_fund.fund_sources['global_phase_2_completion'] = pr_fund.fund_sources.get('global_phase_2_completion', 0.0) + float(president_reward)
+                pr_fund.last_updated = datetime.utcnow()
+                pr_fund.save()
+            except Exception as e:
+                print(f"Failed to credit President Reward: {str(e)}")
+            
+            # Triple Entry Reward (5%)
+            try:
+                self.spark_service.contribute_to_fund(
+                    amount=float(triple_entry_reward),
+                    program='global',
+                    source_user_id=str(user_id),
+                    source_type='global_phase_2_completion',
+                    currency='USDT'
+                )
+            except Exception as e:
+                print(f"Failed to credit Triple Entry Reward: {str(e)}")
+            
+            # Shareholders (5%)
+            try:
+                bf_sh = BonusFund.objects(fund_type='shareholders', program='global').first()
+                if not bf_sh:
+                    bf_sh = BonusFund(fund_type='shareholders', program='global', status='active')
+                bf_sh.total_amount = float(getattr(bf_sh, 'total_amount', 0.0) + float(shareholders))
+                bf_sh.available_amount = float(getattr(bf_sh, 'available_amount', 0.0) + float(shareholders))
+                bf_sh.updated_at = datetime.utcnow()
+                bf_sh.save()
+                # Company wallet credit
+                self.company_wallet.credit(shareholders, 'USDT', 'global_phase_2_completion_shareholders', f'GLB-P2-SH-{user_id}-{int(datetime.utcnow().timestamp())}')
+            except Exception as e:
+                print(f"Failed to credit Shareholders: {str(e)}")
+            
+            print(f"✅ Phase-2 completion income distributed for user {user_id}")
+            return {
+                "success": True,
+                "distribution": {
+                    "tree_upline_wallet": float(tree_upline_wallet),
+                    "partner_incentive": float(partner_incentive),
+                    "royal_captain_bonus": float(royal_captain_bonus),
+                    "president_reward": float(president_reward),
+                    "triple_entry_reward": float(triple_entry_reward),
+                    "shareholders": float(shareholders)
+                }
+            }
+            
+        except Exception as e:
+            print(f"❌ Failed to distribute Phase-2 completion income: {str(e)}")
             return {"success": False, "error": str(e)}
 
     def get_phase_seats(self, user_id: str, phase: str) -> Dict[str, Any]:

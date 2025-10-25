@@ -1087,9 +1087,10 @@ class WalletService:
             return {"success": False, "error": str(e)}
 
     def get_phase_1_income(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Global Program Phase-1 income data for a specific user"""
+        """Get Global Program Phase-1 income data for a specific user, grouped by slot"""
         try:
             from ..user.model import User
+            from ..tree.model import TreePlacement
             from bson import ObjectId
             
             # Convert user_id to ObjectId if needed
@@ -1098,56 +1099,80 @@ class WalletService:
             except:
                 user_oid = user_id
             
-            # Get Phase-1 income entries for specific user from WalletLedger
-            phase_1_entries = WalletLedger.objects(
-                user_id=user_oid,
-                type="credit",
-                currency=currency.upper(),
-                reason__regex="^global_phase_1"
-            ).order_by('-created_at')
-            
-            total_entries = phase_1_entries.count()
-            
-            # Pagination
-            page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 50)))
-            skip = (page - 1) * limit
-            page_entries = phase_1_entries.skip(skip).limit(limit)
-            
-            # Get user info once (since filtering by single user)
+            # Get user info
             user = User.objects(id=user_oid).first()
             if not user:
                 return {"success": False, "error": "User not found"}
             
-            # Get upline info
-            ref = getattr(user, 'refered_by', None)
-            upline_uid = None
-            if ref:
-                upline = User.objects(id=ref).only('uid').first()
-                if upline:
-                    upline_uid = getattr(upline, 'uid', None)
-            if not upline_uid:
-                upline_uid = 'ROOT'
+            # Get all active Global slots for this user
+            user_placements = TreePlacement.objects(
+                user_id=user_oid,
+                program='global',
+                phase='PHASE-1',
+                is_active=True
+            ).order_by('slot_no')
             
-            # Build rows from ledger entries
-            items = []
-            for entry in page_entries:
-                items.append({
-                    "uid": getattr(user, 'uid', None),
-                    "upline_uid": upline_uid,
-                    "amount": float(entry.amount) if entry.amount else 0,
-                    "time": entry.created_at.isoformat() if entry.created_at else None,
-                    "reason": entry.reason,
-                    "tx_hash": entry.tx_hash or ""
+            # Build slot-wise income data
+            slots_data = []
+            
+            for placement in user_placements:
+                slot_no = placement.slot_no
+                
+                # Get Phase-1 income entries for this specific slot
+                phase_1_entries = WalletLedger.objects(
+                    user_id=user_oid,
+                    type="credit",
+                    currency=currency.upper(),
+                    reason__regex=f"^global_phase_1.*slot_{slot_no}"
+                ).order_by('-created_at')
+                
+                total_entries = phase_1_entries.count()
+                
+                # Pagination for this slot
+                page = max(1, int(page or 1))
+                limit = max(1, min(100, int(limit or 50)))
+                skip = (page - 1) * limit
+                page_entries = phase_1_entries.skip(skip).limit(limit)
+                
+                # Get upline info
+                ref = getattr(user, 'refered_by', None)
+                upline_uid = None
+                if ref:
+                    upline = User.objects(id=ref).only('uid').first()
+                    if upline:
+                        upline_uid = getattr(upline, 'uid', None)
+                if not upline_uid:
+                    upline_uid = 'ROOT'
+                
+                # Build items for this slot
+                items = []
+                for entry in page_entries:
+                    items.append({
+                        "sl_no": len(items) + 1,
+                        "uid": getattr(user, 'uid', None),
+                        "upline_uid": upline_uid,
+                        "rank": "Bitron",  # Default rank, can be fetched from user if needed
+                        "amount": float(entry.amount) if entry.amount else 0,
+                        "time": entry.created_at.isoformat() if entry.created_at else None,
+                        "reason": entry.reason,
+                        "tx_hash": entry.tx_hash or ""
+                    })
+                
+                slots_data.append({
+                    "slot_no": slot_no,
+                    "total_records": total_entries,
+                    "page": page,
+                    "limit": limit,
+                    "items": items
                 })
             
             return {
                 "success": True,
                 "data": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total_entries,
-                    "items": items
+                    "user_id": str(user_oid),
+                    "user_uid": getattr(user, 'uid', None),
+                    "slots": slots_data,
+                    "total_slots": len(slots_data)
                 }
             }
             
@@ -1155,9 +1180,10 @@ class WalletService:
             return {"success": False, "error": str(e)}
 
     def get_phase_2_income(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        """Get Global Program Phase-2 income data for a specific user"""
+        """Get Global Program Phase-2 income data for a specific user, grouped by slot"""
         try:
             from ..user.model import User
+            from ..tree.model import TreePlacement
             from bson import ObjectId
             
             # Convert user_id to ObjectId if needed
@@ -1166,56 +1192,80 @@ class WalletService:
             except:
                 user_oid = user_id
             
-            # Get Phase-2 income entries for specific user from WalletLedger
-            phase_2_entries = WalletLedger.objects(
-                user_id=user_oid,
-                type="credit",
-                currency=currency.upper(),
-                reason__regex="^global_phase_2"
-            ).order_by('-created_at')
-            
-            total_entries = phase_2_entries.count()
-            
-            # Pagination
-            page = max(1, int(page or 1))
-            limit = max(1, min(100, int(limit or 50)))
-            skip = (page - 1) * limit
-            page_entries = phase_2_entries.skip(skip).limit(limit)
-            
-            # Get user info once (since filtering by single user)
+            # Get user info
             user = User.objects(id=user_oid).first()
             if not user:
                 return {"success": False, "error": "User not found"}
             
-            # Get upline info
-            ref = getattr(user, 'refered_by', None)
-            upline_uid = None
-            if ref:
-                upline = User.objects(id=ref).only('uid').first()
-                if upline:
-                    upline_uid = getattr(upline, 'uid', None)
-            if not upline_uid:
-                upline_uid = 'ROOT'
+            # Get all active Global slots for this user in Phase-2
+            user_placements = TreePlacement.objects(
+                user_id=user_oid,
+                program='global',
+                phase='PHASE-2',
+                is_active=True
+            ).order_by('slot_no')
             
-            # Build rows from ledger entries
-            items = []
-            for entry in page_entries:
-                items.append({
-                    "uid": getattr(user, 'uid', None),
-                    "upline_uid": upline_uid,
-                    "amount": float(entry.amount) if entry.amount else 0,
-                    "time": entry.created_at.isoformat() if entry.created_at else None,
-                    "reason": entry.reason,
-                    "tx_hash": entry.tx_hash or ""
+            # Build slot-wise income data
+            slots_data = []
+            
+            for placement in user_placements:
+                slot_no = placement.slot_no
+                
+                # Get Phase-2 income entries for this specific slot
+                phase_2_entries = WalletLedger.objects(
+                    user_id=user_oid,
+                    type="credit",
+                    currency=currency.upper(),
+                    reason__regex=f"^global_phase_2.*slot_{slot_no}"
+                ).order_by('-created_at')
+                
+                total_entries = phase_2_entries.count()
+                
+                # Pagination for this slot
+                page = max(1, int(page or 1))
+                limit = max(1, min(100, int(limit or 50)))
+                skip = (page - 1) * limit
+                page_entries = phase_2_entries.skip(skip).limit(limit)
+                
+                # Get upline info
+                ref = getattr(user, 'refered_by', None)
+                upline_uid = None
+                if ref:
+                    upline = User.objects(id=ref).only('uid').first()
+                    if upline:
+                        upline_uid = getattr(upline, 'uid', None)
+                if not upline_uid:
+                    upline_uid = 'ROOT'
+                
+                # Build items for this slot
+                items = []
+                for entry in page_entries:
+                    items.append({
+                        "sl_no": len(items) + 1,
+                        "uid": getattr(user, 'uid', None),
+                        "upline_uid": upline_uid,
+                        "rank": "Bitron",  # Default rank, can be fetched from user if needed
+                        "amount": float(entry.amount) if entry.amount else 0,
+                        "time": entry.created_at.isoformat() if entry.created_at else None,
+                        "reason": entry.reason,
+                        "tx_hash": entry.tx_hash or ""
+                    })
+                
+                slots_data.append({
+                    "slot_no": slot_no,
+                    "total_records": total_entries,
+                    "page": page,
+                    "limit": limit,
+                    "items": items
                 })
             
             return {
                 "success": True,
                 "data": {
-                    "page": page,
-                    "limit": limit,
-                    "total": total_entries,
-                    "items": items
+                    "user_id": str(user_oid),
+                    "user_uid": getattr(user, 'uid', None),
+                    "slots": slots_data,
+                    "total_slots": len(slots_data)
                 }
             }
             
