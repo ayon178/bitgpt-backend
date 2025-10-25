@@ -4764,6 +4764,12 @@ class GlobalService:
                         "user": None,
                         "downlines": []
                     }
+                    
+                    # Add phase-specific completion and process status for inactive slots
+                    slot_data["isCompleted"] = False
+                    slot_data["isProcess"] = False
+                    slot_data["processPercent"] = 0
+                    
                     slots_data.append(slot_data)
                     continue
                 
@@ -4881,6 +4887,24 @@ class GlobalService:
                         "remaining": max(0, 8 - phase_2_joined)
                     }
                 }
+                
+                # Add phase-specific completion and process status based on requested phase
+                if phase == 'PHASE-1':
+                    slot_data["isCompleted"] = phase_1_joined >= 4
+                    slot_data["isProcess"] = current_user_placement and current_user_placement.parent_id is None and phase_1_joined < 4
+                    slot_data["processPercent"] = min(100, (phase_1_joined / 4) * 100) if phase_1_joined > 0 else 0
+                elif phase == 'PHASE-2':
+                    slot_data["isCompleted"] = phase_2_joined >= 8
+                    slot_data["isProcess"] = current_user_placement and current_user_placement.parent_id is None and phase_2_joined < 8
+                    slot_data["processPercent"] = min(100, (phase_2_joined / 8) * 100) if phase_2_joined > 0 else 0
+                else:
+                    # No phase filter - show both phases status
+                    slot_data["isCompleted"] = phase_1_joined >= 4 or phase_2_joined >= 8
+                    slot_data["isProcess"] = current_user_placement and current_user_placement.parent_id is None and (phase_1_joined < 4 or phase_2_joined < 8)
+                    slot_data["processPercent"] = max(
+                        min(100, (phase_1_joined / 4) * 100) if phase_1_joined > 0 else 0,
+                        min(100, (phase_2_joined / 8) * 100) if phase_2_joined > 0 else 0
+                    )
                 
                 # Build tree structure
                 tree_structure = {
