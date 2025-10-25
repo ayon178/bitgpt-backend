@@ -38,8 +38,10 @@ class CreateUserRequest(BaseModel):
 
 
 class TempCreateUserRequest(BaseModel):
-    email: str = Field(..., description="Email address")
-    name: str = Field(..., description="Full name of the user")
+    email: Optional[str] = Field(None, description="Email address (optional)")
+    name: Optional[str] = Field(None, description="Full name of the user (optional)")
+    password: Optional[str] = Field(None, description="Password (optional)")
+    wallet_address: str = Field(..., description="Unique blockchain wallet address")
     refered_by: str = Field(..., description="Referral code of the user who referred this user")
 
     class Config:
@@ -47,6 +49,8 @@ class TempCreateUserRequest(BaseModel):
             "example": {
                 "email": "john@example.com",
                 "name": "John Doe",
+                "password": "secret123",
+                "wallet_address": "0xABCDEF0123456789",
                 "refered_by": "RC12345"
             }
         }

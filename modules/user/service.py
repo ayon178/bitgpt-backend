@@ -552,18 +552,35 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
     import random
     import secrets
     
-    # Required fields (minimal)
-    required_fields = ["email", "name", "refered_by"]
+    # Required fields
+    required_fields = ["wallet_address", "refered_by"]
     
     missing = [f for f in required_fields if not payload.get(f)]
     if missing:
         return None, f"Missing required fields: {', '.join(missing)}"
     
-    # Check if email already exists
-    email = payload.get("email")
-    existing_email = User.objects(email=email).first()
-    if existing_email:
-        return None, "User with this email already exists"
+    # Get wallet_address (required)
+    wallet_address = payload.get("wallet_address")
+    
+    # Check if wallet_address already exists
+    existing_wallet = User.objects(wallet_address=wallet_address).first()
+    if existing_wallet:
+        return None, "User with this wallet_address already exists"
+    
+    # Get optional fields - set to empty string if not provided
+    email = payload.get("email", "").strip()
+    name = payload.get("name", "").strip()
+    password = payload.get("password")
+    
+    # Generate password if not provided
+    if not password:
+        password = secrets.token_urlsafe(16)
+    
+    # Check if email already exists (only if email was provided and not empty)
+    if email:
+        existing_email = User.objects(email=email).first()
+        if existing_email:
+            return None, "User with this email already exists"
     
     # Look up refered_by code to get upline_id
     refered_by_code = payload.get("refered_by")
@@ -572,13 +589,6 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
         return None, f"Referral code '{refered_by_code}' not found"
     
     upline_id = str(upline_user.id)
-    
-    # Auto-generate unique wallet_address (0x + 40 hex chars)
-    wallet_address = "0x" + secrets.token_hex(20)
-    
-    # Ensure wallet_address is unique
-    while User.objects(wallet_address=wallet_address).first():
-        wallet_address = "0x" + secrets.token_hex(20)
     
     # Auto-generate unique uid
     uid = f"user{int(time.time() * 1000)}{random.randint(1000, 9999)}"
@@ -607,7 +617,7 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             refer_code=refer_code,
             refered_by=upline_id,
             wallet_address=wallet_address,
-            name=payload.get("name"),
+            name=name,
             role="user",
             email=email,
             password=hashed_password,
@@ -897,21 +907,28 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
         # Return full user data + token + auto-generated credentials
         user_data = {
             "_id": str(user.id),
-            "uid": user.uid,
-            "refer_code": user.refer_code,
-            "name": user.name,
-            "email": user.email,
-            "wallet_address": user.wallet_address,
+            "token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "_id": str(user.id),
+                "uid": user.uid,
+                "refer_code": user.refer_code,
+                "refered_by": str(user.refered_by) if user.refered_by else None,
+                "wallet_address": user.wallet_address,
+                "name": user.name,
+                "role": user.role,
+                "email": user.email,
+                "status": user.status if hasattr(user, 'status') else "active",
+                "is_activated": user.is_activated if hasattr(user, 'is_activated') else False,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            },
             "auto_password": auto_password,  # Return generated password (user should save this)
-            "refered_by": upline_id,
             "refered_by_code": refered_by_code,
             "refered_by_name": upline_user.name if upline_user else None,
             "binary_joined": user.binary_joined,
             "matrix_joined": user.matrix_joined if hasattr(user, 'matrix_joined') else False,
-            "global_joined": user.global_joined if hasattr(user, 'global_joined') else False,
-            "created_at": user.created_at,
-            "token": access_token,
-            "token_type": "bearer"
+            "global_joined": user.global_joined if hasattr(user, 'global_joined') else False
         }
         
         return user_data, None
@@ -1817,6 +1834,20 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             "_id": str(user.id),
             "token": token.access_token,
             "token_type": token.token_type,
+            "user": {
+                "_id": str(user.id),
+                "uid": user.uid,
+                "refer_code": user.refer_code,
+                "refered_by": str(user.refered_by) if user.refered_by else None,
+                "wallet_address": user.wallet_address,
+                "name": user.name,
+                "role": user.role,
+                "email": user.email,
+                "status": user.status if hasattr(user, 'status') else "active",
+                "is_activated": user.is_activated if hasattr(user, 'is_activated') else False,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            }
         }, None
 
     except (ValidationError, NotUniqueError) as e:
@@ -1908,6 +1939,20 @@ def create_root_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
             "_id": str(user.id),
             "token": token.access_token,
             "token_type": token.token_type,
+            "user": {
+                "_id": str(user.id),
+                "uid": user.uid,
+                "refer_code": user.refer_code,
+                "refered_by": str(user.refered_by) if user.refered_by else None,
+                "wallet_address": user.wallet_address,
+                "name": user.name,
+                "role": user.role,
+                "email": user.email,
+                "status": user.status if hasattr(user, 'status') else "active",
+                "is_activated": user.is_activated if hasattr(user, 'is_activated') else False,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            }
         }, None
 
     except Exception as e:
