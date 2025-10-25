@@ -568,12 +568,19 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
         return None, "User with this wallet_address already exists"
     
     # Get optional fields - set to empty string if not provided
-    email = payload.get("email") or ""
-    name = payload.get("name") or ""
+    email = payload.get("email")
+    name = payload.get("name")
     
-    # Strip if not empty
-    email = email.strip() if email else ""
-    name = name.strip() if name else ""
+    # Handle None values and strip whitespace
+    if email is None:
+        email = ""
+    else:
+        email = str(email).strip()
+    
+    if name is None:
+        name = ""
+    else:
+        name = str(name).strip()
     password = payload.get("password")
     
     # Generate password if not provided
