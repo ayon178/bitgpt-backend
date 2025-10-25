@@ -4748,9 +4748,11 @@ class GlobalService:
                     "slot_no": slot_no,
                     "slot_name": slot_info.get("name", f"Slot {slot_no}"),
                     "slot_value": slot_info.get("value", 0),
-                    "is_active": user_in_this_slot,
-                    "phases": {}
+                    "is_active": user_in_this_slot
                 }
+                
+                # Initialize phases object
+                slot_data["phases"] = {}
                 
                 # If user is not in this slot, mark as inactive and skip phase data
                 if not user_in_this_slot:
@@ -4828,6 +4830,7 @@ class GlobalService:
                         else:
                             print(f"[DEBUG] User {user_id} is NOT root in Slot {slot_no}, {phase_name}")
                     
+                    # Add phase data to phases object
                     slot_data["phases"][phase_name] = phase_data
                 
                 # Calculate progress for this slot based on user's current phase
@@ -4917,6 +4920,11 @@ class GlobalService:
                             tree_structure["downlines"].append(downline_data)
                 
                 slot_data["tree"] = tree_structure
+                
+                # If phase filter is applied, remove phases object from response
+                if phase:
+                    del slot_data["phases"]
+                
                 slots_data.append(slot_data)
             
             return {
