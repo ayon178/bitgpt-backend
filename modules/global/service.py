@@ -4942,6 +4942,125 @@ class GlobalService:
         except Exception as e:
             return {"success": False, "error": f"Failed to get global earnings slots: {str(e)}"}
     
+    def get_global_earnings_details_by_slot(self, user_id: str, phase: str, slot: int) -> Dict[str, Any]:
+        """
+        Get Global earnings details for specific user, phase, and slot.
+        Returns tree structure with user and downlines if user is root in that slot/phase.
+        """
+        try:
+            # Convert user_id to ObjectId
+            try:
+                user_oid = ObjectId(user_id)
+                print(f"Converted user_id {user_id} to ObjectId: {user_oid}")
+            except Exception as e:
+                user_oid = user_id
+                print(f"Could not convert to ObjectId, using string: {user_id}, Error: {e}")
+            
+            # Get user info
+            user_info = User.objects(id=user_oid).first()
+            if not user_info:
+                return {"success": False, "error": "User not found"}
+            
+            # Get user's placement in the specific slot and phase
+            user_placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='global',
+                phase=phase,
+                slot_no=slot,
+                is_active=True
+            ).first()
+            
+            if not user_placement:
+                return {"success": False, "error": f"User not found in Slot {slot}, {phase}"}
+            
+            # Check if user is root in this slot/phase
+            is_root = user_placement.parent_id is None
+            
+            # Build tree structure
+            tree_structure = {
+                "user": {
+                    "user_id": str(user_oid),
+                    "uid": user_info.uid,
+                    "name": user_info.name,
+                    "email": user_info.email,
+                    "level": user_placement.level,
+                    "position": user_placement.position,
+                    "is_root": is_root,
+                    "activation_date": user_placement.activation_date.isoformat() if user_placement.activation_date else None
+                },
+                "downlines": []
+            }
+            
+            # If user is root, get all downlines
+            if is_root:
+                downlines = TreePlacement.objects(
+                    parent_id=user_oid,
+                    program='global',
+                    phase=phase,
+                    slot_no=slot,
+                    is_active=True
+                ).order_by('created_at')
+                
+                for downline in downlines:
+                    downline_user = User.objects(id=downline.user_id).first()
+                    downline_data = {
+                        "user_id": str(downline.user_id),
+                        "uid": downline_user.uid if downline_user else "Unknown",
+                        "name": downline_user.name if downline_user else "Unknown",
+                        "email": downline_user.email if downline_user else "Unknown",
+                        "level": downline.level,
+                        "position": downline.position,
+                        "activation_date": downline.activation_date.isoformat() if downline.activation_date else None
+                    }
+                    tree_structure["downlines"].append(downline_data)
+            
+            # Calculate progress for this slot/phase
+            progress = {
+                "phase_1": {"joined": 0, "required": 4, "remaining": 4},
+                "phase_2": {"joined": 0, "required": 8, "remaining": 8}
+            }
+            
+            if is_root:
+                if phase == 'PHASE-1':
+                    phase_1_downlines = TreePlacement.objects(
+                        parent_id=user_oid,
+                        program='global',
+                        phase='PHASE-1',
+                        slot_no=slot,
+                        is_active=True
+                    ).count()
+                    progress["phase_1"]["joined"] = phase_1_downlines
+                    progress["phase_1"]["remaining"] = max(0, 4 - phase_1_downlines)
+                
+                if phase == 'PHASE-2':
+                    phase_2_downlines = TreePlacement.objects(
+                        parent_id=user_oid,
+                        program='global',
+                        phase='PHASE-2',
+                        slot_no=slot,
+                        is_active=True
+                    ).count()
+                    progress["phase_2"]["joined"] = phase_2_downlines
+                    progress["phase_2"]["remaining"] = max(0, 8 - phase_2_downlines)
+            
+            return {
+                "success": True,
+                "data": {
+                    "user_id": str(user_oid),
+                    "user_name": user_info.name,
+                    "user_email": user_info.email,
+                    "user_uid": user_info.uid,
+                    "slot_no": slot,
+                    "phase": phase,
+                    "is_root": is_root,
+                    "progress": progress,
+                    "tree": tree_structure
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": f"Failed to get global earnings details by slot: {str(e)}"}
+    
     def _create_slot_data(self, user_oid: ObjectId, slot_no: int, phase: str, placements: List) -> Dict[str, Any]:
         """
         Create detailed slot data including tree structure

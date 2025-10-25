@@ -193,64 +193,48 @@ async def get_team_statistics(user_id: str):
 
 @router.get("/earnings/details")
 async def get_global_earnings_details(
-    uid: str,
-    item_id: Optional[int] = None,
-    phase: Optional[str] = None
+    user_id: str,
+    phase: str,
+    slot: int,
+    uid: Optional[str] = None,
+    item_id: Optional[int] = None
 ):
     """
-    Get Global earnings details by item_id or last item if item_id not provided
+    Get Global earnings details for specific user, phase, and slot.
+    Returns tree structure with user and downlines if user is root in that slot/phase.
     
     Examples:
-    - /global/earnings/details?uid=AUTO001 - Returns last earnings item for user
-    - /global/earnings/details?uid=AUTO001&item_id=3 - Returns specific item with ID 3
-    - /global/earnings/details?uid=AUTO001&phase=phase1 - Returns last item for specific phase
+    - /global/earnings/details?user_id=123&phase=PHASE-2&slot=1
+    - /global/earnings/details?uid=AUTO001&phase=PHASE-1&slot=2
     """
     try:
-        if not uid:
-            raise HTTPException(status_code=400, detail="uid parameter is required")
+        # If uid is provided, find user by uid
+        if uid:
+            user = User.objects(uid=uid).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            user_id = str(user.id)
         
-        # Find user by uid
-        user = User.objects(uid=uid).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id or uid parameter is required")
         
-        user_id = str(user.id)
-
+        if not phase:
+            raise HTTPException(status_code=400, detail="phase parameter is required")
+        
+        if not slot:
+            raise HTTPException(status_code=400, detail="slot parameter is required")
+        
+        # Validate phase
+        if phase.upper() not in ['PHASE-1', 'PHASE-2']:
+            raise HTTPException(status_code=400, detail="phase must be PHASE-1 or PHASE-2")
+        
         service = GlobalService()
+        result = service.get_global_earnings_details_by_slot(user_id, phase.upper(), slot)
         
-        # If item_id is provided, return specific item
-        if item_id is not None:
-            result = service.get_global_earnings_details(user_id, item_id, phase)
-            
-            if result["success"]:
-                return success_response(result["data"])
-            else:
-                raise HTTPException(status_code=404, detail=result["error"])
-        
-        # If item_id is not provided, return last item from earnings data
+        if result["success"]:
+            return success_response(result["data"])
         else:
-            result = service.get_global_earnings(user_id, phase)
-            
-            if result["success"]:
-                # Service returns data as { "phase-1": [...], "phase-2": [...] }
-                # Combine all phase data into a single array
-                earnings_data = []
-                
-                if isinstance(result["data"], dict):
-                    for phase_key in ['phase-1', 'phase-2']:
-                        if phase_key in result["data"]:
-                            phase_items = result["data"][phase_key]
-                            if isinstance(phase_items, list):
-                                earnings_data.extend(phase_items)
-                
-                if not earnings_data:
-                    raise HTTPException(status_code=404, detail="No earnings data found for this user")
-                
-                # Return only the last earnings item
-                last_item = earnings_data[-1]
-                return success_response(last_item)
-            else:
-                raise HTTPException(status_code=400, detail=result["error"])
+            raise HTTPException(status_code=404, detail=result["error"])
 
     except HTTPException:
         raise
