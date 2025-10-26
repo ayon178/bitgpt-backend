@@ -4975,12 +4975,22 @@ class GlobalService:
                     slot_data["phases"][phase_name] = phase_data
                 
                 # Calculate progress for this slot based on user's current phase
-                current_user_placement = TreePlacement.objects(
-                    user_id=user_oid,
-                    program='global',
-                    slot_no=slot_no,
-                    is_active=True
-                ).order_by('-created_at').first()  # Get the latest placement
+                # If phase filter is applied, only get placement for that phase
+                if phase:
+                    current_user_placement = TreePlacement.objects(
+                        user_id=user_oid,
+                        program='global',
+                        phase=phase,
+                        slot_no=slot_no,
+                        is_active=True
+                    ).first()
+                else:
+                    current_user_placement = TreePlacement.objects(
+                        user_id=user_oid,
+                        program='global',
+                        slot_no=slot_no,
+                        is_active=True
+                    ).order_by('-created_at').first()  # Get the latest placement
                 
                 phase_1_joined = 0
                 phase_2_joined = 0
@@ -5047,36 +5057,39 @@ class GlobalService:
                     "downlines": []
                 }
                 
-                if current_user_placement:
+                # Only show tree if user is root in the current phase
+                if current_user_placement and current_user_placement.parent_id is None:
                     tree_structure["user"] = {
                         "user_id": str(user_oid),
                         "uid": user_info.uid,
                         "name": user_info.name,
                         "level": current_user_placement.level,
                         "position": current_user_placement.position,
-                        "is_root": current_user_placement.parent_id is None
+                        "is_root": True
                     }
                     
-                    # Get downlines if user is root
-                    if current_user_placement.parent_id is None:  # User is root
-                        downlines = TreePlacement.objects(
-                            parent_id=user_oid,
-                            program='global',
-                            phase=current_user_placement.phase,
-                            slot_no=slot_no,
-                            is_active=True
-                        ).order_by('created_at')
-                        
-                        for downline in downlines:
-                            downline_user = User.objects(id=downline.user_id).first()
-                            downline_data = {
-                                "user_id": str(downline.user_id),
-                                "uid": downline_user.uid if downline_user else "Unknown",
-                                "name": downline_user.name if downline_user else "Unknown",
-                                "level": downline.level,
-                                "position": downline.position
-                            }
-                            tree_structure["downlines"].append(downline_data)
+                    # Get downlines since user is root
+                    # Use the requested phase filter, if provided
+                    downlines_phase = phase if phase else current_user_placement.phase
+                    
+                    downlines = TreePlacement.objects(
+                        parent_id=user_oid,
+                        program='global',
+                        phase=downlines_phase,
+                        slot_no=slot_no,
+                        is_active=True
+                    ).order_by('created_at')
+                    
+                    for downline in downlines:
+                        downline_user = User.objects(id=downline.user_id).first()
+                        downline_data = {
+                            "user_id": str(downline.user_id),
+                            "uid": downline_user.uid if downline_user else "Unknown",
+                            "name": downline_user.name if downline_user else "Unknown",
+                            "level": downline.level,
+                            "position": downline.position
+                        }
+                        tree_structure["downlines"].append(downline_data)
                 
                 slot_data["tree"] = tree_structure
                 
