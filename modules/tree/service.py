@@ -83,63 +83,94 @@ class TreeService:
                 print(f"✅ Created {program} tree placement: User {user_id} at Level {referrer_placement.level + 1}, Position {available_position} under {referrer_id}")
                 return True
             
-            # All direct positions filled - use BFS for spillover
-            # This implements the logic: যদি direct positions full হয়, তাহলে level-wise check করবে
-            # প্রথম level er first user er directDownline check করবে, তারপর second user, তারপর third
-            # সবার না থাকলে next level এ যাবে
-            queue = deque([(referrer_id, referrer_placement.level)])
-            visited = set()
+            # All direct positions filled - use level-wise BFS for spillover
+            # This implements the correct matrix logic:
+            # Level 1: [1, 4, 5] - check 1's index0, then 4's index0, then 5's index0
+            #          if all filled, check 1's index1, then 4's index1, then 5's index1
+            # Only when all positions at current level are filled, go to next level
             
-            while queue:
-                current_user_id, current_level = queue.popleft()
-                
-                user_id_str = str(current_user_id)
-                if user_id_str in visited:
-                    continue
-                visited.add(user_id_str)
-                
-                # Check all positions for this node (2 for binary, 3 for matrix)
-                children = []
-                available_position = None
-                
+            def find_level_wise_position(referrer_oid, referrer_level):
+                """
+                Level-wise BFS: Check all children's position 0, then all's position 1, then all's position 2
+                Only then move to next level
+                """
+                # Start with referrer's direct children (level = referrer_level + 1)
+                current_level_nodes = []
                 for pos in positions:
                     child = TreePlacement.objects(
                         program=program,
-                        upline_id=current_user_id,
+                        upline_id=referrer_oid,
                         position=pos,
                         slot_no=slot_no,
                         is_active=True
                     ).first()
-                    
                     if child:
-                        children.append(child)
-                    elif available_position is None:
-                        # Found first available position
-                        available_position = pos
+                        current_level_nodes.append((child.user_id, referrer_level + 1))
                 
-                # If we found an available position at this node, place user here
-                if available_position:
-                    placement = TreePlacement(
-                        user_id=user_id,
-                        program=program,
-                        parent_id=referrer_id,  # Direct referrer stays same
-                        upline_id=current_user_id,  # Actual placement parent
-                        position=available_position,
-                        level=current_level + 1,
-                        slot_no=slot_no,
-                        is_spillover=True,
-                        spillover_from=referrer_id,
-                        is_active=True,
-                        created_at=datetime.utcnow()
-                    )
-                    placement.save()
-                    print(f"✅ Created {program} SPILLOVER placement: User {user_id} at Level {current_level + 1}, Position {available_position} under {current_user_id} (referred by {referrer_id})")
-                    return True
+                while current_level_nodes:
+                    # For each position index (0=left, 1=middle, 2=right)
+                    for pos_idx in range(len(positions)):
+                        pos = positions[pos_idx]
+                        
+                        # Check this position for ALL nodes at current level
+                        for node_user_id, node_level in current_level_nodes:
+                            existing = TreePlacement.objects(
+                                program=program,
+                                upline_id=node_user_id,
+                                position=pos,
+                                slot_no=slot_no,
+                                is_active=True
+                            ).first()
+                            
+                            if not existing:
+                                # Found available slot!
+                                return {
+                                    'upline_id': node_user_id,
+                                    'position': pos,
+                                    'level': node_level + 1
+                                }
+                    
+                    # All positions at current level are filled
+                    # Get next level children from all current level nodes
+                    next_level_nodes = []
+                    for node_user_id, node_level in current_level_nodes:
+                        for pos in positions:
+                            child = TreePlacement.objects(
+                                program=program,
+                                upline_id=node_user_id,
+                                position=pos,
+                                slot_no=slot_no,
+                                is_active=True
+                            ).first()
+                            if child:
+                                next_level_nodes.append((child.user_id, node_level + 1))
+                    
+                    if not next_level_nodes:
+                        return None  # No more nodes
+                    
+                    current_level_nodes = next_level_nodes
                 
-                # All positions filled at this node, add children to queue for next level
-                # This implements: যদি এই node full হয়, তাহলে এর children গুলো check করবে
-                for child in children:
-                    queue.append((child.user_id, current_level + 1))
+                return None
+            
+            placement_info = find_level_wise_position(referrer_id, referrer_placement.level)
+            
+            if placement_info:
+                placement = TreePlacement(
+                    user_id=user_id,
+                    program=program,
+                    parent_id=referrer_id,  # Direct referrer stays same
+                    upline_id=placement_info['upline_id'],  # Actual placement parent
+                    position=placement_info['position'],
+                    level=placement_info['level'],
+                    slot_no=slot_no,
+                    is_spillover=True,
+                    spillover_from=referrer_id,
+                    is_active=True,
+                    created_at=datetime.utcnow()
+                )
+                placement.save()
+                print(f"✅ Created {program} SPILLOVER placement: User {user_id} at Level {placement_info['level']}, Position {placement_info['position']} under {placement_info['upline_id']} (referred by {referrer_id})")
+                return True
             
             print(f"❌ No available position found in tree (shouldn't happen)")
             return False
@@ -405,18 +436,21 @@ class TreeService:
         slot_no: int
     ) -> Optional[Dict[str, Any]]:
         """
-        Use BFS (Breadth-First Search) to find the next available position in the binary tree
-        starting from the referrer's position.
+        Use level-wise BFS to find the next available position in the tree.
+        
+        Logic: Check all children's position 0, then all's position 1, then all's position 2
+        Only when all positions at current level are filled, move to next level.
         
         Returns: {
             'upline_id': ObjectId of the parent where user will be placed,
-            'position': 'left' or 'right',
+            'position': 'left', 'middle', or 'right',
             'level': level number
         }
         """
-        from collections import deque
+        # Determine positions based on program type
+        positions = ['left', 'right'] if program == 'binary' else ['left', 'middle', 'right']
         
-        # Get referrer's placement to start BFS
+        # Get referrer's placement to start
         referrer_placement = TreePlacement.objects(
             user_id=referrer_id,
             program=program,
@@ -427,63 +461,70 @@ class TreeService:
         if not referrer_placement:
             return None
         
-        # Initialize BFS queue with the referrer
-        # Queue contains tuples of (user_id, level)
-        queue = deque([(referrer_id, referrer_placement.level)])
-        visited = set()
+        def find_level_wise_position(referrer_oid, referrer_level):
+            """
+            Level-wise BFS: Check all children's position 0, then all's position 1, then all's position 2
+            Only then move to next level
+            """
+            # Start with referrer's direct children
+            current_level_nodes = []
+            for pos in positions:
+                child = TreePlacement.objects(
+                    program=program,
+                    upline_id=referrer_oid,
+                    position=pos,
+                    slot_no=slot_no,
+                    is_active=True
+                ).first()
+                if child:
+                    current_level_nodes.append((child.user_id, referrer_level + 1))
+            
+            while current_level_nodes:
+                # For each position index (0=left, 1=middle, 2=right)
+                for pos_idx in range(len(positions)):
+                    pos = positions[pos_idx]
+                    
+                    # Check this position for ALL nodes at current level
+                    for node_user_id, node_level in current_level_nodes:
+                        existing = TreePlacement.objects(
+                            program=program,
+                            upline_id=node_user_id,
+                            position=pos,
+                            slot_no=slot_no,
+                            is_active=True
+                        ).first()
+                        
+                        if not existing:
+                            # Found available slot!
+                            return {
+                                'upline_id': node_user_id,
+                                'position': pos,
+                                'level': node_level + 1
+                            }
+                
+                # All positions at current level are filled
+                # Get next level children from all current level nodes
+                next_level_nodes = []
+                for node_user_id, node_level in current_level_nodes:
+                    for pos in positions:
+                        child = TreePlacement.objects(
+                            program=program,
+                            upline_id=node_user_id,
+                            position=pos,
+                            slot_no=slot_no,
+                            is_active=True
+                        ).first()
+                        if child:
+                            next_level_nodes.append((child.user_id, node_level + 1))
+                
+                if not next_level_nodes:
+                    return None  # No more nodes
+                
+                current_level_nodes = next_level_nodes
+            
+            return None
         
-        while queue:
-            current_user_id, current_level = queue.popleft()
-            
-            # Skip if already visited
-            user_id_str = str(current_user_id)
-            if user_id_str in visited:
-                continue
-            visited.add(user_id_str)
-            
-            # Check if current node has available positions
-            # Check left position first
-            left_child = TreePlacement.objects(
-                program=program,
-                upline_id=current_user_id,
-                position='left',
-                slot_no=slot_no,
-                is_active=True
-            ).first()
-            
-            if not left_child:
-                # Found available left position!
-                return {
-                    'upline_id': current_user_id,
-                    'position': 'left',
-                    'level': current_level + 1
-                }
-            
-            # Check right position
-            right_child = TreePlacement.objects(
-                        program=program,
-                upline_id=current_user_id,
-                        position='right',
-                        slot_no=slot_no,
-                        is_active=True
-            ).first()
-            
-            if not right_child:
-                # Found available right position!
-                return {
-                    'upline_id': current_user_id,
-                    'position': 'right',
-                    'level': current_level + 1
-                }
-            
-            # Both positions are filled, add children to queue for next level
-            if left_child:
-                queue.append((left_child.user_id, current_level + 1))
-            if right_child:
-                queue.append((right_child.user_id, current_level + 1))
-        
-        # No available position found (shouldn't happen in practice)
-        return None
+        return find_level_wise_position(referrer_id, referrer_placement.level)
     
     @staticmethod
     async def _calculate_level(parent_id: ObjectId, program: str, slot_no: int) -> int:

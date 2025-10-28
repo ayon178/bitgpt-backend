@@ -162,10 +162,11 @@ class DreamMatrixService:
                         "progressPercent": progress_percent
                     }
                     
-                    # Only add tree structure if slot is completed
-                    if is_completed:
+                    # Add tree structure for completed slots AND the current active slot
+                    if is_completed or current_slot_no == user_current_slot:
                         try:
-                            slot_root_node, slot_depth, slot_total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=3, slot_no=current_slot_no)
+                            # Build up to Level 10 (root=0 plus 10 levels)
+                            slot_root_node, slot_depth, slot_total_nodes_count = self._build_nested_matrix_tree_limited(user_oid, max_levels=11, slot_no=current_slot_no)
                         except Exception as tree_error:
                             print(f"Error building matrix tree for slot {current_slot_no}: {tree_error}")
                             import traceback
@@ -247,7 +248,12 @@ class DreamMatrixService:
             total_count = [0]
             
             # Helper to build node recursively with level limit
-            def build_node(parent_oid, level: int, position: str) -> Dict[str, Any]:
+            def build_node(current_oid, level: int, position: str, tree_parent_oid=None) -> Dict[str, Any]:
+                """
+                Build a node recursively.
+                current_oid: The user whose node we're building
+                tree_parent_oid: The actual tree parent (for parent_id display)
+                """
                 # Stop if we've exceeded max levels
                 if level >= max_levels:
                     return None
@@ -263,19 +269,7 @@ class DreamMatrixService:
                 node_type = "self" if level == 0 else "downLine"
                 
                 # Get user info
-                user_info = get_user_info(parent_oid)
-                
-                # Get parent_id from TreePlacement for this user
-                parent_id = None
-                try:
-                    user_placement = TreePlacement.objects(
-                        user_id=parent_oid,
-                        program='matrix'
-                    ).first()
-                    if user_placement:
-                        parent_id = str(user_placement.parent_id)
-                except Exception:
-                    pass
+                user_info = get_user_info(current_oid)
                 
                 # Create the node
                 node = {
@@ -287,17 +281,17 @@ class DreamMatrixService:
                     "position": position
                 }
                 
-                # Add parent_id if available
-                if parent_id:
-                    node["parent_id"] = parent_id
+                # Add parent_id for non-root nodes (the actual tree parent)
+                if level > 0 and tree_parent_oid:
+                    node["parent_id"] = str(tree_parent_oid)
                 
                 # Only get children if we're not at the last level
                 if level < max_levels - 1:
                     # Build query filter for TreePlacement
                     query_filter = {
                         "program": 'matrix',
-                        "upline_id": parent_oid,
-                        "user_id__ne": parent_oid  # Exclude self
+                        "upline_id": current_oid,  # Changed from parent_oid to current_oid
+                        "user_id__ne": current_oid  # Exclude self
                     }
                     
                     # Add slot filter if slot_no is provided
@@ -305,23 +299,25 @@ class DreamMatrixService:
                         query_filter["slot_no"] = slot_no
                         query_filter["is_active"] = True
                     
-                    # Get direct children from TreePlacement for matrix program
-                    # Matrix has 3 positions per level (3x3 structure)
-                    children = TreePlacement.objects(**query_filter).order_by('created_at').limit(3)
-                    
-                    # Build directDownline array
+                    # Fetch children and map by saved position to enforce left→middle→right ordering
+                    children = TreePlacement.objects(**query_filter).only('user_id', 'position', 'created_at').order_by('created_at')
+                    children_by_position = { 'left': None, 'middle': None, 'right': None }
+                    for ch in children:
+                        pos_key = getattr(ch, 'position', None)
+                        if pos_key in children_by_position and children_by_position[pos_key] is None:
+                            children_by_position[pos_key] = ch
+
+                    # Build directDownline in fixed order
                     direct_downline = []
-                    
-                    # Position names for matrix (3 positions)
-                    positions = ['left', 'middle', 'right']
-                    
-                    # Add children (max 3 for matrix)
-                    for idx, child in enumerate(children):
-                        child_position = positions[idx] if idx < len(positions) else f"pos{idx}"
+                    for pos_key in ['left', 'middle', 'right']:
+                        ch = children_by_position[pos_key]
+                        if not ch:
+                            continue
                         child_node = build_node(
-                            child.user_id,
+                            ch.user_id,
                             level + 1,
-                            child_position
+                            pos_key,
+                            tree_parent_oid=current_oid
                         )
                         if child_node:
                             direct_downline.append(child_node)

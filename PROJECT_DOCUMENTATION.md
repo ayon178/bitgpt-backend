@@ -94,22 +94,76 @@ The platform offers 14 different earning programs organized in three rows:
 ### Tree Upline Reserve System
 **CRITICAL FEATURE**: Tree upline reserve fund system for automatic slot activation.
 
-#### Reserve Fund Rules:
-- **30% of slot fee** goes to tree upline's reserve for next slot activation
-- **Automatic slot activation**: When reserve fund reaches next slot cost, automatic activation occurs
-- **Mother account fallback**: If tree upline doesn't activate slot, fund goes to mother account
+#### Slot Activation & Tree Structure:
+- **Each slot has separate tree**: When a user joins Binary, they activate Slot 1 and Slot 2 automatically
+- **Separate tree for each slot**: User placed in Slot 1 tree joins Slot 1 tree, user placed in Slot 2 tree joins Slot 2 tree, etc.
+- **User joins multiple trees**: Same user can be in different positions in Slot 1 tree, Slot 2 tree, Slot 3 tree, etc.
 
-#### Reserve Fund Logic:
-1. **Level 1 or 2 User Activation**: If tree upline's 1st or 2nd level user activates a slot, entire fund goes to tree upline's reserve
-2. **Automatic Upgrade**: Reserve fund automatically activates tree upline's next slot when sufficient funds accumulated
-3. **Mother Account**: If tree upline doesn't activate target slot, fund goes to mother account
-4. **Normal Distribution**: If target slot already activated, fund follows normal distribution percentages
+#### Slot 1 Activation Logic:
+- **Full fee to direct upline**: When a user joins Slot 1, the entire joining fee goes to their direct upline (referrer)
+- **Example**: User C refers User H to join Slot 1, then User C gets the full Slot 1 fee
+
+#### Slot 2-17 Activation Logic:
+When a user activates Slot 2 or above, the system checks:
+
+**Condition 1: First or Second Level User**
+- If the activating user is the tree upline's (for that slot number) 1st level or 2nd level user
+- **THEN**: Entire activation fee goes to tree upline's reserve fund for next slot activation
+- **Purpose**: Auto-upgrade the tree upline when reserve reaches next slot cost
+
+**Condition 2: Tree Upline Not Activated**
+- If the tree upline hasn't activated the target slot yet
+- **THEN**: Fund goes to mother account
+
+**Condition 3: Normal Distribution**
+- If the target slot is already activated by tree upline
+- **THEN**: Fund follows normal distribution percentages (Spark Bonus, Royal Captain, etc.)
+
+#### Automatic Slot Activation:
+- When reserve fund reaches the cost of next slot, automatic activation occurs
+- Example: User C refers User H, User H activates Slot 3, entire fee goes to User A's (tree upline) reserve, and automatic Slot 4 activation happens when sufficient funds
 
 #### Example Scenario:
 - User C refers User H
 - User H activates Slot 3
 - Entire Slot 3 fee goes to User A's (tree upline) reserve for next slot activation
 - System automatically activates User A's next slot when reserve reaches required amount
+
+#### Normal Distribution (When NOT in First/Second Level):
+
+If a user is NOT in tree upline's 1st or 2nd level, the slot activation fee is distributed as:
+
+| Component | Percentage (%) |
+| :-------- | :------------- |
+| Spark Bonus | 8% |
+| Royal Captain Bonus | 4% |
+| President Reward | 3% |
+| Leadership Stipend | 5% |
+| Jackpot Entry | 5% |
+| Partner Incentive | 10% (direct referrer) |
+| Share Holders | 5% |
+| Level Distribution | 60% (distributed across levels 1-16) |
+
+**Additional Notes:**
+- **Newcomer Growth Fund**: Created when user joins Binary
+- **Global Funds**: Spark Bonus, Royal Captain Bonus, President Reward, Leadership Stipend, Jackpot Entry are global funds distributed based on eligibility
+- **Share Holders**: 5% goes to separate wallet
+- **Partner Incentive**: Goes directly to referrer who brought the user
+
+#### Level Distribution (60%):
+
+The 60% level distribution is treated as 100% baseline and distributed across levels:
+
+| Level | Percentage of 60% | Description |
+| :---- | :---------------- | :---------- |
+| Level 1 | 30% | Tree upline at level 1 |
+| Level 2 | 10% | Tree upline at level 2 |
+| Level 3 | 10% | Tree upline at level 3 |
+| Level 4-10 | 5% each | Tree upline at levels 4-10 |
+| Level 11-13 | 3% each | Tree upline at levels 11-13 |
+| Level 14-16 | 2% each | Tree upline at levels 14-16 |
+
+**Important Rule**: If a level's user hasn't activated the corresponding slot, that level's reward goes to Mother ID.
 
 ---
 
@@ -909,7 +963,7 @@ The Matrix Auto Upgrade System automatically uses earnings from specific members
 
 ### Eligibility Escalation and Fallback
 - When resolving sweepover placement, check eligibility upward to the 60th-level upline for an upgraded holder of the target slot.
-- If no eligible upline exists within 60 levels, place into the Mother ID’s tree for that slot.
+- If no eligible upline exists within 60 levels, place into the Mother ID's tree for that slot.
 
 ### Level Distribution (Matrix) — 3 Levels: 20% / 20% / 60%
 Matrix level-income distributes across the immediate three upline levels relative to the placed position:
@@ -929,9 +983,9 @@ Example with an $800 basis for illustration:
 Summary: 1) 20%, 2) 20%, 3) 60%.
 
 ### Recycle Behavior with Sweepover
-- Each slot (1–15) completes at 39 occupants (3/9/27) and then recycles. On recycle, a user re-enters the direct upline’s corresponding slot using BFS placement.
-- If the user originally occupied a position via sweepover, they will re-enter the same super-upline’s tree on recycle, unless their immediate upline has upgraded that slot in the meantime. If the immediate upline later upgrades the same slot, subsequent upgrade/recycle for that slot will place under that upline per normal rules.
-- Chain recycle: If a downline’s final placement completes the upline’s tree and triggers the upline’s recycle, both recycles occur. The triggering join/upgrade amount is accounted for in the upline’s tree at the tick-marked circle, and level-income distributes to the first/second/third uplines relative to that placement. This cascade may repeat multiple times.
+- Each slot (1–15) completes at 39 occupants (3/9/27) and then recycles. On recycle, a user re-enters the direct upline's corresponding slot using BFS placement.
+- If the user originally occupied a position via sweepover, they will re-enter the same super-upline's tree on recycle, unless their immediate upline has upgraded that slot in the meantime. If the immediate upline later upgrades the same slot, subsequent upgrade/recycle for that slot will place under that upline per normal rules.
+- Chain recycle: If a downline's final placement completes the upline's tree and triggers the upline's recycle, both recycles occur. The triggering join/upgrade amount is accounted for in the upline's tree at the tick-marked circle, and level-income distributes to the first/second/third uplines relative to that placement. This cascade may repeat multiple times.
 
 ### Direct vs Tree Upline (Authoritative)
 - Direct Upline: The referral relationship. This never changes across slots or recycles.
@@ -948,38 +1002,38 @@ Notes:
 
 ### Recycle Re-entry Algorithm (BFS with Ancestor Resolution)
 When a user completes a slot (39 occupants) and recycles:
-1) If the immediate upline has the same slot active, place the recycling user into the immediate upline’s current in-progress tree using BFS:
+1) If the immediate upline has the same slot active, place the recycling user into the immediate upline's current in-progress tree using BFS:
    - Try Level-1 first (any of the 3 direct positions). If none are free, proceed breadth-first to Level-2 then Level-3.
-2) If the immediate upline does NOT have that slot active, escalate upward to the next upline who has that slot active and space available, using the same BFS rule. Continue escalation up to 60 levels; if none is eligible, place into the Mother ID’s tree for that slot.
+2) If the immediate upline does NOT have that slot active, escalate upward to the next upline who has that slot active and space available, using the same BFS rule. Continue escalation up to 60 levels; if none is eligible, place into the Mother ID's tree for that slot.
 3) The resulting three ancestors above the placed position define Level-1/2/3 for income distribution (20/20/60).
 
-Implication: A user may temporarily appear under a super-upline’s tree (sweepover or recycle), while the direct upline relationship remains unchanged. Later, if the skipped upline activates the relevant slot (or a higher slot before the downline’s next upgrade), subsequent placements can return under that upline’s tree.
+Implication: A user may temporarily appear under a super-upline's tree (sweepover or recycle), while the direct upline relationship remains unchanged. Later, if the skipped upline activates the relevant slot (or a higher slot before the downline's next upgrade), subsequent placements can return under that upline's tree.
 
 ### Worked Example (Slots 3 and 4)
 Assume the hierarchy: You (A) → Me (B) → My Downline (D).
 - A has Slot-3 active. D has Slot-3 active. B does NOT yet have Slot-3.
 - D completes Slot-3 and recycles. Since B lacks Slot-3, D is placed into A Slot-3 tree by BFS. This may place D at A Level-1 if a direct position is free, otherwise at Level-2/3 per BFS. During this time, Tree Upline for D@Slot-3 is A. Direct Upline remains B.
-- Later, B upgrades Slot-3. Before D upgrades to Slot-4, D’s next placement (e.g., D’s Slot-4 join/upgrade) will resolve under B’s tree if B has Slot-4 first (or activates the relevant slot before D’s corresponding upgrade). Thus Tree Upline for D@Slot-4 becomes B, while Direct Upline was always B.
+- Later, B upgrades Slot-3. Before D upgrades to Slot-4, D's next placement (e.g., D's Slot-4 join/upgrade) will resolve under B's tree if B has Slot-4 first (or activates the relevant slot before D's corresponding upgrade). Thus Tree Upline for D@Slot-4 becomes B, while Direct Upline was always B.
 
 ### Bonuses Unaffected by Sweepover
 - Partner Incentive (10%), Newcomer Growth Support, and Mentorship Bonus are not impacted by sweepover; they distribute per their normal rules regardless of the tree used for level-income.
 
 ### Notes
-- “Second-level middle three fund the next slot” remains the authoritative auto-upgrade rule for Matrix and is unchanged here.
-- For concrete scenarios (e.g., junior upgrades $60 and sweeps over a non-upgraded upline into a super-upline’s tree), recycle re-entry will remain in that same tree so long as the skipped upline stays non-upgraded at that slot. If the upline later upgrades (e.g., $60 and $240), then when the junior reaches the higher slot (e.g., $240) the placement and distribution will occur under the upgraded upline per normal.
+- "Second-level middle three fund the next slot" remains the authoritative auto-upgrade rule for Matrix and is unchanged here.
+- For concrete scenarios (e.g., junior upgrades $60 and sweeps over a non-upgraded upline into a super-upline's tree), recycle re-entry will remain in that same tree so long as the skipped upline stays non-upgraded at that slot. If the upline later upgrades (e.g., $60 and $240), then when the junior reaches the higher slot (e.g., $240) the placement and distribution will occur under the upgraded upline per normal.
 
 ### Partner Incentive & Mentorship Bonus (Matrix) — Distribution Rules
 - Partner Incentive (PI) — 10%: Paid to the direct sponsor/upline of the user who joins or upgrades a Matrix slot. This is always based on the referral chain (not tree placement). Unaffected by sweepover or recycle.
-- Mentorship Bonus — 10%: Paid to the “super upline” (the sponsor of the sponsor) for transactions made by the direct-of-direct partner (i.e., your direct’s direct). Also based on the referral chain and unaffected by sweepover or recycle.
+- Mentorship Bonus — 10%: Paid to the "super upline" (the sponsor of the sponsor) for transactions made by the direct-of-direct partner (i.e., your direct's direct). Also based on the referral chain and unaffected by sweepover or recycle.
 - Scope: Both apply on Matrix join ($11) and on every Matrix slot upgrade (slots 1–15) per slot value.
 - Independence: PI and Mentorship are independent of the 20/20/60 level-income and of reserve mechanics. They are computed in parallel with level-income.
 - Missing super upline: If a super upline does not exist for a user (no sponsor-of-sponsor), the Mentorship portion for that user does not apply.
 
 Example:
-- If X joins/upgrade a Matrix slot and S is X’s direct sponsor, Y is S’s sponsor:
+- If X joins/upgrade a Matrix slot and S is X's direct sponsor, Y is S's sponsor:
   - PI 10% of the slot amount → S (direct sponsor of X).
   - Mentorship 10% of the slot amount → Y (sponsor of S), because X is a direct-of-direct relative to Y.
-  - These payouts are independent of whether X’s level-income flows under S’s tree or under any super-upline’s tree due to sweepover.
+  - These payouts are independent of whether X's level-income flows under S's tree or under any super-upline's tree due to sweepover.
 
 
 ### Matrix Recycle Tree API
