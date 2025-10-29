@@ -73,9 +73,9 @@ class FundDistributionService:
         
         # Matrix level distribution breakdown (40% treated as 100%)
         self.matrix_level_breakdown = {
-            1: Decimal('20.0'),   # Level 1: 20%
-            2: Decimal('20.0'),   # Level 2: 20%
-            3: Decimal('60.0')    # Level 3: 60%
+            1: Decimal('30.0'),   # Level 1: 30%
+            2: Decimal('10.0'),   # Level 2: 10%
+            3: Decimal('10.0')    # Level 3: 10%
         }
 
     def distribute_binary_funds(self, user_id: str, amount: Decimal, slot_no: int, 
