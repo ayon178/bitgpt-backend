@@ -486,6 +486,108 @@ async def claim_instant_bonus(payload: NewcomerSupportJoinRequest):
     except Exception as e:
         return error_response(str(e))
 
+
+@router.post("/claim-instant-available")
+async def claim_instant_available(current_user: dict = Depends(authentication_service.verify_authentication)):
+    """Claim all pending instant (50%) newcomer bonuses to user's main wallet immediately.
+    - Computes total on backend from NewcomerSupportBonus (bonus_type='instant', payment_status='pending')
+    - Credits user's wallet with reason 'newcomer_support'
+    - Marks those bonuses as paid with timestamps
+    - Note: The remaining 50% (upline monthly distributions) cannot be claimed before 30 days
+    """
+    try:
+        # Extract user id from auth
+        user_id = None
+        for k in ("user_id", "_id", "id"):
+            if isinstance(current_user, dict) and current_user.get(k):
+                user_id = str(current_user[k])
+                break
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found in authentication")
+
+        # Validate user and program enrollment
+        user = User.objects(id=ObjectId(user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        newcomer_support = NewcomerSupport.objects(user_id=ObjectId(user_id)).first()
+        if not newcomer_support:
+            raise HTTPException(status_code=404, detail="User not in Newcomer Support program")
+
+        # Gather pending instant bonuses
+        pending = list(NewcomerSupportBonus.objects(
+            user_id=ObjectId(user_id), bonus_type="instant", payment_status="pending"
+        ))
+
+        total_amount = sum(float(getattr(b, 'bonus_amount', 0) or 0) for b in pending)
+
+        if total_amount <= 0:
+            return success_response(
+                data={
+                    "claimed": 0.0,
+                    "currency": "USDT",
+                    "bonuses_paid": 0,
+                    "message": "No pending instant bonuses to claim",
+                    "monthly_note": "Remaining 50% is locked for 30 days and distributed monthly by upline"
+                },
+                message="Nothing to claim"
+            )
+
+        # Credit user's wallet
+        try:
+            from ..wallet.service import WalletService
+            wallet_service = WalletService()
+            tx_hash = f"NGS-INSTANT-CLAIM-{int(datetime.utcnow().timestamp())}"
+            credit = wallet_service.credit_main_wallet(
+                user_id=user_id,
+                amount=Decimal(str(total_amount)),
+                currency="USDT",
+                reason="newcomer_support",
+                tx_hash=tx_hash
+            )
+            if not credit.get("success"):
+                raise HTTPException(status_code=500, detail="Wallet credit failed")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=500, detail="Wallet credit failed")
+
+        # Mark bonuses as paid
+        now = datetime.utcnow()
+        for b in pending:
+            try:
+                b.payment_status = "paid"
+                b.paid_at = now
+                b.processed_at = now
+                b.save()
+            except Exception:
+                pass
+
+        # Update newcomer support aggregates (best-effort)
+        try:
+            newcomer_support.pending_bonuses = max(0.0, float(getattr(newcomer_support, 'pending_bonuses', 0) or 0) - total_amount)
+            newcomer_support.total_bonuses_claimed = float(getattr(newcomer_support, 'total_bonuses_claimed', 0) or 0) + total_amount
+            newcomer_support.last_updated = now
+            newcomer_support.save()
+        except Exception:
+            pass
+
+        return success_response(
+            data={
+                "claimed": total_amount,
+                "currency": "USDT",
+                "bonuses_paid": len(pending),
+                "tx_hash": tx_hash,
+                "monthly_note": "Remaining 50% is locked for 30 days and distributed monthly by upline"
+            },
+            message="Instant newcomer bonuses claimed"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
 @router.get("/monthly-opportunities/{user_id}")
 async def get_monthly_opportunities(user_id: str):
     """Get monthly earning opportunities for user"""

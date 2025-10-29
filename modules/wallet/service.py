@@ -873,6 +873,42 @@ class WalletService:
                     "amount": float(getattr(e, 'amount', 0)) if hasattr(e, 'amount') else 0
                 })
 
+            # Fallback: derive data from IncomeEvent when no DreamMatrixCommission rows exist
+            if total == 0:
+                try:
+                    from ..income.model import IncomeEvent
+                    # Within the same timeframe
+                    ie_q = IncomeEvent.objects(
+                        user_id=user_oid,
+                        program='matrix',
+                        income_type__in=['partner_incentive', 'level_1_distribution', 'level_2_distribution', 'level_3_distribution'],
+                        status__in=['pending', 'completed'],
+                        created_at__gte=since
+                    ).order_by('-created_at')
+
+                    total = ie_q.count()
+                    ie_entries = list(ie_q.skip(skip).limit(limit))
+
+                    # Map source users
+                    ie_src_ids = list(set([ie.source_user_id for ie in ie_entries if getattr(ie, 'source_user_id', None)]))
+                    ie_sources = {str(u.id): u for u in User.objects(id__in=ie_src_ids).only('uid')}
+
+                    rows = []
+                    for ie in ie_entries:
+                        src_u = ie_sources.get(str(getattr(ie, 'source_user_id', '')))
+                        rows.append({
+                            "uid": getattr(user, 'uid', None),
+                            "upline_uid": getattr(src_u, 'uid', None) or 'ROOT',
+                            "time": ie.created_at.isoformat() if ie.created_at else None,
+                            "partner_count": partner_count,
+                            "rank": getattr(user, 'current_rank', None),
+                            "amount": float(ie.amount) if ie.amount else 0.0,
+                            "reason": 'matrix_partner_incentive' if ie.income_type == 'partner_incentive' else f"matrix_dual_tree_{ie.income_type.replace('_distribution','')}"
+                        })
+                except Exception:
+                    # Keep rows empty if fallback fails silently
+                    pass
+
             return {
                 "success": True,
                 "data": {
