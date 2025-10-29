@@ -309,6 +309,45 @@ async def get_newcomer_support_bonuses(user_id: str, limit: int = Query(50, le=1
     except Exception as e:
         return error_response(str(e))
 
+@router.get("/bonuses/upline-locked/{user_id}")
+async def get_upline_locked_bonuses(user_id: str, limit: int = Query(50, le=100)):
+    """Get upline-locked Newcomer Support bonuses (locked until available_from)."""
+    try:
+        # Filter by bonus_type 'upline_reserve' or available_from in the future
+        bonuses = NewcomerSupportBonus.objects(user_id=ObjectId(user_id)).order_by('-created_at')
+        locked = []
+        now = datetime.utcnow()
+        for b in bonuses:
+            is_locked = False
+            if getattr(b, 'bonus_type', None) == 'upline_reserve':
+                is_locked = True
+            if getattr(b, 'available_from', None) and b.available_from > now:
+                is_locked = True
+            if is_locked:
+                locked.append(b)
+            if len(locked) >= limit:
+                break
+        return success_response(
+            data={
+                "bonuses": [
+                    {
+                        "id": str(b.id),
+                        "bonus_type": b.bonus_type,
+                        "bonus_name": b.bonus_name,
+                        "bonus_amount": b.bonus_amount,
+                        "currency": b.currency,
+                        "payment_status": b.payment_status,
+                        "available_from": b.available_from,
+                        "created_at": b.created_at,
+                    } for b in locked
+                ],
+                "total_locked": len(locked)
+            },
+            message="Upline locked bonuses retrieved"
+        )
+    except Exception as e:
+        return error_response(str(e))
+
 @router.post("/bonus")
 async def create_newcomer_support_bonus(request: NewcomerSupportBonusRequest):
     """Create Newcomer Support bonus"""

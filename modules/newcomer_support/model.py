@@ -140,6 +140,8 @@ class NewcomerSupportBonus(Document):
     payment_status = StringField(choices=['pending', 'processing', 'paid', 'failed'], default='pending')
     payment_method = StringField(choices=['wallet', 'blockchain', 'bonus_pool'], default='bonus_pool')
     payment_reference = StringField()  # Transaction hash or reference
+    # Availability lock (e.g., 30-day wait for upline fund)
+    available_from = DateTimeField()  # If set in future, cannot be claimed before this time
     
     # Payment processing
     processed_at = DateTimeField()

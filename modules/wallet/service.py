@@ -403,7 +403,8 @@ class WalletService:
                 # Binary Partner Incentive includes: joining commission, partner incentive, and upgrade commissions
                 if r == "binary_partner_incentive" or r == "binary_joining_commission" or r.startswith("binary_upgrade_"):
                     return "binary_partner_incentive"
-                if r == "matrix_partner_incentive":
+                # Matrix Partner Incentive includes: partner incentive and level distributions (matrix_dual_tree_level_X)
+                if r == "matrix_partner_incentive" or r.startswith("matrix_dual_tree_"):
                     return "matrix_partner_incentive"
                 if r == "global_partner_incentive":
                     return "global_partner_incentive"
@@ -475,6 +476,10 @@ class WalletService:
                 from ..jackpot.model import JackpotFund
             except Exception:
                 JackpotFund = None
+            try:
+                from ..newcomer_support.model import NewcomerSupportBonus
+            except Exception:
+                NewcomerSupportBonus = None
 
             # IncomeEvent-driven pools (report as USDT) - user specific
             if IncomeEvent:
@@ -487,10 +492,37 @@ class WalletService:
                         res = list(IncomeEvent.objects.aggregate(agg))
                         return float(res[0]["total"]) if res else 0.0
                     totals["mentorship_bonus"]["USDT"] += _sum_income(["mentorship"])  # mentorship bonus
-                    totals["newcomer_growth_support"]["USDT"] += _sum_income(["newcomer_support"])  # NGS
+                    # NGS is handled separately below via NewcomerSupportBonus
                     # Global phases
                     totals["global_phase_1"]["USDT"] += _sum_income(["global_phase_1"])  # Phase-1 allocation
                     totals["global_phase_2"]["USDT"] += _sum_income(["global_phase_2"])  # Phase-2 allocation
+                except Exception:
+                    pass
+
+            # NewcomerSupportBonus-driven pools (user's instant claimable 50%)
+            if NewcomerSupportBonus:
+                try:
+                    def _sum_newcomer_bonuses() -> float:
+                        agg = [
+                            {"$match": {"user_id": ObjectId(user_id), "bonus_type": "instant"}},
+                            {"$group": {"_id": None, "total": {"$sum": "$bonus_amount"}}}
+                        ]
+                        res = list(NewcomerSupportBonus.objects.aggregate(agg))
+                        return float(res[0]["total"]) if res else 0.0
+                    totals["newcomer_growth_support"]["USDT"] += _sum_newcomer_bonuses()  # User's 50% instant claimable
+                except Exception:
+                    pass
+
+            # Fallback: IncomeEvent-driven pools if not already handled
+            if IncomeEvent:
+                try:
+                    def _sum_income(types: list[str]) -> float:
+                        agg = [
+                            {"$match": {"user_id": ObjectId(user_id), "income_type": {"$in": types}, "status": {"$in": ["pending", "completed"]}}},
+                            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+                        ]
+                        res = list(IncomeEvent.objects.aggregate(agg))
+                        return float(res[0]["total"]) if res else 0.0
 
                     # Fallback for Binary Partner Incentive and Duel Tree when WalletLedger is missing
                     # Sum partner incentive for binary as BNB-equivalent (amounts recorded in native amount)
@@ -858,7 +890,8 @@ class WalletService:
         """
         Return a paginated list of Dream Matrix Partner Incentive earnings for a specific user.
         Columns: uid (receiver), upline_uid, amount, time, reason, tx_hash.
-        Reasons counted: matrix_partner_incentive, dream_matrix_partner_incentive, dream_matrix_commission, dream_matrix_*, matrix_partner_* (credits only).
+        Reasons counted: matrix_partner_incentive, dream_matrix_partner_incentive, dream_matrix_commission, 
+        dream_matrix_*, matrix_partner_*, matrix_dual_tree_* (level distributions) (credits only).
         """
         try:
             from ..user.model import User
@@ -872,12 +905,13 @@ class WalletService:
                 user_oid = user_id
 
             # Get wallet ledger entries for this specific user
-            # Include all Dream Matrix Partner Incentive related reasons
+            # Include all Dream Matrix Partner Incentive related reasons and level distributions
             base_filter = Q(user_id=user_oid) & Q(type="credit") & Q(currency=currency.upper())
             reason_filter = (
                 Q(reason__in=["matrix_partner_incentive", "dream_matrix_partner_incentive", "dream_matrix_commission"]) |
                 Q(reason__startswith="dream_matrix_") |
-                Q(reason__startswith="matrix_partner_")
+                Q(reason__startswith="matrix_partner_") |
+                Q(reason__startswith="matrix_dual_tree_")  # Include level distributions
             )
             query = base_filter & reason_filter
             
@@ -934,12 +968,11 @@ class WalletService:
     def get_newcomer_growth_support_income(self, user_id: str, currency: str = "USDT", page: int = 1, limit: int = 50) -> Dict[str, Any]:
         """
         Return a paginated list of Newcomer Growth Support earnings for a specific user.
-        Fetches from IncomeEvent collection (consistent with pools_summary).
-        Income type: newcomer_support
+        Fetches from NewcomerSupportBonus collection (user's 50% instant claimable portion).
         """
         try:
             from ..user.model import User
-            from ..income.model import IncomeEvent
+            from ..newcomer_support.model import NewcomerSupportBonus
             from bson import ObjectId
 
             # Convert user_id to ObjectId if needed
@@ -948,15 +981,14 @@ class WalletService:
             except:
                 user_oid = user_id
 
-            # Get IncomeEvent entries for this specific user (matching pools_summary logic)
+            # Get NewcomerSupportBonus entries for this specific user (user's instant claimable 50%)
             query_filter = {
                 "user_id": user_oid,
-                "income_type": "newcomer_support",
-                "status__in": ["pending", "completed"]
+                "bonus_type": "instant"  # Only instant claimable bonuses
             }
             
             # Count total entries
-            total = IncomeEvent.objects(**query_filter).count()
+            total = NewcomerSupportBonus.objects(**query_filter).count()
             
             # Pagination
             page = max(1, int(page or 1))
@@ -964,7 +996,7 @@ class WalletService:
             skip = (page - 1) * limit
             
             # Get paginated entries, sorted by created_at desc
-            entries = IncomeEvent.objects(**query_filter).order_by('-created_at').skip(skip).limit(limit)
+            entries = NewcomerSupportBonus.objects(**query_filter).order_by('-created_at').skip(skip).limit(limit)
 
             # Get user info
             user = User.objects(id=user_oid).first()
@@ -981,17 +1013,17 @@ class WalletService:
             if not upline_uid:
                 upline_uid = 'ROOT'
 
-            # Build rows from income events
+            # Build rows from bonus entries
             rows = []
             for entry in entries:
                 rows.append({
                     "uid": getattr(user, 'uid', None),
                     "upline_uid": upline_uid,
-                    "amount": float(entry.amount) if entry.amount else 0,
+                    "amount": float(entry.bonus_amount) if entry.bonus_amount else 0,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
-                    "income_type": entry.income_type,
-                    "status": entry.status,
-                    "description": getattr(entry, 'description', '') or ""
+                    "income_type": "newcomer_support",
+                    "status": entry.payment_status,
+                    "description": entry.source_description or entry.bonus_name or ""
                 })
 
             return {
@@ -1045,28 +1077,27 @@ class WalletService:
             user = User.objects(id=user_oid).first()
             if not user:
                 return {"success": False, "error": "User not found"}
-            
-            # Get upline info (mentorship comes from super upline)
-            ref = getattr(user, 'refered_by', None)
-            upline_uid = None
-            if ref:
-                upline = User.objects(id=ref).only('uid', 'refered_by').first()
-                if upline:
-                    # Get super upline (upline's upline)
-                    super_ref = getattr(upline, 'refered_by', None)
-                    if super_ref:
-                        super_upline = User.objects(id=super_ref).only('uid').first()
-                        if super_upline:
-                            upline_uid = getattr(super_upline, 'uid', None)
-            if not upline_uid:
-                upline_uid = 'ROOT'
 
-            # Build rows from income events
+            # Build rows from income events - show the source_user_id (who generated the bonus)
             rows = []
             for entry in entries:
+                # Get source user info (the user who triggered this bonus)
+                source_user = None
+                source_uid = None
+                if entry.source_user_id:
+                    try:
+                        source_user = User.objects(id=entry.source_user_id).only('uid').first()
+                        if source_user:
+                            source_uid = getattr(source_user, 'uid', None)
+                    except Exception:
+                        pass
+                
+                if not source_uid:
+                    source_uid = 'ROOT'
+                
                 rows.append({
                     "uid": getattr(user, 'uid', None),
-                    "upline_uid": upline_uid,  # Super upline (mentor)
+                    "source_uid": source_uid,  # Source user (who joined, triggering this bonus)
                     "amount": float(entry.amount) if entry.amount else 0,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
                     "income_type": entry.income_type,

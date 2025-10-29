@@ -196,8 +196,29 @@ class SweepoverService:
             # Create matrix activation record
             self._create_matrix_activation(user_id, slot_no, tx_hash, amount, tree_upline_id)
             
-            # Distribute level income
-            self._distribute_level_income(tree_upline_id, user_id, slot_no, amount, placement_position)
+            # Distribute income with recycle-aware middle override
+            try:
+                from modules.slot.model import SlotActivation
+                from modules.user.tree_reserve_service import TreeUplineReserveService
+                # If placement is Level 2 middle (position % 3 == 1) under tree_upline and next slot not yet active
+                is_middle_l2 = placement_position.get('level') == 2 and int(placement_position.get('position', -1)) % 3 == 1
+                next_slot_no = slot_no + 1
+                already_active = False
+                try:
+                    act = SlotActivation.objects(user_id=ObjectId(tree_upline_id), program='matrix', slot_no=next_slot_no, status='completed').first()
+                    already_active = bool(act)
+                except Exception:
+                    already_active = False
+                if is_middle_l2 and not already_active:
+                    # Route 100% to tree_upline reserve for current slot
+                    reserve_service = TreeUplineReserveService()
+                    reserve_service.add_to_reserve_fund(tree_upline_id=str(tree_upline_id), program='matrix', slot_no=slot_no, amount=amount, source_user_id=str(user_id), tx_hash=tx_hash)
+                else:
+                    # Normal distribution
+                    self._distribute_level_income(tree_upline_id, user_id, slot_no, amount, placement_position)
+            except Exception:
+                # Fallback to normal level distribution
+                self._distribute_level_income(tree_upline_id, user_id, slot_no, amount, placement_position)
             
             return {
                 "success": True,

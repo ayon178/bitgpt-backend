@@ -144,15 +144,20 @@ class MatrixService:
                     amount=amount,
                     slot_no=1,
                     referrer_id=direct_referrer_id,
-                    tx_hash=tx_hash
+                    tx_hash=tx_hash,
+                    placement_context={
+                        "placed_under_user_id": placement_result.get("placed_under_user_id"),
+                        "level": placement_result.get("level"),
+                        "position": placement_result.get("position")
+                    }
                 )
                 
                 if distribution_result.get('success'):
                     print(f"✅ Matrix funds distributed: {distribution_result.get('total_distributed')}")
                 else:
-                    print(f"⚠️ Matrix fund distribution failed: {distribution_result.get('error')}")
+                    print(f" Matrix fund distribution failed: {distribution_result.get('error')}")
             except Exception as e:
-                print(f"⚠️ Matrix fund distribution error: {e}")
+                print(f" Matrix fund distribution error: {e}")
             
             # 5b. Process all commission distributions (100% total)
             commission_results = self._process_matrix_commissions(
@@ -779,7 +784,9 @@ class MatrixService:
             # 8. Newcomer Growth Support (20% contribution + instant bonus)
             ngs_result = self.newcomer_support_service.process_matrix_contribution(
                 user_id=user_id,
-                amount=amount,
+                amount=float(amount),
+                referrer_id=referrer_id,
+                tx_hash=(placement_context or {}).get('tx_hash') if placement_context else None,
                 currency=currency
             )
             results['newcomer_support'] = ngs_result
@@ -890,7 +897,8 @@ class MatrixService:
                     placement_position=placement_context.get('position')
                 )
 
-            splits = [Decimal('0.20'), Decimal('0.20'), Decimal('0.60')]
+            # Matrix 40% breakdown: L1 30%, L2 10%, L3 10% of the 40%
+            splits = [Decimal('0.30'), Decimal('0.10'), Decimal('0.10')]
             recipients = [l1_id, l2_id, l3_id]
             paid = []
 

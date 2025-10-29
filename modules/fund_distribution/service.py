@@ -108,6 +108,24 @@ class FundDistributionService:
                             )
                             distributions.append(distribution)
                             total_distributed += dist_amount
+                elif income_type == "mentorship":
+                    # 10% mentorship payout to super upline (direct referrer's referrer)
+                    try:
+                        from modules.mentorship.service import MentorshipService
+                        from modules.user.model import User
+                        ref = User.objects(id=ObjectId(referrer_id)).first() if referrer_id else None
+                        super_upline = str(getattr(ref, 'refered_by', '')) if ref else None
+                        if super_upline:
+                            ms = MentorshipService()
+                            ms.process_matrix_mentorship(user_id=user_id, referrer_id=referrer_id, amount=amount * (percentage / Decimal('100.0')), currency=currency)
+                            distributions.append({
+                                "type": "mentorship",
+                                "to_user_id": super_upline,
+                                "amount": float(amount * (percentage / Decimal('100.0')))
+                            })
+                            total_distributed += amount * (percentage / Decimal('100.0'))
+                    except Exception:
+                        pass
                 else:
                     # Direct distribution to fund pools
                     dist_amount = amount * (percentage / Decimal('100.0'))
@@ -131,14 +149,125 @@ class FundDistributionService:
             return {"success": False, "error": f"Binary fund distribution failed: {str(e)}"}
 
     def distribute_matrix_funds(self, user_id: str, amount: Decimal, slot_no: int,
-                              referrer_id: str = None, tx_hash: str = None, currency: str = 'USDT') -> Dict[str, Any]:
+                              referrer_id: str = None, tx_hash: str = None, currency: str = 'USDT',
+                              placement_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Distribute Matrix program funds according to percentages"""
         try:
+            from modules.slot.model import SlotActivation
+            from modules.user.tree_reserve_service import TreeUplineReserveService
             if not tx_hash:
                 tx_hash = f"MATRIX_DIST_{user_id}_{int(datetime.now().timestamp())}"
             
             distributions = []
             total_distributed = Decimal('0.0')
+
+            # Special routing: super-upline middle position → 100% to next-slot reserve
+            try:
+                if placement_context:
+                    try:
+                        print(f"[MATRIX ROUTING] placement_context={placement_context}")
+                    except Exception:
+                        pass
+                    placed_under_user_id = placement_context.get('placed_under_user_id')  # tree owner (super upline or immediate upline)
+                    placement_level = placement_context.get('level')
+                    placement_position = placement_context.get('position')
+                    # Case A: explicit Level-2 middle under tree owner
+                    if placed_under_user_id and placement_level == 2 and placement_position is not None and int(placement_position) % 3 == 1:
+                        next_slot_no = slot_no + 1
+                        already_active = False
+                        try:
+                            act = SlotActivation.objects(user_id=ObjectId(placed_under_user_id), program='matrix', slot_no=next_slot_no, status='completed').first()
+                            already_active = bool(act)
+                        except Exception:
+                            already_active = False
+                        if not already_active:
+                            reserve_service = TreeUplineReserveService()
+                            ok, msg = reserve_service.add_to_reserve_fund(
+                                tree_upline_id=str(placed_under_user_id),
+                                program='matrix',
+                                slot_no=slot_no,
+                                amount=Decimal(str(amount)),
+                                source_user_id=str(user_id),
+                                tx_hash=tx_hash
+                            )
+                            distributions.append({
+                                "type": "super_upline_middle_reserve",
+                                "to_user_id": str(placed_under_user_id),
+                                "amount": float(amount),
+                                "slot_no": slot_no,
+                                "message": msg,
+                                "success": ok
+                            })
+                            return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
+                    # Case B: placement is Level-1 under a child; if child is Level-1 under a super upline and child_offset is middle → treat as Level-2 middle under super upline
+                    if placed_under_user_id and placement_level == 1 and placement_position is not None:
+                        try:
+                            print(f"[MATRIX ROUTING] Case B check: user={user_id}, placed_under={placed_under_user_id}, level={placement_level}, position={placement_position}")
+                            # Determine the tree owner (super upline) of the immediate parent for this slot
+                            parent_link = TreePlacement.objects(
+                                user_id=ObjectId(placed_under_user_id),
+                                program='matrix',
+                                slot_no=slot_no,
+                                is_active=True
+                            ).first()
+                            print(f"[MATRIX ROUTING] Case B parent_link found: {parent_link is not None}")
+                            # Placement must be the middle child under its immediate parent
+                            if parent_link and int(placement_position) == 1:
+                                print(f"[MATRIX ROUTING] Case B: position is middle (1)")
+                                # The tree owner is the grandparent (parent of the immediate parent) in this slot
+                                super_owner_id = None
+                                if getattr(parent_link, 'parent_id', None):
+                                    parent_parent = TreePlacement.objects(
+                                        user_id=parent_link.parent_id,
+                                        program='matrix',
+                                        slot_no=slot_no,
+                                        is_active=True
+                                    ).first()
+                                    if parent_parent and getattr(parent_parent, 'parent_id', None):
+                                        super_owner_id = str(parent_parent.parent_id)
+                                print(f"[MATRIX ROUTING] Case B: super_owner_id={super_owner_id}")
+                                if super_owner_id:
+                                    next_slot_no = slot_no + 1
+                                    act = SlotActivation.objects(
+                                        user_id=ObjectId(super_owner_id),
+                                        program='matrix',
+                                        slot_no=next_slot_no,
+                                        status='completed'
+                                    ).first()
+                                    if act:
+                                        print(f"[MATRIX ROUTING] Case B: super owner slot already active, skipping reserve")
+                                    else:
+                                        print(f"[MATRIX ROUTING] Case B: routing to reserve...")
+                                        reserve_service = TreeUplineReserveService()
+                                        ok, msg = reserve_service.add_to_reserve_fund(
+                                            tree_upline_id=super_owner_id,
+                                            program='matrix',
+                                            slot_no=slot_no,
+                                            amount=Decimal(str(amount)),
+                                            source_user_id=str(user_id),
+                                            tx_hash=tx_hash
+                                        )
+                                        print(f"[MATRIX ROUTING] Case B routed to reserve: owner={super_owner_id}, ok={ok}, msg={msg}")
+                                        distributions.append({
+                                            "type": "derived_middle_reserve",
+                                            "to_user_id": super_owner_id,
+                                            "amount": float(amount),
+                                            "slot_no": slot_no,
+                                            "message": msg,
+                                            "success": ok
+                                        })
+                                        return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
+                        except Exception as e:
+                            print(f"[MATRIX ROUTING] Case B exception: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            pass
+            except Exception as e:
+                # Fail-safe: if special routing check fails, continue with normal distribution
+                print(f"[MATRIX ROUTING] Outer exception during special routing: {e}")
+                import traceback
+                traceback.print_exc()
+                pass
             
             # Calculate each distribution
             for income_type, percentage in self.matrix_percentages.items():
@@ -164,12 +293,23 @@ class FundDistributionService:
                     # Direct distribution to fund pools
                     dist_amount = amount * (percentage / Decimal('100.0'))
                     if dist_amount > 0:
-                        distribution = self._create_income_event(
-                            user_id, user_id, 'matrix', slot_no, income_type,
-                            dist_amount, percentage, tx_hash, f"Matrix {income_type.replace('_', ' ').title()}", currency
-                        )
-                        distributions.append(distribution)
-                        total_distributed += dist_amount
+                        if income_type == 'shareholders':
+                            # Route to shareholders fund/account
+                            try:
+                                import importlib
+                                global_module = importlib.import_module('modules.global.service')
+                                gs = global_module.GlobalService()
+                                gs.process_shareholders_fund_distribution(dist_amount, transaction_type='matrix_distribution')
+                            except Exception:
+                                pass
+                        # Create income event for non-shareholders distributions
+                        if income_type != 'shareholders':
+                            distribution = self._create_income_event(
+                                user_id, user_id, 'matrix', slot_no, income_type,
+                                dist_amount, percentage, tx_hash, f"Matrix {income_type.replace('_', ' ').title()}", currency
+                            )
+                            distributions.append(distribution)
+                            total_distributed += dist_amount
             
             return {
                 "success": True,
@@ -267,7 +407,7 @@ class FundDistributionService:
             level_dist_amount = level_amount * (level_percentage / Decimal('100.0'))
             if level_dist_amount > 0:
                 # Find upline at this level
-                upline_id = self._find_upline_at_level(user_id, level, 'matrix')
+                upline_id = self._find_upline_at_level(user_id, level, 'matrix', slot_no)
                 if upline_id:
                     distribution = self._create_income_event(
                         upline_id, user_id, 'matrix', slot_no, f'level_{level}_distribution',

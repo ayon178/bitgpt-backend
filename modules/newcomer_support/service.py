@@ -70,14 +70,92 @@ class NewcomerSupportService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
-    def process_matrix_contribution(self, user_id: str, amount: float, **kwargs) -> Dict[str, Any]:
-        """Stub: record a Matrix contribution into NGS context for compatibility."""
+    def process_matrix_contribution(self, user_id: str, amount: float, referrer_id: str = None, tx_hash: str = None, currency: str = 'USDT') -> Dict[str, Any]:
+        """Process Newcomer Growth Support 20% split for Matrix contributions.
+        - 50% to the joining user's instant-claimable bucket (IncomeEvent newcomer_support)
+        - 50% to direct upline's newcomer fund ledger, distributable every 30 days equally among their direct referrals
+        """
         try:
+            from ..income.model import IncomeEvent
+            from ..wallet.model import UserWallet
+            from ..tree.model import TreePlacement
+            from bson import ObjectId
+            from datetime import datetime, timedelta
+            total = float(amount or 0.0)
+            if total <= 0:
+                return {"success": False, "error": "Amount must be positive"}
+
+            ngs_portion = total * 0.20
+            user_instant = ngs_portion * 0.50
+            upline_fund = ngs_portion * 0.50
+
+            # Ensure newcomer support record exists for the user (auto-create on matrix join)
+            try:
+                ns = NewcomerSupport.objects(user_id=ObjectId(user_id)).first()
+                if not ns:
+                    self.join_newcomer_support_program(user_id)
+            except Exception:
+                pass
+
+            # Credit 50% to the user's newcomer fund (claimable upon user action)
+            try:
+                bonus = NewcomerSupportBonus(
+                    user_id=ObjectId(user_id),
+                    newcomer_support_id=NewcomerSupport.objects(user_id=ObjectId(user_id)).first().id if NewcomerSupport.objects(user_id=ObjectId(user_id)).first() else None,
+                    bonus_type="instant",
+                    bonus_name="Newcomer Support (User 50%)",
+                    bonus_amount=user_instant,
+                    source_type="matrix_join",
+                    source_description="User 50% Newcomer Support on Matrix join",
+                    payment_status="pending"
+                )
+                bonus.save()
+            except Exception:
+                pass
+
+            # Identify direct upline (parent_id by referral relationship)
+            upline_id = None
+            try:
+                # Prefer referral chain from User document
+                from ..user.model import User
+                u = User.objects(id=ObjectId(user_id)).first()
+                if u and getattr(u, 'refered_by', None):
+                    upline_id = str(u.refered_by)
+                elif referrer_id:
+                    upline_id = referrer_id
+            except Exception:
+                upline_id = referrer_id
+
+            # Credit 50% to upline's newcomer fund (locked for 30 days)
+            if upline_id:
+                try:
+                    ns_upline = NewcomerSupport.objects(user_id=ObjectId(upline_id)).first()
+                    if not ns_upline:
+                        self.join_newcomer_support_program(upline_id)
+                        ns_upline = NewcomerSupport.objects(user_id=ObjectId(upline_id)).first()
+                    up_bonus = NewcomerSupportBonus(
+                        user_id=ObjectId(upline_id),
+                        newcomer_support_id=ns_upline.id if ns_upline else None,
+                        bonus_type="upline_reserve",
+                        bonus_name="Newcomer Support (Upline 50%)",
+                        bonus_amount=upline_fund,
+                        source_type="matrix_join",
+                        source_description=f"Upline 50% Newcomer Support from user {user_id}",
+                        payment_status="pending",
+                        available_from=datetime.utcnow() + timedelta(days=30)
+                    )
+                    up_bonus.save()
+                except Exception:
+                    pass
+
             return {
                 "success": True,
                 "user_id": user_id,
-                "amount": float(amount) if amount is not None else 0.0,
-                "context": {k: v for k, v in (kwargs or {}).items()}
+                "referrer_id": upline_id,
+                "ngs_total": ngs_portion,
+                "user_fund": user_instant,
+                "upline_fund_locked": upline_fund,
+                "currency": currency
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
