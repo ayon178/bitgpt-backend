@@ -689,16 +689,27 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
                 referrer_placement.save()
                 print(f"✅ Created Binary TreePlacement for referrer {upline_id}")
             
-            # Place user in binary tree under their referrer
-            binary_placement = tree_service.place_user_in_tree(
+            # Place user in binary tree for BOTH slots before activation
+            # Slot 1 placement
+            binary_placement_1 = tree_service.place_user_in_tree(
                 user_id=user.id,
                 referrer_id=ObjectId(upline_id),
                 program='binary',
                 slot_no=1  # First slot
             )
             
-            if binary_placement:
-                print(f"✅ Binary tree placement created for temp user {user.id} under {upline_id}")
+            # Slot 2 placement (needed for reserve routing logic)
+            binary_placement_2 = tree_service.place_user_in_tree(
+                user_id=user.id,
+                referrer_id=ObjectId(upline_id),
+                program='binary',
+                slot_no=2  # Second slot
+            )
+            
+            if binary_placement_1:
+                print(f"✅ Binary tree placement created for temp user {user.id} under {upline_id} (slot 1)")
+                if binary_placement_2:
+                    print(f"✅ Binary tree placement created for temp user {user.id} under {upline_id} (slot 2)")
                 
                 # 🚀 AUTOMATIC BINARY SLOT ACTIVATION
                 # When user joins, automatically activate Slot 1 and Slot 2
@@ -719,7 +730,7 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
                 else:
                     print(f"⚠️ Slot 1 activation failed: {slot_1_result.get('error', 'Unknown error')}")
                 
-                # Activate Slot 2 (Contributor)
+                # Activate Slot 2 (Contributor) - now with proper tree placement for reserve routing
                 slot_2_result = auto_upgrade_service.process_binary_slot_activation(
                     user_id=str(user.id),
                     slot_no=2,
@@ -737,104 +748,8 @@ def create_temp_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
         except Exception as e:
             print(f"Error in temp user binary tree placement and slot activation: {e}")
             # Don't fail user creation if tree placement fails
-        # so that referrer receives partner incentive and pools-summary reflects changes
-        try:
-            commission_service = CommissionService()
-            total_join_amount = Decimal('0')
-            currency = ensure_currency_for_program('binary', 'BNB')
-            for slot_no in [1, 2]:
-                catalog = SlotCatalog.objects(program='binary', slot_no=slot_no, is_active=True).first()
-                if not catalog:
-                    continue
-                amount = catalog.price or Decimal('0')
-                total_join_amount += (amount or Decimal('0'))
-
-                # Ensure tree placement exists BEFORE distribution so level earnings resolve
-                try:
-                    tree_service = TreeService()
-                    tree_service.place_user_in_tree(
-                        user_id=ObjectId(user.id),
-                        referrer_id=ObjectId(upline_id),
-                        program='binary',
-                        slot_no=slot_no
-                    )
-                except Exception:
-                    pass
-
-                # Record activation for consistency
-                try:
-                    activation = SlotActivation(
-                        user_id=ObjectId(user.id),
-                        program='binary',
-                        slot_no=slot_no,
-                        slot_name=catalog.name,
-                        activation_type='initial',
-                        upgrade_source='auto',
-                        amount_paid=amount,
-                        currency=currency,
-                        tx_hash=f"AUTO-{user.uid}-S{slot_no}",
-                        is_auto_upgrade=True,
-                        status='completed'
-                    )
-                    activation.save()
-                except Exception:
-                    pass
-
-                # Update user's binary_slots list with auto-activated slot
-                try:
-                    from .model import BinarySlotInfo
-                    slot_info = BinarySlotInfo(
-                        slot_name=catalog.name,
-                        slot_value=float(amount or Decimal('0')),
-                        level=catalog.level,
-                        is_active=True,
-                        activated_at=datetime.utcnow(),
-                        upgrade_cost=float(catalog.upgrade_cost or Decimal('0')),
-                        total_income=float(catalog.total_income or Decimal('0')),
-                        wallet_amount=float(catalog.wallet_amount or Decimal('0'))
-                    )
-                    existing_slot = None
-                    for i, existing_slot_info in enumerate(user.binary_slots):
-                        if existing_slot_info.slot_name == catalog.name:
-                            existing_slot = i
-                            break
-                    if existing_slot is not None:
-                        user.binary_slots[existing_slot] = slot_info
-                    else:
-                        user.binary_slots.append(slot_info)
-                    user.save()
-                except Exception:
-                    pass
-
-                # Distribute funds to bonus pools; specifically credits partner incentive to referrer
-                try:
-                    from modules.fund_distribution.service import FundDistributionService
-                    fund_service = FundDistributionService()
-                    fund_service.distribute_binary_funds(
-                        user_id=str(user.id),
-                        amount=amount,  # BNB amount
-                        slot_no=slot_no,
-                        referrer_id=upline_id,
-                        tx_hash=f"AUTO-{user.uid}-S{slot_no}",
-                        currency=currency
-                    )
-                except Exception:
-                    pass
-
-            # Optional: joining commission (does not impact pools-summary mapping directly)
-            try:
-                if total_join_amount and total_join_amount > 0:
-                    commission_service.calculate_joining_commission(
-                        from_user_id=str(user.id),
-                        program='binary',
-                        amount=total_join_amount,
-                        currency=currency
-                    )
-            except Exception:
-                pass
-        except Exception:
-            # Do not fail temp create if activation/distribution has any issue
-            pass
+        # Note: Binary slot activations and reserve routing are handled by AutoUpgradeService above.
+        # The old catalog-based activation path is removed to avoid duplicates and ensure reserve routing works correctly.
         
         # Create PartnerGraph for the new user
         try:
@@ -1444,28 +1359,10 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                     print(f"Error in Tree Upline Reserve System: {e}")
                     pass
 
-                # Distribute funds to all bonus pools (PROJECT_DOCUMENTATION.md Section 32)
-                if amount > 0:
-                    try:
-                        from modules.fund_distribution.service import FundDistributionService
-                        import os
-                        
-                        fund_service = FundDistributionService()
-                        
-                        # Pass original BNB amount (not converted to USD) for proper wallet crediting
-                        distribution_result = fund_service.distribute_binary_funds(
-                            user_id=str(user.id),
-                            amount=amount,  # Original BNB amount
-                            slot_no=slot_no,
-                            referrer_id=upline_id,
-                            tx_hash=f"AUTO-{user.uid}-S{slot_no}",
-                            currency=currency  # Pass currency (BNB)
-                        )
-                        
-                        if distribution_result.get('success'):
-                            print(f"✅ Binary Slot {slot_no} funds distributed: {distribution_result.get('total_distributed')} {currency}")
-                    except Exception as e:
-                        print(f"⚠️ Binary fund distribution error: {e}")
+                # Distribute funds handled inside AutoUpgradeService for Binary:
+                # - Slot 1: full to direct upline (already implemented)
+                # - Slot 2+: reserve routing or pools inside AutoUpgradeService
+                # Intentionally skip duplicate distribution here for binary
                 
                 # Trigger upgrade commission logic for each activated slot
                 if amount > 0:
@@ -1792,16 +1689,27 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
             # Create binary tree placement for the new user
             tree_service = TreeService()
             
-            # Place user in binary tree under their referrer
-            binary_placement = tree_service.place_user_in_tree(
+            # Place user in binary tree for BOTH slots before activation
+            # Slot 1 placement
+            binary_placement_1 = tree_service.place_user_in_tree(
                 user_id=user.id,
                 referrer_id=ObjectId(upline_id),
                 program='binary',
                 slot_no=1  # First slot
             )
             
-            if binary_placement:
-                print(f"✅ Binary tree placement created for user {user.id} under {upline_id}")
+            # Slot 2 placement (needed for reserve routing logic)
+            binary_placement_2 = tree_service.place_user_in_tree(
+                user_id=user.id,
+                referrer_id=ObjectId(upline_id),
+                program='binary',
+                slot_no=2  # Second slot
+            )
+            
+            if binary_placement_1:
+                print(f"✅ Binary tree placement created for user {user.id} under {upline_id} (slot 1)")
+                if binary_placement_2:
+                    print(f"✅ Binary tree placement created for user {user.id} under {upline_id} (slot 2)")
                 
                 # 🚀 AUTOMATIC BINARY SLOT ACTIVATION
                 # When user joins, automatically activate Slot 1 and Slot 2

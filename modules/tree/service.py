@@ -34,16 +34,33 @@ class TreeService:
                 print(f"User {user_id} already has placement in {program} slot {slot_no}")
                 return True
             
-            # Get referrer's placement
+            # Get referrer's placement (allow fallback for binary slot > 1)
             referrer_placement = TreePlacement.objects(
                 user_id=referrer_id,
                 program=program,
                 slot_no=slot_no,
                 is_active=True
             ).first()
-            
-            if not referrer_placement:
-                print(f"❌ Referrer {referrer_id} not found in tree")
+            referrer_level = None
+            if not referrer_placement and program == 'binary' and slot_no > 1:
+                # Fallback: use referrer's slot-1 level as anchor so we can place slot-2 child
+                ref_slot1 = TreePlacement.objects(
+                    user_id=referrer_id,
+                    program=program,
+                    slot_no=1,
+                    is_active=True
+                ).first()
+                if ref_slot1:
+                    referrer_level = ref_slot1.level
+                    print(f"⚠️ Referrer {referrer_id} has no slot {slot_no} placement; using slot 1 level {referrer_level} as anchor")
+                else:
+                    # As a last resort, assume root level
+                    referrer_level = 1
+                    print(f"⚠️ Referrer {referrer_id} has no placement; assuming level 1 for slot {slot_no}")
+            elif referrer_placement:
+                referrer_level = referrer_placement.level
+            else:
+                print(f"❌ Referrer {referrer_id} not found in tree for {program} slot {slot_no}")
                 return False
             
             # Determine positions based on program type
@@ -74,7 +91,7 @@ class TreeService:
                     parent_id=referrer_id,
                     upline_id=referrer_id,
                     position=available_position,
-                    level=referrer_placement.level + 1,
+                    level=(referrer_level or 1) + 1,
                     slot_no=slot_no,
                     is_active=True,
                     created_at=datetime.utcnow()
@@ -152,7 +169,7 @@ class TreeService:
                 
                 return None
             
-            placement_info = find_level_wise_position(referrer_id, referrer_placement.level)
+            placement_info = find_level_wise_position(referrer_id, referrer_level or 1)
             
             if placement_info:
                 placement = TreePlacement(

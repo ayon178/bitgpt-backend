@@ -37,6 +37,10 @@ class CommissionService:
     def calculate_joining_commission(self, from_user_id: str, program: str, amount: Decimal, currency: str) -> Dict[str, Any]:
         """Calculate 10% joining commission for upline"""
         try:
+            # Per updated binary rules: no joining commission on Binary program joins
+            if (program or "").lower() == 'binary':
+                return {"success": True, "skipped": True, "message": "Binary joining commission disabled for slot-1 full fee rule."}
+
             # Get user and upline
             from_user = User.objects(id=ObjectId(from_user_id)).first()
             if not from_user or not from_user.refered_by:

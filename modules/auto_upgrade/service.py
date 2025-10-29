@@ -397,7 +397,7 @@ class AutoUpgradeService:
         """Process Slot 1 activation - direct upline gets full fee"""
         try:
             from ..tree.model import TreePlacement
-            from ..wallet.model import WalletLedger
+            from ..wallet.service import WalletService
             from ..slot.model import SlotActivation
             
             # Get user's direct upline (parent_id)
@@ -412,17 +412,19 @@ class AutoUpgradeService:
                 # Direct upline gets full fee
                 upline_id = user_placement.parent_id
                 
-                # Credit upline's wallet
-                WalletLedger(
-                    user_id=upline_id,
-                    type='credit',
-                    amount=slot_value,
-                    currency='BNB',
-                    reason='binary_slot_1_commission',
-                    balance_after=Decimal('0'),  # Will be calculated separately
-                    tx_hash=f"auto_slot_1_{user_id}_{int(datetime.utcnow().timestamp())}",
-                    created_at=datetime.utcnow()
-                ).save()
+                # Credit upline's main wallet via wallet service
+                tx_hash = f"auto_slot_1_{user_id}_{int(datetime.utcnow().timestamp())}"
+                try:
+                    ws = WalletService()
+                    ws.credit_main_wallet(
+                        user_id=str(upline_id),
+                        amount=slot_value,
+                        currency='BNB',
+                        reason='binary_slot1_full',
+                        tx_hash=tx_hash
+                    )
+                except Exception:
+                    pass
                 
                 # Create SlotActivation record for automatic activation
                 SlotActivation(
@@ -433,7 +435,7 @@ class AutoUpgradeService:
                     amount_paid=slot_value,
                     currency='BNB',
                     status='completed',
-                    activation_type='automatic',  # Mark as automatic activation
+                    activation_type='auto',  # valid value
                     upgrade_source='auto',
                     tx_hash=f"auto_slot_1_{user_id}_{int(datetime.utcnow().timestamp())}",
                     activated_at=datetime.utcnow(),
@@ -461,71 +463,103 @@ class AutoUpgradeService:
             from ..wallet.model import ReserveLedger
             from ..slot.model import SlotActivation
             
-            # Find tree upline for this slot (the user who should get the reserve)
-            tree_upline = self._find_tree_upline_for_slot(user_placement, slot_no)
+            print(f"[BINARY_ROUTING] Processing slot {slot_no} for user {user_id}, amount {slot_value}")
             
-            if not tree_upline:
-                return {"success": False, "error": "Tree upline not found"}
+            # Identify Nth upline for this slot (slot 2 -> 2nd upline, slot 3 -> 3rd upline, ...)
+            nth_upline = self._get_nth_upline_by_slot(ObjectId(user_id), slot_no, slot_no)
+            print(f"[BINARY_ROUTING] Nth upline for slot {slot_no}: {nth_upline}")
             
-            # Check if tree upline has activated this slot
-            tree_upline_activation = SlotActivation.objects(
-                user_id=tree_upline,
-                program='binary',
-                slot_no=slot_no,
-                status='completed'
-            ).first()
-            
-            if tree_upline_activation:
-                # Tree upline has this slot activated - fund goes to their reserve
-                reserve_amount = slot_value * Decimal('0.30')  # 30% to reserve
-                
-                # Add to tree upline's reserve
-                ReserveLedger(
-                    user_id=tree_upline,
-                    program='binary',
-                    slot_no=slot_no + 1,  # Reserve for next slot
-                    amount=reserve_amount,
-                    direction='credit',
-                    source='tree_upline_reserve',
-                    balance_after=Decimal('0'),  # Will be calculated separately
-                    created_at=datetime.utcnow()
-                ).save()
-                
-                # Create SlotActivation record for automatic activation
-                slot_names = ['Explorer', 'Contributor', 'Supporter', 'Promoter', 'Developer', 'Manager', 'Director', 'Executive', 'Leader', 'Master', 'Expert', 'Professional', 'Specialist', 'Consultant', 'Advisor', 'Partner']
-                slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
-                
-                SlotActivation(
-                    user_id=ObjectId(user_id),
-                    program='binary',
-                    slot_no=slot_no,
-                    slot_name=slot_name,
-                    amount_paid=slot_value,
-                    currency='BNB',
-                    status='completed',
-                    activation_type='automatic',  # Mark as automatic activation
-                    upgrade_source='auto',
-                    tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
-                    activated_at=datetime.utcnow(),
-                    completed_at=datetime.utcnow(),
-                    created_at=datetime.utcnow()
-                ).save()
-                
-                # Check if auto upgrade is possible
-                auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(tree_upline, slot_no + 1)
-                
+            if not nth_upline:
+                print(f"[BINARY_ROUTING] No Nth upline found, sending to mother account")
+                # No upline found at required depth → mother fallback
+                return self._send_to_mother_account(slot_value, slot_no)
+
+            # Check first/second child condition under the Nth upline for this slot tree
+            is_first_second = self._is_first_or_second_under_upline(ObjectId(user_id), nth_upline, slot_no)
+            print(f"[BINARY_ROUTING] Is first/second under Nth upline: {is_first_second}")
+
+            if is_first_second:
+                # Route 100% to Nth upline reserve for its next slot (slot_no + 1)
+                try:
+                    print(f"[BINARY_ROUTING] ✅ Routing {slot_value} BNB to {nth_upline}'s reserve for slot {slot_no + 1}")
+                    reserve_entry = ReserveLedger(
+                        user_id=nth_upline,
+                        program='binary',
+                        slot_no=slot_no + 1,
+                        amount=slot_value,
+                        direction='credit',
+                        source='tree_upline_reserve',
+                        balance_after=Decimal('0'),
+                        created_at=datetime.utcnow()
+                    )
+                    reserve_entry.save()
+                    print(f"[BINARY_ROUTING] ✅ ReserveLedger created: user={nth_upline}, slot={slot_no + 1}, amount={slot_value}")
+                except Exception as e:
+                    print(f"[BINARY_ROUTING] ❌ Failed to create ReserveLedger: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+                # Create SlotActivation record for this user's activation
+                try:
+                    slot_names = ['Explorer', 'Contributor', 'Supporter', 'Promoter', 'Developer', 'Manager', 'Director', 'Executive', 'Leader', 'Master', 'Expert', 'Professional', 'Specialist', 'Consultant', 'Advisor', 'Partner']
+                    slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
+
+                    SlotActivation(
+                        user_id=ObjectId(user_id),
+                        program='binary',
+                        slot_no=slot_no,
+                        slot_name=slot_name,
+                        amount_paid=slot_value,
+                        currency='BNB',
+                        status='completed',
+                        activation_type='auto',
+                        upgrade_source='auto',
+                        tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                        activated_at=datetime.utcnow(),
+                        completed_at=datetime.utcnow(),
+                        created_at=datetime.utcnow()
+                    ).save()
+                    print(f"[BINARY_ROUTING] ✅ SlotActivation created for user {user_id}, slot {slot_no}")
+                except Exception as e:
+                    print(f"[BINARY_ROUTING] ⚠️ Failed to create SlotActivation: {e}")
+
+                # Evaluate auto-upgrade for the Nth upline's next slot
+                try:
+                    auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(nth_upline, slot_no + 1)
+                    print(f"[BINARY_ROUTING] Auto-upgrade check result: {auto_upgrade_result}")
+                except Exception as e:
+                    print(f"[BINARY_ROUTING] ⚠️ Auto-upgrade check failed: {e}")
+                    auto_upgrade_result = {"auto_upgrade_triggered": False}
+
                 return {
                     "success": True,
                     "fund_destination": "tree_upline_reserve",
-                    "tree_upline_id": str(tree_upline),
-                    "reserve_amount": float(reserve_amount),
+                    "tree_upline_id": str(nth_upline),
+                    "reserve_amount": float(slot_value),
                     "next_slot": slot_no + 1,
                     "auto_upgrade_triggered": auto_upgrade_result.get("auto_upgrade_triggered", False),
-                    "message": f"Fund added to tree upline reserve for slot {slot_no + 1} and slot activated"
+                    "message": f"100% routed to Nth upline reserve for next slot (slot {slot_no + 1})"
                 }
             else:
-                # Tree upline hasn't activated this slot - fund goes to mother account
-                return self._send_to_mother_account(slot_value, slot_no)
+                # Special condition not met → distribute via Binary pools and dual-tree rules
+                try:
+                    from ..fund_distribution.service import FundDistributionService
+                    from ..user.model import User
+                    fund = FundDistributionService()
+                    # Fetch referrer for partner incentive portion
+                    ref = User.objects(id=ObjectId(user_id)).only('refered_by').first()
+                    referrer_id = str(ref.refered_by) if ref and ref.refered_by else None
+                    dist = fund.distribute_binary_funds(
+                        user_id=str(user_id),
+                        amount=slot_value,
+                        slot_no=slot_no,
+                        referrer_id=referrer_id,
+                        tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                        currency='BNB'
+                    )
+                    return {"success": True, "distribution": dist, "fund_destination": "pools"}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
                 
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -560,6 +594,128 @@ class AutoUpgradeService:
             
         except Exception:
             return None
+
+    def _get_nth_upline_by_slot(self, user_id: ObjectId, slot_no: int, n: int) -> ObjectId:
+        """Traverse up using parent_id pointers to get Nth upline for slot, without requiring each ancestor's slot placement."""
+        try:
+            from ..tree.model import TreePlacement
+            current = TreePlacement.objects(user_id=user_id, program='binary', slot_no=slot_no, is_active=True).first()
+            if not current:
+                print(f"[BINARY_ROUTING] No placement found for user {user_id} in slot {slot_no}")
+                return None
+
+            steps = 0
+            parent_id = getattr(current, 'parent_id', None)
+            while parent_id and steps < n:
+                steps += 1
+                print(f"[BINARY_ROUTING] Step {steps}: moved to {parent_id}")
+                if steps == n:
+                    return parent_id
+                # advance: try same-slot placement to fetch next parent; fallback to slot-1
+                parent_slot_placement = TreePlacement.objects(
+                    user_id=parent_id, program='binary', slot_no=slot_no, is_active=True
+                ).first()
+                if parent_slot_placement and getattr(parent_slot_placement, 'parent_id', None):
+                    parent_id = parent_slot_placement.parent_id
+                    continue
+                parent_slot1 = TreePlacement.objects(
+                    user_id=parent_id, program='binary', slot_no=1, is_active=True
+                ).first()
+                parent_id = getattr(parent_slot1, 'parent_id', None)
+
+            print(f"[BINARY_ROUTING] Reached root or missing parent at step {steps}")
+            return None
+        except Exception as e:
+            print(f"[BINARY_ROUTING] Error in _get_nth_upline_by_slot: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _is_first_or_second_under_upline(self, user_id: ObjectId, upline_id: ObjectId, slot_no: int) -> bool:
+        """
+        Return True if the user is among the first two placements anywhere in the Nth upline's
+        slot-N subtree (BFS level-order traversal by created_at). 
+        Collects users level-by-level until we have 2 users total, then checks if user_id is in that set.
+        """
+        try:
+            from ..tree.model import TreePlacement
+            from collections import deque
+            
+            def get_children(upline: ObjectId) -> list:
+                """Get direct children under upline for this slot, ordered by created_at"""
+                return list(TreePlacement.objects(
+                    upline_id=upline,
+                    program='binary',
+                    slot_no=slot_no,
+                    is_active=True
+                ).order_by('created_at').only('user_id'))
+
+            # Get upline's level to determine which users to count
+            upline_placement = TreePlacement.objects(
+                user_id=upline_id,
+                program='binary',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            upline_level = upline_placement.level if upline_placement else 1
+            target_level = upline_level + 2  # Only count users at level 2+ (skip direct children)
+            
+            # Collect all descendants at level 2+ (exclude direct children at level 1)
+            all_subtree_placements = []
+            visited = {upline_id}
+            
+            def collect_level_2_plus(start_node, depth=0):
+                """Recursively collect users at level 2+ only (skip direct children)"""
+                if depth > 10:  # Safety limit
+                    return
+                children = get_children(start_node)
+                for child_placement in children:
+                    child_id = child_placement.user_id
+                    if child_id not in visited:
+                        visited.add(child_id)
+                        # Get full placement to check level
+                        full_placement = TreePlacement.objects(
+                            user_id=child_id,
+                            program='binary',
+                            slot_no=slot_no,
+                            is_active=True
+                        ).first()
+                        if full_placement:
+                            # Only include if level >= target_level (level 2+ relative to upline)
+                            if full_placement.level >= target_level:
+                                all_subtree_placements.append((child_id, full_placement.created_at))
+                                print(f"[BINARY_ROUTING] Including level-2+ user {child_id} at level {full_placement.level} (upline_level={upline_level})")
+                            # Always recurse to collect deeper descendants
+                            collect_level_2_plus(child_id, depth + 1)
+            
+            # Start from upline's direct children (they will be skipped, but we recurse into them)
+            direct_children = get_children(upline_id)
+            for child_placement in direct_children:
+                child_id = child_placement.user_id
+                if child_id not in visited:
+                    visited.add(child_id)
+                    # This direct child is at level 1 - skip it, but recurse to get its children
+                    collect_level_2_plus(child_id, depth=0)
+            
+            # Sort all by created_at (chronological order)
+            sorted_placements = sorted(all_subtree_placements, key=lambda x: x[1])
+            
+            # Take first 2 users (from level 2+)
+            first_two_found = [uid for uid, _ in sorted_placements[:2]]
+            
+            result = user_id in first_two_found
+            first_two_str = [str(uid) for uid in first_two_found]
+            print(f"[BINARY_ROUTING] First/second subtree check (all levels, sorted by created_at): first_two={first_two_str}, user={user_id}, result={result}")
+            
+            if result:
+                print(f"[BINARY_ROUTING] ✅ User {user_id} is first/second under upline {upline_id} (slot {slot_no})")
+            
+            return result
+        except Exception as e:
+            print(f"[BINARY_ROUTING] Error in _is_first_or_second_under_upline: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
     def _get_next_upline(self, user_id: ObjectId) -> ObjectId:
         """Get the next upline in the tree"""
@@ -580,32 +736,48 @@ class AutoUpgradeService:
             return None
     
     def _check_binary_auto_upgrade_from_reserve(self, user_id: ObjectId, target_slot_no: int) -> Dict[str, Any]:
-        """Check if auto upgrade is possible from reserve funds"""
+        """Check if auto upgrade is possible from reserve funds and trigger it"""
         try:
             from ..wallet.model import ReserveLedger
+            from ..slot.model import SlotActivation
             
-            # Calculate total reserve for this user and slot
-            reserve_entries = ReserveLedger.objects(
+            # Calculate total reserve for this user and slot (both credits and debits)
+            reserve_entries = list(ReserveLedger.objects(
                 user_id=user_id,
                 program='binary',
-                slot_no=target_slot_no,
-                direction='credit'
-            )
+                slot_no=target_slot_no
+            ))
             
-            total_reserve = sum(entry.amount for entry in reserve_entries)
+            # Calculate total reserve (sum credits, subtract debits)
+            total_reserve = Decimal('0')
+            for entry in reserve_entries:
+                if entry.direction == 'credit':
+                    total_reserve += entry.amount
+                elif entry.direction == 'debit':
+                    total_reserve -= entry.amount
             
             # Get target slot cost
             target_slot_cost = self._get_binary_slot_cost(target_slot_no)
             
             if total_reserve >= target_slot_cost:
-                # Auto upgrade is possible
-                auto_upgrade_result = self.process_binary_auto_upgrade(str(user_id))
-                return {
-                    "auto_upgrade_triggered": True,
-                    "total_reserve": float(total_reserve),
-                    "target_slot_cost": float(target_slot_cost),
-                    "auto_upgrade_result": auto_upgrade_result
-                }
+                # Check if slot is already activated
+                existing_activation = SlotActivation.objects(
+                    user_id=user_id,
+                    program='binary',
+                    slot_no=target_slot_no,
+                    status='completed'
+                ).first()
+                
+                if existing_activation:
+                    return {
+                        "auto_upgrade_triggered": False,
+                        "total_reserve": float(total_reserve),
+                        "target_slot_cost": float(target_slot_cost),
+                        "message": "Slot already activated"
+                    }
+                
+                # Auto upgrade is possible - activate the slot directly from reserve
+                return self._auto_upgrade_from_reserve(user_id, target_slot_no, target_slot_cost, total_reserve)
             else:
                 return {
                     "auto_upgrade_triggered": False,
@@ -615,6 +787,238 @@ class AutoUpgradeService:
                 }
                 
         except Exception as e:
+            print(f"[BINARY_ROUTING] Error in _check_binary_auto_upgrade_from_reserve: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "auto_upgrade_triggered": False,
+                "error": str(e)
+            }
+    
+    def _auto_upgrade_from_reserve(self, user_id: ObjectId, slot_no: int, slot_cost: Decimal, total_reserve: Decimal) -> Dict[str, Any]:
+        """Directly activate a slot using reserve funds"""
+        try:
+            from ..wallet.model import ReserveLedger
+            from ..slot.model import SlotActivation
+            from ..tree.model import TreePlacement
+            
+            print(f"[BINARY_ROUTING] 🚀 Auto-upgrading user {user_id} to slot {slot_no} using reserve {total_reserve} BNB")
+            
+            # Create SlotActivation record
+            slot_names = ['Explorer', 'Contributor', 'Supporter', 'Promoter', 'Developer', 'Manager', 
+                         'Director', 'Executive', 'Leader', 'Master', 'Expert', 'Professional', 
+                         'Specialist', 'Consultant', 'Advisor', 'Partner']
+            slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
+            
+            # Check if user has tree placement for this slot (create if needed)
+            placement = TreePlacement.objects(
+                user_id=user_id,
+                program='binary',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            if not placement:
+                # Get slot 1 placement to find referrer
+                slot1_placement = TreePlacement.objects(
+                    user_id=user_id,
+                    program='binary',
+                    slot_no=1,
+                    is_active=True
+                ).first()
+                
+                if slot1_placement and slot1_placement.parent_id:
+                    # Create placement for this slot under same parent
+                    from ..tree.service import TreeService
+                    tree_service = TreeService()
+                    try:
+                        placement_created = tree_service.place_user_in_tree(
+                            user_id=user_id,
+                            referrer_id=slot1_placement.parent_id,
+                            program='binary',
+                            slot_no=slot_no
+                        )
+                        if placement_created:
+                            # Fetch the newly created placement
+                            placement = TreePlacement.objects(
+                                user_id=user_id,
+                                program='binary',
+                                slot_no=slot_no,
+                                is_active=True
+                            ).first()
+                            print(f"[BINARY_ROUTING] ✅ Slot-{slot_no} placement created successfully")
+                        else:
+                            print(f"[BINARY_ROUTING] ⚠️ Failed to create Slot-{slot_no} placement, but continuing with auto-upgrade")
+                            placement = None
+                    except Exception as e:
+                        print(f"[BINARY_ROUTING] ⚠️ Error creating Slot-{slot_no} placement: {e}, but continuing with auto-upgrade")
+                        # Placement creation failed, but we can still activate the slot
+                        placement = None
+            
+            # IMPORTANT: When a slot is auto-upgraded, the upgrade amount (slot_cost) must follow
+            # the same routing rules as a regular slot activation:
+            # - Slot 1: Full amount to direct upline
+            # - Slot 2+: Check if user is first/second in Nth upline's tree
+            #   - If yes: Route to Nth upline's reserve
+            #   - If no: Distribute via pools
+            
+            # Deduct from reserve by creating a debit entry (this happens first)
+            debit_entry = ReserveLedger(
+                user_id=user_id,
+                program='binary',
+                slot_no=slot_no,
+                amount=slot_cost,
+                direction='debit',
+                source='income',  # Using 'income' since reserve funds come from income routing
+                balance_after=total_reserve - slot_cost,
+                tx_hash=f"auto_reserve_debit_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                created_at=datetime.utcnow()
+            )
+            debit_entry.save()
+            print(f"[BINARY_ROUTING] ✅ ReserveLedger debit created: user={user_id}, slot={slot_no}, amount={slot_cost}")
+            
+            # Now trigger the distribution logic for this slot upgrade
+            # This ensures the upgrade amount follows the same routing rules
+            distribution_result = None
+            slot_activation_created = False
+            if slot_no == 1:
+                # Slot 1: Full amount to direct upline
+                print(f"[BINARY_ROUTING] Auto-upgrade Slot 1: routing full amount to direct upline")
+                distribution_result = self._process_slot_1_activation(str(user_id), slot_cost)
+                # _process_slot_1_activation creates SlotActivation
+                slot_activation_created = True
+            else:
+                # Slot 2+: Check first/second and route accordingly
+                print(f"[BINARY_ROUTING] Auto-upgrade Slot {slot_no}: checking routing rules")
+                if not placement:
+                    # Try to get placement again
+                    placement = TreePlacement.objects(
+                        user_id=user_id,
+                        program='binary',
+                        slot_no=slot_no,
+                        is_active=True
+                    ).first()
+                    if not placement:
+                        # Get slot-1 placement to use for routing logic if needed
+                        slot1_placement = TreePlacement.objects(
+                            user_id=user_id,
+                            program='binary',
+                            slot_no=1,
+                            is_active=True
+                        ).first()
+                        if slot1_placement:
+                            # Use slot-1 placement info for routing (we'll handle None placement in routing)
+                            print(f"[BINARY_ROUTING] Using slot-1 placement info for routing logic")
+                            placement = slot1_placement  # Use slot-1 placement as reference
+                        else:
+                            placement = None
+                if placement:
+                    distribution_result = self._process_slot_2plus_activation(
+                        str(user_id), 
+                        slot_no, 
+                        slot_cost, 
+                        placement
+                    )
+                else:
+                    print(f"[BINARY_ROUTING] ⚠️ No placement available for Slot-{slot_no}, distributing via pools")
+                    # Fallback: distribute via pools if no placement available
+                    from ..fund_distribution.service import FundDistributionService
+                    from ..user.model import User
+                    fund = FundDistributionService()
+                    ref = User.objects(id=user_id).only('refered_by').first()
+                    referrer_id = str(ref.refered_by) if ref and ref.refered_by else None
+                    distribution_result = fund.distribute_binary_funds(
+                        user_id=str(user_id),
+                        amount=slot_cost,
+                        slot_no=slot_no,
+                        referrer_id=referrer_id,
+                        tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                        currency='BNB'
+                    )
+                print(f"[BINARY_ROUTING] Auto-upgrade distribution result: {distribution_result}")
+                # _process_slot_2plus_activation creates SlotActivation only when routing to reserve
+                # Check if it was created
+                existing = SlotActivation.objects(
+                    user_id=user_id,
+                    program='binary',
+                    slot_no=slot_no,
+                    status='completed'
+                ).first()
+                if existing:
+                    slot_activation_created = True
+                    print(f"[BINARY_ROUTING] SlotActivation already created by distribution logic")
+            
+            # Create SlotActivation record only if it wasn't created by distribution logic
+            if not slot_activation_created:
+                activation = SlotActivation(
+                    user_id=user_id,
+                    program='binary',
+                    slot_no=slot_no,
+                    slot_name=slot_name,
+                    amount_paid=slot_cost,
+                    currency='BNB',
+                    status='completed',
+                    activation_type='auto',
+                    upgrade_source='reserve',  # Using 'reserve' since funds come from reserve
+                    tx_hash=f"auto_reserve_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                    activated_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow(),
+                    created_at=datetime.utcnow(),
+                    is_auto_upgrade=True  # Mark as auto upgrade
+                )
+                activation.save()
+                print(f"[BINARY_ROUTING] ✅ SlotActivation created: user={user_id}, slot={slot_no}")
+            else:
+                print(f"[BINARY_ROUTING] ✅ SlotActivation confirmed: user={user_id}, slot={slot_no}")
+            
+            # Update BinaryAutoUpgrade if it exists, otherwise create it
+            binary_status = BinaryAutoUpgrade.objects(user_id=user_id).first()
+            if binary_status:
+                binary_status.current_slot_no = max(binary_status.current_slot_no, slot_no)
+                binary_status.updated_at = datetime.utcnow()
+                binary_status.save()
+            else:
+                # Get level from placement if available, otherwise default to 1
+                # Also try to get from slot-1 placement as fallback
+                user_level = 1
+                if placement and hasattr(placement, 'level'):
+                    user_level = placement.level
+                else:
+                    slot1_placement = TreePlacement.objects(
+                        user_id=user_id,
+                        program='binary',
+                        slot_no=1,
+                        is_active=True
+                    ).first()
+                    if slot1_placement and hasattr(slot1_placement, 'level'):
+                        user_level = slot1_placement.level
+                
+                # Initialize BinaryAutoUpgrade for future upgrades
+                BinaryAutoUpgrade(
+                    user_id=user_id,
+                    current_slot_no=slot_no,
+                    current_level=user_level,
+                    partners_required=2,
+                    partners_available=0,
+                    is_eligible=False,
+                    can_upgrade=False
+                ).save()
+                print(f"[BINARY_ROUTING] ✅ BinaryAutoUpgrade initialized: user={user_id}, slot={slot_no}, level={user_level}")
+            
+            return {
+                "auto_upgrade_triggered": True,
+                "total_reserve": float(total_reserve),
+                "target_slot_cost": float(slot_cost),
+                "slot_activated": slot_no,
+                "slot_name": slot_name,
+                "remaining_reserve": float(total_reserve - slot_cost),
+                "message": f"Slot {slot_no} ({slot_name}) auto-activated from reserve"
+            }
+            
+        except Exception as e:
+            print(f"[BINARY_ROUTING] ❌ Error in _auto_upgrade_from_reserve: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "auto_upgrade_triggered": False,
                 "error": str(e)
@@ -635,6 +1039,8 @@ class AutoUpgradeService:
                 amount=amount,
                 currency='BNB',
                 reason=f'binary_mother_account_slot_{slot_no}',
+                balance_after=Decimal('0'),
+                tx_hash=f"mother_slot_{slot_no}_{int(datetime.utcnow().timestamp())}",
                 created_at=datetime.utcnow()
             ).save()
             

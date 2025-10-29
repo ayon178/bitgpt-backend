@@ -82,6 +82,19 @@ class FundDistributionService:
                                referrer_id: str = None, tx_hash: str = None, currency: str = 'BNB') -> Dict[str, Any]:
         """Distribute Binary program funds according to percentages"""
         try:
+            # Slot 1 special rule: 100% goes to direct upline handled elsewhere (auto-upgrade/placement service)
+            # Do NOT run any pool distributions or partner incentive for Slot 1 joins
+            if int(slot_no) == 1:
+                return {
+                    "success": True,
+                    "total_amount": amount,
+                    "total_distributed": Decimal('0.0'),
+                    "distributions": [],
+                    "distribution_type": "binary",
+                    "skipped": True,
+                    "message": "Slot 1 distribution skipped; full fee handled by slot-1 upline commission."
+                }
+
             if not tx_hash:
                 tx_hash = f"BINARY_DIST_{user_id}_{int(datetime.now().timestamp())}"
             
