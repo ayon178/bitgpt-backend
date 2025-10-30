@@ -471,6 +471,14 @@ class UserService:
                         "direct_partner": self._count_direct_partners(str(user.id))
                     })
             
+            # Include the requesting user's refer_code in the response
+            root_refer_code = None
+            try:
+                root_user = User.objects(id=uid).only('refer_code').first()
+                root_refer_code = getattr(root_user, 'refer_code', None) if root_user else None
+            except Exception:
+                root_refer_code = None
+
             return {
                 "success": True,
                 "data": {
@@ -479,7 +487,8 @@ class UserService:
                     "slot_no": slot_no,
                     "level_maximum": level_max,
                     "total_members": len(team_data),
-                    "team_members": team_data
+                    "team_members": team_data,
+                    "user_refer_code": root_refer_code
                 }
             }
             
