@@ -398,10 +398,11 @@ class WalletService:
 
             def map_reason_to_pool(reason: str) -> str | None:
                 r = (reason or "").lower()
-                if r.startswith("binary_dual_tree_"):
+                # Duel tree: ONLY explicit slot-1 full credits
+                if r == "binary_slot1_full":
                     return "duel_tree"
-                # Binary Partner Incentive includes: joining commission, partner incentive, and upgrade commissions
-                if r == "binary_partner_incentive" or r == "binary_joining_commission" or r.startswith("binary_upgrade_"):
+                # Binary Partner Incentive: ONLY partner incentive credits per user request
+                if r == "binary_partner_incentive":
                     return "binary_partner_incentive"
                 # Matrix Partner Incentive includes: partner incentive and level distributions (matrix_dual_tree_level_X)
                 if r == "matrix_partner_incentive" or r.startswith("matrix_dual_tree_"):
