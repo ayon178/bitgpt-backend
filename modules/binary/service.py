@@ -1321,9 +1321,15 @@ class BinaryService:
                 17: 65536  # CEO - Level 16 (extrapolated)
             }
             
-            # Gather slot catalog 1..17 for binary
+            # Gather slot catalog 1..17 for binary; fallback to defaults if catalog is empty
             catalogs = SlotCatalog.objects(program='binary').order_by('slot_no')
             catalog_by_slot = {c.slot_no: c for c in catalogs}
+            # Default slot costs (BNB) when catalog is missing; slot 17 extrapolated
+            default_slot_costs = {
+                1: 0.0022, 2: 0.0044, 3: 0.0088, 4: 0.0176, 5: 0.0352, 6: 0.0704,
+                7: 0.1408, 8: 0.2816, 9: 0.5632, 10: 1.1264, 11: 2.2528, 12: 4.5056,
+                13: 9.0112, 14: 18.0224, 15: 36.0448, 16: 72.0896, 17: 144.1792
+            }
             max_slot_no = max(catalog_by_slot.keys()) if catalog_by_slot else 17
             # Ensure we cover up to 17 as per documentation
             target_max_slot = max(17, max_slot_no)
@@ -1352,8 +1358,11 @@ class BinaryService:
             slots_summary = []
             for slot_no in range(1, target_max_slot + 1):
                 catalog = catalog_by_slot.get(slot_no)
-                slot_name = catalog.name if catalog else f"Slot {slot_no}"
-                slot_value = float(catalog.price) if catalog and catalog.price is not None else 0.0
+                slot_name = catalog.name if catalog and getattr(catalog, 'name', None) else f"Slot {slot_no}"
+                if catalog and getattr(catalog, 'price', None) is not None:
+                    slot_value = float(catalog.price)
+                else:
+                    slot_value = float(default_slot_costs.get(slot_no, 0.0))
                 
                 # Check if slot is completed
                 is_completed = slot_no in all_completed_slots
