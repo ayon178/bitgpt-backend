@@ -232,24 +232,31 @@ class DreamMatrixService:
             from ..tree.model import TreePlacement
             from ..user.model import User
             
-            # Helper to get user uid and object id
+            # Helper to get user basic display info + refer codes
             def get_user_info(oid) -> dict:
                 try:
-                    u = User.objects(id=oid).only('uid').first()
-                    if u and u.uid:
-                        return {
-                            "uid": str(u.uid),
-                            "object_id": str(oid)
-                        }
-                    else:
-                        return {
-                            "uid": str(oid),
-                            "object_id": str(oid)
-                        }
+                    u = User.objects(id=oid).only('uid', 'refer_code', 'refered_by').first()
+                    uid_val = str(u.uid) if u and getattr(u, 'uid', None) else str(oid)
+                    refer_code_val = getattr(u, 'refer_code', None) if u else None
+                    referrer_code_val = None
+                    try:
+                        if u and getattr(u, 'refered_by', None):
+                            inviter = User.objects(id=u.refered_by).only('refer_code').first()
+                            referrer_code_val = getattr(inviter, 'refer_code', None) if inviter else None
+                    except Exception:
+                        referrer_code_val = None
+                    return {
+                        "uid": uid_val,
+                        "object_id": str(oid),
+                        "refer_code": refer_code_val,
+                        "referrer_refer_code": referrer_code_val
+                    }
                 except Exception:
                     return {
                         "uid": str(oid),
-                        "object_id": str(oid)
+                        "object_id": str(oid),
+                        "refer_code": None,
+                        "referrer_refer_code": None
                     }
             
             # Counter for node IDs
@@ -286,6 +293,8 @@ class DreamMatrixService:
                     "type": node_type,
                     "userId": user_info["uid"],
                     "objectId": user_info["object_id"],
+                    "refer_code": user_info.get("refer_code"),
+                    "referrer_refer_code": user_info.get("referrer_refer_code"),
                     "level": level,
                     "position": position
                 }
