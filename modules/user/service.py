@@ -35,6 +35,15 @@ class UserService:
                     "error": "User not found"
                 }
             
+            # Resolve referrer's refer_code
+            referrer_refer_code = None
+            try:
+                if getattr(user, 'refered_by', None):
+                    inviter = User.objects(id=user.refered_by).only('refer_code').first()
+                    referrer_refer_code = getattr(inviter, 'refer_code', None) if inviter else None
+            except Exception:
+                referrer_refer_code = None
+            
             # Return user data in the exact format as shown in the collection
             user_data = {
                 "success": True,
@@ -43,6 +52,7 @@ class UserService:
                     "uid": user.uid,
                     "refer_code": user.refer_code,
                     "refered_by": str(user.refered_by) if user.refered_by else None,
+                    "referrer_refer_code": referrer_refer_code,
                     "wallet_address": user.wallet_address,
                     "name": user.name,
                     "role": user.role,
