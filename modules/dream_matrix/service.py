@@ -193,11 +193,14 @@ class DreamMatrixService:
                             slot_total_nodes_count = 1
                         
                         # Build tree structure for this slot
+                        root_user_info = get_user_info(user_oid)
                         slot_tree = {
                             "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
                             "totalMembers": max(0, slot_total_nodes_count - 1),  # Exclude the root user
                             "levels": slot_depth,
-                            "nodes": [slot_root_node]  # Root node with nested directDownline structure
+                            "nodes": [slot_root_node],  # Root node with nested directDownline structure
+                            "refer_code": root_user_info.get("refer_code"),
+                            "referrer_refer_code": root_user_info.get("referrer_refer_code")
                         }
                         
                         slot_obj["tree"] = slot_tree
