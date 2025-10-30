@@ -1314,50 +1314,8 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 except Exception:
                     pass
 
-                # Tree Upline Reserve System - 30% of slot fee goes to tree upline's reserve
-                try:
-                    from .tree_reserve_service import TreeUplineReserveService
-                    reserve_service = TreeUplineReserveService()
-                    
-                    # Find tree upline for this slot
-                    tree_upline = reserve_service.find_tree_upline(str(user.id), 'binary', slot_no)
-                    
-                    if tree_upline:
-                        # Calculate 30% reserve amount
-                        reserve_amount = reserve_service.calculate_reserve_amount(amount)
-                        
-                        # Add to tree upline's reserve fund
-                        success, message = reserve_service.add_to_reserve_fund(
-                            tree_upline["user_id"],
-                            'binary',
-                            slot_no,
-                            reserve_amount,
-                            str(user.id),
-                            f"AUTO-{user.uid}-S{slot_no}-RESERVE"
-                        )
-                        
-                        if success:
-                            print(f"Added {reserve_amount} to tree upline {tree_upline['uid']} reserve: {message}")
-                        else:
-                            print(f"Failed to add to reserve fund: {message}")
-                    else:
-                        # No tree upline found, transfer to mother account
-                        reserve_amount = reserve_service.calculate_reserve_amount(amount)
-                        success, message = reserve_service.transfer_to_mother_account(
-                            str(user.id),
-                            'binary',
-                            slot_no,
-                            reserve_amount,
-                            f"AUTO-{user.uid}-S{slot_no}-MOTHER"
-                        )
-                        if success:
-                            print(f"Transferred {reserve_amount} to mother account: {message}")
-                        else:
-                            print(f"Failed to transfer to mother account: {message}")
-                            
-                except Exception as e:
-                    print(f"Error in Tree Upline Reserve System: {e}")
-                    pass
+                # Tree Upline Reserve System handled inside AutoUpgradeService routing.
+                # Skipping legacy 30% reserve flow to prevent double-credit and wrong PI on slot 2.
 
                 # Distribute funds handled inside AutoUpgradeService for Binary:
                 # - Slot 1: full to direct upline (already implemented)
@@ -1388,43 +1346,7 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
                 except Exception:
                     pass
 
-            # Joining commission once on total of slot-1 and slot-2 (expected 0.0066 BNB)
-            if total_join_amount and total_join_amount > 0:
-                try:
-                    commission_service.calculate_joining_commission(
-                        from_user_id=str(user.id),
-                        program='binary',
-                        amount=total_join_amount,
-                        currency=currency
-                    )
-                except Exception:
-                    pass
-                
-                # Spark Bonus: contribute 8% from Binary program to Spark Bonus fund
-                try:
-                    spark_contribution = total_join_amount * Decimal('0.08')
-                    spark_service = SparkService()
-                    spark_service.contribute_to_fund(
-                        amount=float(spark_contribution),
-                        program='binary',
-                        source_user_id=str(user.id),
-                        source_type='binary_join',
-                        currency=currency
-                    )
-                except Exception:
-                    pass
-                # Earning history for joining commission seed (from user perspective)
-                try:
-                    EarningHistory(
-                        user_id=ObjectId(user.id),
-                        earning_type='commission',
-                        program='binary',
-                        amount=float(total_join_amount),
-                        currency=currency,
-                        description="Joining commission base amount recorded (upline paid via service)"
-                    ).save()
-                except Exception:
-                    pass
+            # Skipping legacy joining commission on Slot 1+2 bundle to avoid PI on reserve-routed Slot 2.
         except Exception:
             pass
 
