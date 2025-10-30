@@ -200,7 +200,8 @@ class DreamMatrixService:
                             "levels": slot_depth,
                             "nodes": [slot_root_node],  # Root node with nested directDownline structure
                             "refer_code": root_user_info.get("refer_code"),
-                            "referrer_refer_code": root_user_info.get("referrer_refer_code")
+                            "referrer_refer_code": root_user_info.get("referrer_refer_code"),
+                            "referrer_uid": root_user_info.get("referrer_uid")
                         }
                         
                         slot_obj["tree"] = slot_tree
@@ -242,24 +243,29 @@ class DreamMatrixService:
                     uid_val = str(u.uid) if u and getattr(u, 'uid', None) else str(oid)
                     refer_code_val = getattr(u, 'refer_code', None) if u else None
                     referrer_code_val = None
+                    referrer_uid_val = None
                     try:
                         if u and getattr(u, 'refered_by', None):
-                            inviter = User.objects(id=u.refered_by).only('refer_code').first()
+                            inviter = User.objects(id=u.refered_by).only('refer_code', 'uid').first()
                             referrer_code_val = getattr(inviter, 'refer_code', None) if inviter else None
+                            referrer_uid_val = str(getattr(inviter, 'uid')) if inviter and getattr(inviter, 'uid', None) else None
                     except Exception:
                         referrer_code_val = None
+                        referrer_uid_val = None
                     return {
                         "uid": uid_val,
                         "object_id": str(oid),
                         "refer_code": refer_code_val,
-                        "referrer_refer_code": referrer_code_val
+                        "referrer_refer_code": referrer_code_val,
+                        "referrer_uid": referrer_uid_val
                     }
                 except Exception:
                     return {
                         "uid": str(oid),
                         "object_id": str(oid),
                         "refer_code": None,
-                        "referrer_refer_code": None
+                        "referrer_refer_code": None,
+                        "referrer_uid": None
                     }
             
             # Counter for node IDs
@@ -298,6 +304,7 @@ class DreamMatrixService:
                     "objectId": user_info["object_id"],
                     "refer_code": user_info.get("refer_code"),
                     "referrer_refer_code": user_info.get("referrer_refer_code"),
+                    "referrer_uid": user_info.get("referrer_uid"),
                     "level": level,
                     "position": position
                 }
