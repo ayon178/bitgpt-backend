@@ -687,21 +687,7 @@ class AutoUpgradeService:
         try:
             from ..tree.model import TreePlacement
             
-            # 1) Verify relative distance == required_level (user's ancestor chain up to upline)
-            steps = 0
-            curr = TreePlacement.objects(user_id=user_id, program='binary', slot_no=slot_no, is_active=True).first()
-            while curr and getattr(curr, 'parent_id', None) and steps < 3:
-                if curr.parent_id == upline_id and steps == (required_level - 1):
-                    # Found upline exactly required_level steps above
-                    break
-                curr = TreePlacement.objects(user_id=curr.parent_id, program='binary', slot_no=slot_no, is_active=True).first()
-                steps += 1
-            # After loop, steps==required_level indicates user is exactly that level under upline
-            if steps != required_level:
-                print(f"[BINARY_ROUTING] User {user_id} is not at level-{required_level} under {upline_id} (steps={steps})")
-                return False
-
-            # 2) Collect all nodes exactly at required_level under upline, ordered by created_at (left→right BFS proxy)
+            # Collect all nodes exactly at required_level under upline, ordered by created_at (left→right BFS proxy)
             direct_children = list(TreePlacement.objects(
                 upline_id=upline_id,
                 program='binary',
