@@ -441,10 +441,19 @@ class UserService:
                 # Get user details
                 user = User.objects(id=member.user_id).first()
                 if user:
+                    # Fetch inviter's refer_code (who referred this member)
+                    inviter_code = None
+                    try:
+                        if getattr(user, 'refered_by', None):
+                            inviter = User.objects(id=user.refered_by).only('refer_code').first()
+                            inviter_code = getattr(inviter, 'refer_code', None) if inviter else None
+                    except Exception:
+                        inviter_code = None
                     team_data.append({
                         "s_no": len(team_data) + 1,
                         "id": str(user.id),
                         "uid": user.uid,
+                        "inviter_refer_code": inviter_code,
                         "address": user.wallet_address,
                         "inviter_id": str(user.refered_by) if user.refered_by else "--",
                         "activation_date": member.created_at.strftime("%d %b %Y (%H:%M)"),
