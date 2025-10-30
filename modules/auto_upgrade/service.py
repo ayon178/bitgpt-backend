@@ -499,7 +499,7 @@ class AutoUpgradeService:
                 return mother_result
 
             # Check first/second child condition under the Nth upline for this slot tree
-            is_first_second = self._is_first_or_second_under_upline(ObjectId(user_id), nth_upline, slot_no)
+            is_first_second = self._is_first_or_second_under_upline(ObjectId(user_id), nth_upline, slot_no, required_level=slot_no)
             print(f"[BINARY_ROUTING] Is first/second under Nth upline: {is_first_second}")
 
             if is_first_second:
@@ -679,85 +679,63 @@ class AutoUpgradeService:
             traceback.print_exc()
             return None
 
-    def _is_first_or_second_under_upline(self, user_id: ObjectId, upline_id: ObjectId, slot_no: int) -> bool:
+    def _is_first_or_second_under_upline(self, user_id: ObjectId, upline_id: ObjectId, slot_no: int, required_level: int = 2) -> bool:
         """
-        Return True if the user is among the first two placements anywhere in the Nth upline's
-        slot-N subtree (BFS level-order traversal by created_at). 
-        Collects users level-by-level until we have 2 users total, then checks if user_id is in that set.
+        Strict rule: User must be at EXACTLY level-2 under the given upline (for this slot tree),
+        and be among the first two placements at that level (by created_at order, left→right BFS).
         """
         try:
             from ..tree.model import TreePlacement
-            from collections import deque
             
-            def get_children(upline: ObjectId) -> list:
-                """Get direct children under upline for this slot, ordered by created_at"""
-                return list(TreePlacement.objects(
-                    upline_id=upline,
-                    program='binary',
-                    slot_no=slot_no,
-                    is_active=True
-                ).order_by('created_at').only('user_id'))
+            # 1) Verify relative distance == required_level (user's ancestor chain up to upline)
+            steps = 0
+            curr = TreePlacement.objects(user_id=user_id, program='binary', slot_no=slot_no, is_active=True).first()
+            while curr and getattr(curr, 'parent_id', None) and steps < 3:
+                if curr.parent_id == upline_id and steps == (required_level - 1):
+                    # Found upline exactly required_level steps above
+                    break
+                curr = TreePlacement.objects(user_id=curr.parent_id, program='binary', slot_no=slot_no, is_active=True).first()
+                steps += 1
+            # After loop, steps==required_level indicates user is exactly that level under upline
+            if steps != required_level:
+                print(f"[BINARY_ROUTING] User {user_id} is not at level-{required_level} under {upline_id} (steps={steps})")
+                return False
 
-            # Get upline's level to determine which users to count
-            upline_placement = TreePlacement.objects(
-                user_id=upline_id,
+            # 2) Collect all nodes exactly at required_level under upline, ordered by created_at (left→right BFS proxy)
+            direct_children = list(TreePlacement.objects(
+                upline_id=upline_id,
                 program='binary',
                 slot_no=slot_no,
                 is_active=True
-            ).first()
-            upline_level = upline_placement.level if upline_placement else 1
-            target_level = upline_level + 2  # Only count users at level 2+ (skip direct children)
-            
-            # Collect all descendants at level 2+ (exclude direct children at level 1)
-            all_subtree_placements = []
-            visited = {upline_id}
-            
-            def collect_level_2_plus(start_node, depth=0):
-                """Recursively collect users at level 2+ only (skip direct children)"""
-                if depth > 10:  # Safety limit
-                    return
-                children = get_children(start_node)
-                for child_placement in children:
-                    child_id = child_placement.user_id
-                    if child_id not in visited:
-                        visited.add(child_id)
-                        # Get full placement to check level
-                        full_placement = TreePlacement.objects(
-                            user_id=child_id,
-                            program='binary',
-                            slot_no=slot_no,
-                            is_active=True
-                        ).first()
-                        if full_placement:
-                            # Only include if level >= target_level (level 2+ relative to upline)
-                            if full_placement.level >= target_level:
-                                all_subtree_placements.append((child_id, full_placement.created_at))
-                                print(f"[BINARY_ROUTING] Including level-2+ user {child_id} at level {full_placement.level} (upline_level={upline_level})")
-                            # Always recurse to collect deeper descendants
-                            collect_level_2_plus(child_id, depth + 1)
-            
-            # Start from upline's direct children (they will be skipped, but we recurse into them)
-            direct_children = get_children(upline_id)
-            for child_placement in direct_children:
-                child_id = child_placement.user_id
-                if child_id not in visited:
-                    visited.add(child_id)
-                    # This direct child is at level 1 - skip it, but recurse to get its children
-                    collect_level_2_plus(child_id, depth=0)
-            
-            # Sort all by created_at (chronological order)
-            sorted_placements = sorted(all_subtree_placements, key=lambda x: x[1])
-            
-            # Take first 2 users (from level 2+)
-            first_two_found = [uid for uid, _ in sorted_placements[:2]]
-            
-            result = user_id in first_two_found
-            first_two_str = [str(uid) for uid in first_two_found]
-            print(f"[BINARY_ROUTING] First/second subtree check (all levels, sorted by created_at): first_two={first_two_str}, user={user_id}, result={result}")
-            
-            if result:
-                print(f"[BINARY_ROUTING] ✅ User {user_id} is first/second under upline {upline_id} (slot {slot_no})")
-            
+            ).order_by('created_at').only('user_id'))
+
+            level2_nodes = []
+            # BFS down to exactly required_level depth
+            frontier = [(c.user_id, 1) for c in direct_children]  # tuples of (node_id, depth_from_upline)
+            while frontier:
+                next_frontier = []
+                for node_id, depth in frontier:
+                    if depth == required_level:
+                        # Collect this exact-level node
+                        full = TreePlacement.objects(user_id=node_id, program='binary', slot_no=slot_no, is_active=True).first()
+                        level2_nodes.append((node_id, getattr(full, 'created_at', None)))
+                        continue
+                    # Expand one more level
+                    children = list(TreePlacement.objects(
+                        upline_id=node_id,
+                        program='binary',
+                        slot_no=slot_no,
+                        is_active=True
+                    ).order_by('created_at').only('user_id', 'created_at'))
+                    for ch in children:
+                        next_frontier.append((ch.user_id, depth + 1))
+                frontier = next_frontier
+
+            level2_nodes.sort(key=lambda x: x[1] or datetime.min)
+
+            first_two_ids = [uid for uid, _ in level2_nodes[:2]]
+            result = user_id in first_two_ids
+            print(f"[BINARY_ROUTING] Level-{required_level} first-two under {upline_id}: {[str(x) for x in first_two_ids]}, user={user_id}, result={result}")
             return result
         except Exception as e:
             print(f"[BINARY_ROUTING] Error in _is_first_or_second_under_upline: {e}")

@@ -203,11 +203,13 @@ class BinaryService:
             # 10. Update user's binary slot info
             self._update_user_binary_slot_info(user, slot_no, catalog.name, amount)
             
-            # 11. Check and trigger auto-upgrade for upline (first 2 partners logic)
+            # 11. Auto-upgrade is reserve-driven; no partner-count based trigger here
             try:
-                self.check_and_trigger_binary_auto_upgrade(user_id, slot_no)
+                # Optionally ping reserve service to process any pending auto-activations
+                from modules.user.tree_reserve_service import TreeUplineReserveService
+                TreeUplineReserveService().process_pending_auto_upgrades(program='binary')
             except Exception as e:
-                print(f"⚠️ Error checking binary auto-upgrade: {e}")
+                print(f"⚠️ Reserve auto-upgrade processing skipped: {e}")
             
             return {
                 "success": True,
@@ -1959,172 +1961,11 @@ class BinaryService:
     
     def check_and_trigger_binary_auto_upgrade(self, user_id: str, slot_no: int):
         """
-        Check and trigger Binary auto-upgrade for upline based on first 2 partners logic.
-        Called after each user activates a slot to check if their upline can auto-upgrade.
-        
-        Binary Auto-Upgrade Logic (from PROJECT_DOCUMENTATION.md):
-        - First 2 partners' earnings are used for next slot upgrade
-        - All upgrades are automatic when sufficient funds collected
+        Deprecated: Auto-upgrade is exclusively reserve-driven based on positional routing.
+        This method intentionally does nothing to avoid partner-count-based upgrades.
         """
         try:
-            print(f"Checking Binary auto-upgrade after user {user_id} activated slot {slot_no}...")
-            
-            # Get the user's upline (where they were placed in tree)
-            user_placement = TreePlacement.objects(
-                user_id=ObjectId(user_id),
-                program='binary',
-                slot_no=slot_no
-            ).first()
-            
-            if not user_placement or not user_placement.upline_id:
-                print(f"  No upline found for user {user_id}")
-                return None
-            
-            upline_id = str(user_placement.upline_id)
-            print(f"  Checking if upline {upline_id} can auto-upgrade...")
-            
-            # Get upline's binary status
-            upline_binary = BinaryAutoUpgrade.objects(user_id=ObjectId(upline_id)).first()
-            if not upline_binary:
-                print(f"  Upline {upline_id} doesn't have binary status")
-                return None
-            
-            current_slot = upline_binary.current_slot_no or 2  # Default to 2 if not set
-            
-            # Check if upline is still on this slot
-            if current_slot != slot_no:
-                print(f"  Upline already at slot {current_slot}, not slot {slot_no}")
-                return None
-            
-            # Count upline's direct tree children (partners) at this slot
-            partners_count = TreePlacement.objects(
-                program='binary',
-                upline_id=ObjectId(upline_id),
-                slot_no=slot_no
-            ).count()
-            
-            print(f"  Upline has {partners_count} partners at slot {slot_no}")
-            
-            # Need at least 2 partners for auto-upgrade
-            if partners_count < 2:
-                print(f"  Need 2 partners, only have {partners_count}")
-                return None
-            
-            # Calculate reserve fund (earnings from first 2 partners)
-            # According to PROJECT_DOCUMENTATION.md, first 2 partners fund next upgrade
-            slot_catalog = SlotCatalog.objects(program='binary', slot_no=slot_no, is_active=True).first()
-            if not slot_catalog:
-                print(f"  Slot {slot_no} catalog not found")
-                return None
-            
-            slot_value = float(slot_catalog.price or 0)
-            
-            # First 2 partners contribute to reserve
-            # Assuming each partner's slot fee contributes to upline's reserve
-            # Simplified: 2 partners × slot_value = reserve
-            reserve_fund = slot_value * 2
-            
-            # Get next slot cost
-            next_slot = slot_no + 1
-            if next_slot > 17:
-                print(f"  Already at maximum slot")
-                return None
-            
-            next_catalog = SlotCatalog.objects(program='binary', slot_no=next_slot, is_active=True).first()
-            if not next_catalog:
-                print(f"  Next slot {next_slot} catalog not found")
-                return None
-            
-            next_slot_cost = float(next_catalog.price or 0)
-            
-            print(f"  Reserve fund: {reserve_fund} BNB, Next slot cost: {next_slot_cost} BNB")
-            
-            if reserve_fund < next_slot_cost:
-                print(f"  Insufficient reserve (need {next_slot_cost - reserve_fund} more BNB)")
-                return None
-            
-            # CAN AUTO-UPGRADE!
-            print(f"  ✅ CAN AUTO-UPGRADE! Upgrading upline {upline_id} from slot {slot_no} → {next_slot}")
-            
-            # Update BinaryAutoUpgrade
-            upline_binary.current_slot_no = next_slot
-            upline_binary.current_level = next_slot
-            upline_binary.partners_available = 0  # Reset for new slot
-            upline_binary.last_updated = datetime.utcnow()
-            upline_binary.save()
-            
-            print(f"  ✓ Updated BinaryAutoUpgrade.current_slot_no to {next_slot}")
-            
-            # Create SlotActivation record
-            try:
-                tx_hash_unique = f"auto_upgrade_binary_{upline_id}_{slot_no}_{next_slot}_{int(datetime.utcnow().timestamp() * 1000)}"
-                
-                activation = SlotActivation(
-                    user_id=ObjectId(upline_id),
-                    slot_no=next_slot,
-                    program='binary',
-                    slot_name=next_catalog.name,
-                    activation_type='upgrade',
-                    upgrade_source='auto',
-                    amount_paid=Decimal(str(next_slot_cost)),
-                    currency='BNB',
-                    tx_hash=tx_hash_unique,
-                    is_auto_upgrade=True,
-                    status='completed',
-                    activated_at=datetime.utcnow(),
-                    completed_at=datetime.utcnow()
-                )
-                activation.save()
-                
-                print(f"  ✓ Created SlotActivation record for slot {next_slot}")
-                
-            except Exception as e:
-                print(f"  ⚠️ Error creating activation record: {e}")
-            
-            # Update user's binary_slots array
-            try:
-                upline_user = User.objects(id=ObjectId(upline_id)).first()
-                if upline_user:
-                    if not hasattr(upline_user, 'binary_slots') or upline_user.binary_slots is None:
-                        upline_user.binary_slots = []
-                    
-                    # Check if slot info already exists
-                    slot_exists = any(
-                        getattr(s, 'slot_name', None) == next_catalog.name
-                        for s in upline_user.binary_slots
-                    )
-                    
-                    if not slot_exists:
-                        from ..user.model import BinarySlotInfo
-                        new_slot_info = BinarySlotInfo(
-                            slot_name=next_catalog.name,
-                            slot_level=next_catalog.level,
-                            slot_value=next_catalog.price,
-                            is_active=True,
-                            activated_at=datetime.utcnow()
-                        )
-                        upline_user.binary_slots.append(new_slot_info)
-                        upline_user.updated_at = datetime.utcnow()
-                        upline_user.save()
-                        
-                        print(f"  ✓ Updated user's binary_slots array")
-                
-            except Exception as e:
-                print(f"  ⚠️ Error updating user slots: {e}")
-            
-            print(f"  🎉 BINARY AUTO-UPGRADE COMPLETED: {upline_id} is now at Slot {next_slot}!")
-            
-            return {
-                "success": True,
-                "upline_id": upline_id,
-                "upgraded_from": slot_no,
-                "upgraded_to": next_slot,
-                "reserve_used": reserve_fund,
-                "partners_count": partners_count
-            }
-            
-        except Exception as e:
-            print(f"Error in check_and_trigger_binary_auto_upgrade: {e}")
-            import traceback
-            traceback.print_exc()
+            print("[BINARY] check_and_trigger_binary_auto_upgrade is deprecated; skipping.")
+            return None
+        except Exception:
             return None
