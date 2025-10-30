@@ -1338,15 +1338,9 @@ class BinaryService:
             activated = SlotActivation.objects(user_id=user_oid, program='binary', status='completed')
             completed_slots = {a.slot_no for a in activated}
             
-            # Determine which slots are actually completed based on member count
-            member_completed_slots = set()
-            for slot_no in range(1, target_max_slot + 1):
-                required_members = slot_member_requirements.get(slot_no, 0)
-                if actual_total_team_members >= required_members:
-                    member_completed_slots.add(slot_no)
-            
-            # Combine both: slot is completed if either activated OR member requirement met
-            all_completed_slots = completed_slots.union(member_completed_slots)
+            # IMPORTANT: For completion state in UI, rely strictly on actual SlotActivation
+            # to match wallet statistics and avoid inflating via team member counts.
+            all_completed_slots = set(completed_slots)
             
             # Find highest completed slot
             highest_completed_slot = max(all_completed_slots) if all_completed_slots else 0
