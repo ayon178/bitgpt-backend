@@ -59,9 +59,15 @@ class DreamMatrixService:
                     15: MEMBERS_PER_SLOT   # Slot 15: Need 39 members to complete/recycle
                 }
                 
-                # Gather slot catalog 1..15 for matrix
+                # Gather slot catalog 1..15 for matrix; fallback to defaults if catalog empty
                 catalogs = SlotCatalog.objects(program='matrix').order_by('slot_no')
                 catalog_by_slot = {c.slot_no: c for c in catalogs}
+                # Default Matrix slot costs in USDT
+                default_slot_costs = {
+                    1: 11, 2: 33, 3: 99, 4: 297, 5: 891,
+                    6: 2673, 7: 8019, 8: 24057, 9: 72171, 10: 216513,
+                    11: 649539, 12: 1948617, 13: 5845851, 14: 17537553, 15: 52612659
+                }
                 max_slot_no = max(catalog_by_slot.keys()) if catalog_by_slot else 15
                 target_max_slot = max(15, max_slot_no)
                 
@@ -118,8 +124,11 @@ class DreamMatrixService:
                 
                 for current_slot_no in slot_range:
                     catalog = catalog_by_slot.get(current_slot_no)
-                    slot_name = catalog.name if catalog else f"Slot {current_slot_no}"
-                    slot_value = float(catalog.price) if catalog and catalog.price is not None else 0.0
+                    slot_name = catalog.name if catalog and getattr(catalog, 'name', None) else f"Slot {current_slot_no}"
+                    if catalog and getattr(catalog, 'price', None) is not None:
+                        slot_value = float(catalog.price)
+                    else:
+                        slot_value = float(default_slot_costs.get(current_slot_no, 0))
                     
                     # Check if slot is completed
                     is_completed = current_slot_no in all_completed_slots
