@@ -181,22 +181,36 @@ class FundDistributionService:
                         print(f"[MATRIX ROUTING] placement_context={placement_context}")
                     except Exception:
                         pass
-                    placed_under_user_id = placement_context.get('placed_under_user_id')  # tree owner (super upline or immediate upline)
+                    placed_under_user_id = placement_context.get('placed_under_user_id')  # immediate parent in many flows
                     placement_level = placement_context.get('level')
                     placement_position = placement_context.get('position')
-                    # Case A: explicit Level-2 middle under tree owner
+                    # Case A: Level-2 placement and it's the middle child (position % 3 == 1)
+                    # In many code paths, placed_under_user_id is the immediate parent (Level-1 node),
+                    # so resolve the tree owner as parent.parent_id for this slot.
                     if placed_under_user_id and placement_level == 2 and placement_position is not None and int(placement_position) % 3 == 1:
+                        try:
+                            # Resolve tree owner (super upline) via parent chain
+                            parent_link = TreePlacement.objects(
+                                user_id=ObjectId(placed_under_user_id),
+                                program='matrix',
+                                slot_no=slot_no,
+                                is_active=True
+                            ).first()
+                            tree_owner_id = str(parent_link.parent_id) if parent_link and getattr(parent_link, 'parent_id', None) else str(placed_under_user_id)
+                        except Exception:
+                            tree_owner_id = str(placed_under_user_id)
+
                         next_slot_no = slot_no + 1
                         already_active = False
                         try:
-                            act = SlotActivation.objects(user_id=ObjectId(placed_under_user_id), program='matrix', slot_no=next_slot_no, status='completed').first()
+                            act = SlotActivation.objects(user_id=ObjectId(tree_owner_id), program='matrix', slot_no=next_slot_no, status='completed').first()
                             already_active = bool(act)
                         except Exception:
                             already_active = False
                         if not already_active:
                             reserve_service = TreeUplineReserveService()
                             ok, msg = reserve_service.add_to_reserve_fund(
-                                tree_upline_id=str(placed_under_user_id),
+                                tree_upline_id=tree_owner_id,
                                 program='matrix',
                                 slot_no=slot_no,
                                 amount=Decimal(str(amount)),
@@ -205,7 +219,7 @@ class FundDistributionService:
                             )
                             distributions.append({
                                 "type": "super_upline_middle_reserve",
-                                "to_user_id": str(placed_under_user_id),
+                                "to_user_id": tree_owner_id,
                                 "amount": float(amount),
                                 "slot_no": slot_no,
                                 "message": msg,
@@ -302,6 +316,88 @@ class FundDistributionService:
                             )
                             distributions.append(distribution)
                             total_distributed += dist_amount
+                elif income_type == "mentorship":
+                    # Mentorship 10% → super upline (direct referrer's referrer)
+                    try:
+                        if referrer_id:
+                            from modules.user.model import User as _User
+                            super_upline = None
+                            try:
+                                ref_u = _User.objects(id=ObjectId(referrer_id)).first()
+                                if ref_u and getattr(ref_u, 'refered_by', None):
+                                    super_upline = str(ref_u.refered_by)
+                            except Exception:
+                                super_upline = None
+
+                            if super_upline:
+                                dist_amount = amount * (percentage / Decimal('100.0'))
+                                if dist_amount > 0:
+                                    # Use MentorshipService to also update program records
+                                    try:
+                                        from modules.mentorship.service import MentorshipService
+                                        MentorshipService().process_matrix_mentorship(
+                                            user_id=user_id,
+                                            referrer_id=referrer_id,
+                                            amount=dist_amount,
+                                            currency=currency
+                                        )
+                                    except Exception:
+                                        pass
+
+                                    # Record income event for auditing + credit wallet
+                                    distribution = self._create_income_event(
+                                        super_upline, user_id, 'matrix', slot_no, 'mentorship',
+                                        dist_amount, percentage, tx_hash, "Matrix Mentorship Bonus", currency
+                                    )
+                                    distributions.append(distribution)
+                                    total_distributed += dist_amount
+                    except Exception:
+                        pass
+                elif income_type == "newcomer_support":
+                    # Newcomer Growth Support 20%: 50% to user (instant), 50% to direct upline's newcomer fund
+                    try:
+                        from modules.newcomer_support.service import NewcomerSupportService
+                        svc = NewcomerSupportService()
+                        # Call service with the full amount; it applies 20% internally per spec docs
+                        # However our loop computes percentage. To avoid double-applying, compute split here.
+                        ngs_amount = amount * (percentage / Decimal('100.0'))
+                        user_half = ngs_amount * Decimal('0.50')
+                        upline_half = ngs_amount * Decimal('0.50')
+
+                        # Persist detailed newcomer entries
+                        try:
+                            svc.process_matrix_contribution(
+                                user_id=user_id,
+                                amount=float(amount),  # service expects total to derive 20%
+                                referrer_id=referrer_id,
+                                tx_hash=tx_hash,
+                                currency=str(currency)
+                            )
+                        except Exception:
+                            pass
+
+                        # Record income events for audit and to credit user's wallet for instant claimable portion
+                        if user_half > 0:
+                            distribution_user = self._create_income_event(
+                                user_id, user_id, 'matrix', slot_no, 'newcomer_support',
+                                user_half, Decimal('50.0'), tx_hash, "Newcomer Growth Support (User 50%)", currency
+                            )
+                            distributions.append(distribution_user)
+                            total_distributed += user_half
+
+                        # Upline fund is reserved; record event to upline but do not credit wallet immediately
+                        if referrer_id and upline_half > 0:
+                            try:
+                                distribution_upline = self._create_income_event(
+                                    referrer_id, user_id, 'matrix', slot_no, 'newcomer_support_upline_fund',
+                                    upline_half, Decimal('50.0'), tx_hash, "Newcomer Growth Support (Upline 50% Reserved)", currency
+                                )
+                                distributions.append(distribution_upline)
+                                total_distributed += upline_half
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 else:
                     # Direct distribution to fund pools
                     dist_amount = amount * (percentage / Decimal('100.0'))
@@ -467,6 +563,7 @@ class FundDistributionService:
             'partner_incentive': 'partner_incentive',
             'shareholders': 'shareholders',
             'newcomer_support': 'newcomer_support',
+            'newcomer_support_upline_fund': 'newcomer_support',
             'mentorship': 'mentorship_bonus',
             'triple_entry': 'triple_entry',
             'global_phase_1': None,  # Handled separately (tree upline reserve)

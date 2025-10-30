@@ -134,45 +134,47 @@ class MatrixService:
             # 4. Initialize MatrixAutoUpgrade tracking
             self._initialize_matrix_auto_upgrade(user_id)
             
-            # 5. Distribute funds to all bonus pools (PROJECT_DOCUMENTATION.md Section 32)
+            # 5. Distribute funds and commissions AFTER TreePlacement so placement_context is accurate
+            distribution_result = {"success": False, "error": "skipped"}
+            commission_results = {}
+            
+            # 5c. After TreePlacement, compute accurate placement_context and run distributions
             try:
+                from modules.tree.model import TreePlacement as _TP
                 from modules.fund_distribution.service import FundDistributionService
                 fund_service = FundDistributionService()
-                
+                tp = _TP.objects(user_id=ObjectId(user_id), program='matrix', slot_no=1, is_active=True).first()
+                placement_ctx = None
+                if tp:
+                    # Map matrix position: left/center/right → 0/1/2
+                    pos_map = {'left': 0, 'center': 1, 'right': 2}
+                    pos_idx = pos_map.get(getattr(tp, 'position', ''), None)
+                    parent_id = str(getattr(tp, 'upline_id', None) or getattr(tp, 'parent_id', None) or '')
+                    placement_ctx = {
+                        'placed_under_user_id': parent_id,
+                        'level': int(getattr(tp, 'level', 0)),
+                        'position': pos_idx
+                    }
                 distribution_result = fund_service.distribute_matrix_funds(
                     user_id=user_id,
                     amount=amount,
                     slot_no=1,
                     referrer_id=direct_referrer_id,
                     tx_hash=tx_hash,
-                    placement_context={
-                        "placed_under_user_id": placement_result.get("placed_under_user_id"),
-                        "level": placement_result.get("level"),
-                        "position": placement_result.get("position")
-                    }
+                    placement_context=placement_ctx
                 )
-                
-                if distribution_result.get('success'):
-                    print(f"✅ Matrix funds distributed: {distribution_result.get('total_distributed')}")
-                else:
-                    print(f" Matrix fund distribution failed: {distribution_result.get('error')}")
+                commission_results = self._process_matrix_commissions(
+                    user_id,
+                    direct_referrer_id,
+                    amount,
+                    currency,
+                    placement_context=placement_ctx,
+                    slot_no=1
+                )
             except Exception as e:
-                print(f" Matrix fund distribution error: {e}")
-            
-            # 5b. Process all commission distributions (100% total)
-            commission_results = self._process_matrix_commissions(
-                user_id,
-                direct_referrer_id,
-                amount,
-                currency,
-                placement_context={
-                    "placed_under_user_id": placement_result.get("placed_under_user_id"),
-                    "level": placement_result.get("level"),
-                    "position": placement_result.get("position")
-                },
-                slot_no=1
-            )
-            
+                print(f" Matrix post-placement distribution error: {e}")
+                pass
+
             # 6. Process special program integrations
             special_programs_results = self._process_special_programs(user_id, referrer_id, amount, currency)
 
@@ -1829,9 +1831,10 @@ class MatrixService:
                     slot_no=next_slot,
                     program='matrix',
                     status='completed',
-                    activation_type='auto_upgrade',
+                    activation_type='auto',
                     amount_paid=Decimal(str(next_slot_cost)),
                     funded_by='reserve_fund',
+                    currency='USDT',
                     tx_hash=tx_hash_unique,
                     activated_at=datetime.utcnow(),
                     completed_at=datetime.utcnow()

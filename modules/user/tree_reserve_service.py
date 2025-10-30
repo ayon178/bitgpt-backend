@@ -199,13 +199,15 @@ class TreeUplineReserveService:
                 program=program,
                 slot_no=slot_no,
                 slot_name=catalog.name,
-                activation_type='auto_upgrade',
+                activation_type='auto',
                 upgrade_source='reserve',
                 amount_paid=slot_cost,
                 currency='BNB' if program == 'binary' else ('USDT' if program == 'matrix' else 'USD'),
                 tx_hash=f"RESERVE-AUTO-{user_id}-S{slot_no}",
                 is_auto_upgrade=True,
-                status='completed'
+                status='completed',
+                activated_at=datetime.utcnow(),
+                completed_at=datetime.utcnow()
             )
             activation.save()
             

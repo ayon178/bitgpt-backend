@@ -7,6 +7,7 @@ from bson import ObjectId
 from auth.service import authentication_service
 from ..user.model import User
 from .service import MatrixService
+from ..fund_distribution.service import FundDistributionService
 from utils.response import success_response, error_response
 from ..auto_upgrade.model import MatrixAutoUpgrade
 
@@ -604,6 +605,52 @@ async def get_auto_upgrade_status_endpoint(
         }
         
         return success_response(status, "Auto upgrade status fetched successfully")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return error_response(str(e))
+
+@router.post("/test/middle-upgrade")
+async def test_middle_upgrade_endpoint(
+    owner_user_id: str,
+    slot_no: int,
+    amount: float | None = None,
+    current_user: dict = Depends(_auth_dependency)
+):
+    """Simulate Level-2 middle placement under `owner_user_id` and run auto-upgrade check."""
+    try:
+        # Determine amount from slot catalog if not provided
+        from ..slot.model import SlotCatalog
+        slot_doc = SlotCatalog.objects(program='matrix', slot_no=int(slot_no), is_active=True).first()
+        slot_amount = float(slot_doc.price) if slot_doc and getattr(slot_doc, 'price', None) else None
+        if amount is None:
+            if slot_amount is None:
+                raise HTTPException(status_code=400, detail="Provide amount or configure SlotCatalog")
+            amount = slot_amount
+
+        # Build placement context (Level-2 middle)
+        placement_context = {"placed_under_user_id": owner_user_id, "level": 2, "position": 1}
+
+        # Distribute (should route 100% to reserve if next slot inactive)
+        fds = FundDistributionService()
+        distribution = fds.distribute_matrix_funds(
+            user_id=str(current_user["user_id"]),
+            amount=Decimal(str(amount)),
+            slot_no=int(slot_no),
+            referrer_id=str(current_user.get("user_id")),
+            currency='USDT',
+            placement_context=placement_context
+        )
+
+        # Attempt auto-upgrade for owner
+        MatrixService().check_and_process_automatic_upgrade(owner_user_id, int(slot_no))
+
+        return success_response({
+            "tested_owner": owner_user_id,
+            "slot_no": int(slot_no),
+            "amount": float(amount),
+            "distribution": distribution
+        }, "Middle routing + auto-upgrade check executed")
     except HTTPException as e:
         raise e
     except Exception as e:
