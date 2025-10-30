@@ -722,7 +722,34 @@ class AutoUpgradeService:
             first_two_ids = [uid for uid, _ in level2_nodes[:2]]
             result = user_id in first_two_ids
             print(f"[BINARY_ROUTING] Level-{required_level} first-two under {upline_id}: {[str(x) for x in first_two_ids]}, user={user_id}, result={result}")
-            return result
+
+            if result:
+                return True
+
+            # Fallback: if user is at this exact level but array missed them (timing/indexing), compute rank by created_at
+            user_pl = TreePlacement.objects(user_id=user_id, program='binary', slot_no=slot_no, is_active=True).first()
+            if not user_pl:
+                return False
+            # verify ancestry chain exactly required_level to upline
+            steps = 0
+            curr = user_pl
+            ok_path = False
+            while curr and getattr(curr, 'parent_id', None) and steps < required_level:
+                if curr.parent_id == upline_id and steps == (required_level - 1):
+                    ok_path = True
+                    break
+                curr = TreePlacement.objects(user_id=curr.parent_id, program='binary', slot_no=slot_no, is_active=True).first()
+                steps += 1
+            if not ok_path:
+                return False
+
+            # Count how many nodes at this level have created_at earlier than user's
+            earlier = 0
+            for uid, ts in level2_nodes:
+                if ts and user_pl.created_at and ts < user_pl.created_at:
+                    earlier += 1
+            print(f"[BINARY_ROUTING] Fallback ordering: earlier_count={earlier} at level {required_level}")
+            return earlier < 2
         except Exception as e:
             print(f"[BINARY_ROUTING] Error in _is_first_or_second_under_upline: {e}")
             import traceback
