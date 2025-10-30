@@ -176,10 +176,18 @@ async def get_user_rank(user_id: str):
         
         # Get next rank details
         next_rank = Rank.objects(rank_number=user_rank.next_rank_number).first()
+        # Fetch user's refer_code
+        refer_code = None
+        try:
+            u = User.objects(id=ObjectId(user_id)).only('refer_code').first()
+            refer_code = getattr(u, 'refer_code', None) if u else None
+        except Exception:
+            refer_code = None
         
         return success_response(
             data={
                 "user_id": user_id,
+                "refer_code": refer_code,
                 "current_rank": {
                     "rank_number": user_rank.current_rank_number,
                     "rank_name": user_rank.current_rank_name,

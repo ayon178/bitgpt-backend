@@ -308,6 +308,14 @@ class UserService:
             for user_id_obj in paginated_user_ids:
                 member = user_map.get(str(user_id_obj))
                 if member:
+                    # Fetch inviter's refer_code (who referred this member)
+                    inviter_code = None
+                    try:
+                        if getattr(member, 'refered_by', None):
+                            inviter = User.objects(id=member.refered_by).only('refer_code').first()
+                            inviter_code = getattr(inviter, 'refer_code', None) if inviter else None
+                    except Exception:
+                        inviter_code = None
                     # Count direct partners for this member
                     direct_partner_count = User.objects(refered_by=member.id).count()
                     
@@ -315,6 +323,7 @@ class UserService:
                         "id": str(member.id),
                         "uid": member.uid,
                         "refer_code": member.refer_code,
+                        "inviter_refer_code": inviter_code,
                         "name": member.name,
                         "email": member.email,
                         "role": member.role,
