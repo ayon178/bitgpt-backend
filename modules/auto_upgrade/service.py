@@ -472,7 +472,31 @@ class AutoUpgradeService:
             if not nth_upline:
                 print(f"[BINARY_ROUTING] No Nth upline found, sending to mother account")
                 # No upline found at required depth → mother fallback
-                return self._send_to_mother_account(slot_value, slot_no)
+                mother_result = self._send_to_mother_account(slot_value, slot_no)
+                # Ensure SlotActivation is still recorded for the user's Slot 2+ activation
+                try:
+                    from ..slot.model import SlotActivation
+                    slot_names = ['Explorer', 'Contributor', 'Supporter', 'Promoter', 'Developer', 'Manager', 'Director', 'Executive', 'Leader', 'Master', 'Expert', 'Professional', 'Specialist', 'Consultant', 'Advisor', 'Partner']
+                    slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
+                    SlotActivation(
+                        user_id=ObjectId(user_id),
+                        program='binary',
+                        slot_no=slot_no,
+                        slot_name=slot_name,
+                        amount_paid=slot_value,
+                        currency='BNB',
+                        status='completed',
+                        activation_type='auto',
+                        upgrade_source='auto',
+                        tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                        activated_at=datetime.utcnow(),
+                        completed_at=datetime.utcnow(),
+                        created_at=datetime.utcnow()
+                    ).save()
+                    print(f"[BINARY_ROUTING] ✅ SlotActivation created for user {user_id}, slot {slot_no} (mother path)")
+                except Exception as e:
+                    print(f"[BINARY_ROUTING] ⚠️ Failed to create SlotActivation (mother path): {e}")
+                return mother_result
 
             # Check first/second child condition under the Nth upline for this slot tree
             is_first_second = self._is_first_or_second_under_upline(ObjectId(user_id), nth_upline, slot_no)
@@ -557,6 +581,30 @@ class AutoUpgradeService:
                         tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
                         currency='BNB'
                     )
+                    # Ensure SlotActivation is recorded for Slot 2+ even when routed to pools
+                    try:
+                        from ..slot.model import SlotActivation
+                        slot_names = ['Explorer', 'Contributor', 'Supporter', 'Promoter', 'Developer', 'Manager', 'Director', 'Executive', 'Leader', 'Master', 'Expert', 'Professional', 'Specialist', 'Consultant', 'Advisor', 'Partner']
+                        slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
+                        SlotActivation(
+                            user_id=ObjectId(user_id),
+                            program='binary',
+                            slot_no=slot_no,
+                            slot_name=slot_name,
+                            amount_paid=slot_value,
+                            currency='BNB',
+                            status='completed',
+                            activation_type='auto',
+                            upgrade_source='auto',
+                            tx_hash=f"auto_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                            activated_at=datetime.utcnow(),
+                            completed_at=datetime.utcnow(),
+                            created_at=datetime.utcnow()
+                        ).save()
+                        print(f"[BINARY_ROUTING] ✅ SlotActivation created for user {user_id}, slot {slot_no} (pools path)")
+                    except Exception as e:
+                        print(f"[BINARY_ROUTING] ⚠️ Failed to create SlotActivation (pools path): {e}")
+
                     return {"success": True, "distribution": dist, "fund_destination": "pools"}
                 except Exception as e:
                     return {"success": False, "error": str(e)}
