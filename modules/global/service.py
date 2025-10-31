@@ -886,6 +886,18 @@ class GlobalService:
             if existing_progression:
                 return {"success": False, "error": "User already has Global program progression record"}
             
+            # 2.a Prerequisite: Must have joined Matrix program before Global
+            try:
+                matrix_activation = SlotActivation.objects(
+                    user_id=ObjectId(user_id),
+                    program='matrix',
+                    status='completed'
+                ).first()
+            except Exception:
+                matrix_activation = None
+            if not matrix_activation:
+                return {"success": False, "error": "Join sequence violation: user must join Matrix before Global"}
+
             # 3. Verify amount matches Phase-1 Slot-1 price ($33)
             catalog = SlotCatalog.objects(program='global', slot_no=1, is_active=True).first()
             if not catalog:
