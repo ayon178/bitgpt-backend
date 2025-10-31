@@ -683,76 +683,71 @@ class AutoUpgradeService:
 
     def _is_first_or_second_under_upline(self, user_id: ObjectId, upline_id: ObjectId, slot_no: int, required_level: int = 2) -> bool:
         """
-        Strict rule: User must be at EXACTLY level-2 under the given upline (for this slot tree),
-        and be among the first two placements at that level (by created_at order, left→right BFS).
+        Strict rule: User must be at EXACTLY level-N under the given upline in the BASE (slot 1) tree,
+        and be among the first two positions at that level by deterministic positional order (LL, LR, RL, RR ...),
+        not by join time. Left=0, Right=1; positional index is the binary value of the path from upline.
         """
         try:
             from ..tree.model import TreePlacement
             
-            # Collect all nodes exactly at required_level under upline, ordered by created_at (left→right BFS proxy)
-            # Use base binary tree (slot 1) for positional checks to ensure ROOT ancestry works even if upper slots aren't placed
-            direct_children = list(TreePlacement.objects(
-                upline_id=upline_id,
-                program='binary',
-                slot_no=1,
-                is_active=True
-            ).order_by('created_at').only('user_id'))
+            # Determine exact path from upline -> user in base tree using parent chain
+            # Build path bits by walking up from user to upline collecting L/R at each step
+            from mongoengine.queryset.visitor import Q
 
-            level2_nodes = []
-            # BFS down to exactly required_level depth
-            frontier = [(c.user_id, 1) for c in direct_children]  # tuples of (node_id, depth_from_upline)
-            while frontier:
-                next_frontier = []
-                for node_id, depth in frontier:
-                    if depth == required_level:
-                        # Collect this exact-level node
-                        full = TreePlacement.objects(user_id=node_id, program='binary', slot_no=1, is_active=True).first()
-                        level2_nodes.append((node_id, getattr(full, 'created_at', None)))
-                        continue
-                    # Expand one more level
-                    children = list(TreePlacement.objects(
-                        upline_id=node_id,
-                        program='binary',
-                        slot_no=1,
-                        is_active=True
-                    ).order_by('created_at').only('user_id', 'created_at'))
-                    for ch in children:
-                        next_frontier.append((ch.user_id, depth + 1))
-                frontier = next_frontier
+            def get_lr_for_child(child_pl) -> str:
+                # Prefer explicit position
+                pos = getattr(child_pl, 'position', None)
+                if pos in ('left', 'right'):
+                    return 'L' if pos == 'left' else 'R'
+                # Fallback: derive by parent's children created_at order
+                parent_id = getattr(child_pl, 'parent_id', None) or getattr(child_pl, 'upline_id', None)
+                if not parent_id:
+                    return 'L'  # default
+                sibs = list(TreePlacement.objects(
+                    Q(upline_id=parent_id) | Q(parent_id=parent_id),
+                    program='binary', slot_no=1, is_active=True
+                ).only('user_id', 'created_at').order_by('created_at'))
+                # first child => L, second => R
+                for idx, s in enumerate(sibs[:2]):
+                    if str(s.user_id) == str(child_pl.user_id):
+                        return 'L' if idx == 0 else 'R'
+                return 'L'
 
-            level2_nodes.sort(key=lambda x: x[1] or datetime.min)
-
-            first_two_ids = [uid for uid, _ in level2_nodes[:2]]
-            result = user_id in first_two_ids
-            print(f"[BINARY_ROUTING] Level-{required_level} first-two under {upline_id}: {[str(x) for x in first_two_ids]}, user={user_id}, result={result}")
-
-            if result:
-                return True
-
-            # Fallback: if user is at this exact level but array missed them (timing/indexing), compute rank by created_at
+            # Start from user's slot-1 placement
             user_pl = TreePlacement.objects(user_id=user_id, program='binary', slot_no=1, is_active=True).first()
             if not user_pl:
                 return False
-            # verify ancestry chain exactly required_level to upline
+
+            path_bits: List[str] = []
             steps = 0
             curr = user_pl
-            ok_path = False
-            while curr and getattr(curr, 'parent_id', None) and steps < required_level:
-                if curr.parent_id == upline_id and steps == (required_level - 1):
-                    ok_path = True
+            while curr and steps < required_level:
+                parent = getattr(curr, 'parent_id', None) or getattr(curr, 'upline_id', None)
+                if not parent:
                     break
-                curr = TreePlacement.objects(user_id=curr.parent_id, program='binary', slot_no=1, is_active=True).first()
+                lr = get_lr_for_child(curr)
+                path_bits.append(lr)
                 steps += 1
-            if not ok_path:
+                if parent == upline_id:
+                    break
+                curr = TreePlacement.objects(user_id=parent, program='binary', slot_no=1, is_active=True).first()
+
+            # Validate we reached the upline at exactly required_level
+            if steps != required_level or (getattr(curr, 'parent_id', None) or getattr(curr, 'upline_id', None)) != upline_id:
+                # If loop ended because parent==upline_id, steps should be required_level and we have exactly N steps
+                # Otherwise, not at the exact required level under upline
                 return False
 
-            # Count how many nodes at this level have created_at earlier than user's
-            earlier = 0
-            for uid, ts in level2_nodes:
-                if ts and user_pl.created_at and ts < user_pl.created_at:
-                    earlier += 1
-            print(f"[BINARY_ROUTING] Fallback ordering: earlier_count={earlier} at level {required_level}")
-            return earlier < 2
+            path_bits = list(reversed(path_bits))  # from upline -> user
+
+            # Compute positional index for this user
+            idx = 0
+            for b in path_bits:
+                idx = (idx << 1) | (0 if b == 'L' else 1)
+
+            is_first_or_second = idx in (0, 1)
+            print(f"[BINARY_ROUTING] User path under {upline_id} at level {required_level}: {''.join(path_bits)} (index={idx}), first/second={is_first_or_second}")
+            return is_first_or_second
         except Exception as e:
             print(f"[BINARY_ROUTING] Error in _is_first_or_second_under_upline: {e}")
             import traceback
