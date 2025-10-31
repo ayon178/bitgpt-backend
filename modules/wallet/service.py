@@ -800,12 +800,16 @@ class WalletService:
             # Get upline info
             ref = getattr(user, 'refered_by', None)
             upline_uid = None
+            upline_refer_code = None
             if ref:
-                upline = User.objects(id=ref).only('uid').first()
+                upline = User.objects(id=ref).only('uid', 'refer_code').first()
                 if upline:
                     upline_uid = getattr(upline, 'uid', None)
+                    upline_refer_code = getattr(upline, 'refer_code', None)
             if not upline_uid:
                 upline_uid = 'ROOT'
+            if not upline_refer_code:
+                upline_refer_code = 'ROOT'
 
             # Build rows from ledger entries
             rows = []
@@ -813,6 +817,8 @@ class WalletService:
                 rows.append({
                     "uid": getattr(user, 'uid', None),
                     "upline_uid": upline_uid,
+                    "refer_code": getattr(user, 'refer_code', None),
+                    "referrer_refer_code": upline_refer_code,
                     "amount": float(entry.amount) if entry.amount else 0,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
                     "reason": entry.reason,
