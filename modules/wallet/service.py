@@ -526,7 +526,7 @@ class WalletService:
                         return float(res[0]["total"]) if res else 0.0
 
                     # Fallback for Binary Partner Incentive and Duel Tree when WalletLedger is missing
-                    # Sum partner incentive for binary as BNB-equivalent (amounts recorded in native amount)
+                    # Use IncomeEvent ONLY if WalletLedger totals are zero to avoid double counting
                     try:
                         agg_pi = [
                             {"$match": {
@@ -538,7 +538,8 @@ class WalletService:
                             {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
                         ]
                         res_pi = list(IncomeEvent.objects.aggregate(agg_pi))
-                        totals["binary_partner_incentive"]["BNB"] += float(res_pi[0]["total"]) if res_pi else 0.0
+                        if (totals.get("binary_partner_incentive", {}).get("BNB", 0.0) or 0.0) == 0.0:
+                            totals["binary_partner_incentive"]["BNB"] += float(res_pi[0]["total"]) if res_pi else 0.0
                     except Exception:
                         pass
 
@@ -554,7 +555,8 @@ class WalletService:
                             {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
                         ]
                         res_dt = list(IncomeEvent.objects.aggregate(agg_dt))
-                        totals["duel_tree"]["BNB"] += float(res_dt[0]["total"]) if res_dt else 0.0
+                        if (totals.get("duel_tree", {}).get("BNB", 0.0) or 0.0) == 0.0:
+                            totals["duel_tree"]["BNB"] += float(res_dt[0]["total"]) if res_dt else 0.0
                     except Exception:
                         pass
                 except Exception:
