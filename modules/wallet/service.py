@@ -711,18 +711,27 @@ class WalletService:
             # Get upline info
             ref = getattr(user, 'refered_by', None)
             upline_uid = None
+            referrer_refer_code = None
             if ref:
-                upline = User.objects(id=ref).only('uid').first()
+                upline = User.objects(id=ref).only('uid', 'refer_code').first()
                 if upline:
                     upline_uid = getattr(upline, 'uid', None)
+                    referrer_refer_code = getattr(upline, 'refer_code', None)
             if not upline_uid:
                 upline_uid = 'ROOT'
+            if not referrer_refer_code:
+                referrer_refer_code = 'ROOT'
+
+            # Current user's refer code
+            user_refer_code = getattr(user, 'refer_code', None)
 
             # Build rows from ledger entries
             rows = []
             for entry in entries:
                 rows.append({
                     "uid": getattr(user, 'uid', None),
+                    "refer_code": user_refer_code,
+                    "referrer_refer_code": referrer_refer_code,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
                     "upline_uid": upline_uid,
                     "partner_count": partner_count,
