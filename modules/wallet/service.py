@@ -664,8 +664,9 @@ class WalletService:
 
     def get_duel_tree_earnings(self, user_id: str, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
         """
-        Return a paginated list of Duel Tree earnings for a specific user (binary_dual_tree_* credits),
-        sorted by earning time (desc).
+        Return a paginated list of Duel Tree earnings for a specific user.
+        Definition: Duel Tree = credits with reason == "binary_slot1_full" in wallet_ledger.
+        Sorted by earning time (desc).
         Columns: uid, time, upline uid, partner count, rank, amount, reason.
         """
         try:
@@ -679,10 +680,11 @@ class WalletService:
                 user_oid = user_id
 
             # Get wallet ledger entries for this specific user
+            # Only include Duel Tree earnings: binary_slot1_full
             match_filter = {
                 "user_id": user_oid,
                 "type": "credit",
-                "reason": {"$regex": "^binary_dual_tree_"},
+                "reason": "binary_slot1_full",
                 "currency": currency.upper()
             }
             
