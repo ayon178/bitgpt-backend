@@ -755,6 +755,23 @@ class JackpotService:
             # Check if current date is within the jackpot session
             is_active = week_start <= current_date <= week_end
             
+            # Get total Jackpot fund amounts from BonusFund (calculate before checking is_active)
+            total_global_usdt = 0.0
+            total_global_bnb = 0.0
+            try:
+                from modules.income.bonus_fund import BonusFund
+                # Get USDT fund (from matrix program)
+                usdt_fund = BonusFund.objects(fund_type='jackpot_entry', program='matrix').first()
+                if usdt_fund:
+                    total_global_usdt = float(usdt_fund.current_balance or 0.0)
+                
+                # Get BNB fund (from binary program)
+                bnb_fund = BonusFund.objects(fund_type='jackpot_entry', program='binary').first()
+                if bnb_fund:
+                    total_global_bnb = float(bnb_fund.current_balance or 0.0)
+            except Exception as e:
+                print(f"Error fetching jackpot global funds: {e}")
+            
             if not is_active:
                 response = {
                     "success": True,
@@ -763,7 +780,9 @@ class JackpotService:
                     "total_entries": 0,
                     "total_fund": Decimal('0.0'),
                     "week_start": week_start,
-                    "week_end": week_end
+                    "week_end": week_end,
+                    "total_global_usdt": total_global_usdt,  # Total Jackpot fund in USDT
+                    "total_global_bnb": total_global_bnb,    # Total Jackpot fund in BNB
                 }
                 
                 # Add user entry count if user_id provided
@@ -800,7 +819,9 @@ class JackpotService:
                 "week_end": week_end,
                 "entry_fees_total": fund.entry_fees_total if fund else Decimal('0.0'),
                 "binary_contributions_total": fund.binary_contributions_total if fund else Decimal('0.0'),
-                "rollover_from_previous": fund.rollover_from_previous if fund else Decimal('0.0')
+                "rollover_from_previous": fund.rollover_from_previous if fund else Decimal('0.0'),
+                "total_global_usdt": total_global_usdt,  # Total Jackpot fund in USDT
+                "total_global_bnb": total_global_bnb,    # Total Jackpot fund in BNB
             }
             
             # If user_id provided, get user's own entry count for current session
