@@ -139,6 +139,50 @@ class FundDistributionService:
                             total_distributed += amount * (percentage / Decimal('100.0'))
                     except Exception:
                         pass
+                elif income_type == "shareholders":
+                    # Route to shareholders fund/account
+                    dist_amount = amount * (percentage / Decimal('100.0'))
+                    if dist_amount > 0:
+                        try:
+                            # Use importlib because 'global' is a Python keyword
+                            import importlib
+                            global_service_module = importlib.import_module('modules.global.service')
+                            GlobalService = global_service_module.GlobalService
+                            from modules.user.model import ShareholdersFund
+                            gs = GlobalService()
+                            
+                            # IMPORTANT: process_shareholders_fund_distribution expects full transaction amount
+                            # and calculates 5% internally. Since we already have the 5% amount (dist_amount),
+                            # we need to pass the full amount OR modify to pass the calculated 5% directly.
+                            # For now, pass the full amount so function can calculate 5% correctly
+                            shareholders_result = gs.process_shareholders_fund_distribution(
+                                amount,  # Pass full amount, function will calculate 5% internally
+                                transaction_type='binary_distribution'
+                            )
+                            
+                            if shareholders_result.get("success"):
+                                distributions.append({
+                                    "type": "shareholders",
+                                    "amount": float(dist_amount),
+                                    "shareholders_fund_updated": True,
+                                    "message": "Shareholders fund updated"
+                                })
+                                total_distributed += dist_amount
+                            else:
+                                print(f"[BINARY_DIST] Shareholders fund update failed: {shareholders_result.get('error')}")
+                                distributions.append({
+                                    "type": "shareholders",
+                                    "amount": float(dist_amount),
+                                    "shareholders_fund_updated": False,
+                                    "error": shareholders_result.get("error")
+                                })
+                                total_distributed += dist_amount
+                        except Exception as e:
+                            print(f"[BINARY_DIST] Error routing shareholders fund: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            # Still track the distribution amount
+                            total_distributed += dist_amount
                 else:
                     # Direct distribution to fund pools
                     dist_amount = amount * (percentage / Decimal('100.0'))
@@ -476,29 +520,284 @@ class FundDistributionService:
 
     def _distribute_binary_levels(self, user_id: str, amount: Decimal, percentage: Decimal,
                                  slot_no: int, tx_hash: str, currency: str = 'BNB') -> List[Dict[str, Any]]:
-        """Distribute Binary level distribution (60% treated as 100%)"""
+        """
+        Distribute Binary level distribution (60% treated as 100%)
+        
+        Key Logic:
+        1. Find Nth upline from activating user (using base tree, slot 1)
+        2. Start from Nth upline as Level 1
+        3. Traverse upward for levels 1-16
+        4. For each level, check if user has Slot N activated
+        5. If yes → give reward to that user
+        6. If no or upline not found → give to Mother Account
+        """
         distributions = []
         level_amount = amount * (percentage / Decimal('100.0'))
         
-        # Get user's tree placement for this slot
-        user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program='binary', slot_no=slot_no, is_active=True).first()
-        if not user_placement:
+        # Step 1: Find Nth upline from activating user using base tree (slot 1)
+        nth_upline_id = self._get_nth_upline_by_slot_for_distribution(user_id, slot_no)
+        
+        if not nth_upline_id:
+            # No Nth upline found → send all level distribution to Mother Account
+            print(f"[BINARY_LEVEL_DIST] No {slot_no}th upline found for user {user_id}, sending all to Mother Account")
+            total_level_amount = level_amount
+            if total_level_amount > 0:
+                distribution = self._create_mother_account_income_event(
+                    source_id=user_id,
+                    program='binary',
+                    slot_no=slot_no,
+                    amount=total_level_amount,
+                    tx_hash=tx_hash,
+                    description=f"Binary Level Distribution (No {slot_no}th upline) - Mother Account",
+                    currency=currency
+                )
+                distributions.append(distribution)
             return distributions
         
-        # Distribute to each level according to breakdown
-        for level, level_percentage in self.binary_level_breakdown.items():
+        print(f"[BINARY_LEVEL_DIST] Found {slot_no}th upline: {nth_upline_id} for user {user_id}")
+        
+        # Step 2: Start from Nth upline (Level 1) and traverse upward for levels 1-16
+        for level in range(1, 17):  # Levels 1-16
+            level_percentage = self.binary_level_breakdown.get(level, Decimal('0'))
+            if level_percentage <= 0:
+                continue
+                
             level_dist_amount = level_amount * (level_percentage / Decimal('100.0'))
-            if level_dist_amount > 0:
-                # Find upline at this level
-                upline_id = self._find_upline_at_level(user_id, level, 'binary', slot_no)
-                if upline_id:
+            
+            if level_dist_amount <= 0:
+                continue
+            
+            # Level 1 = Nth upline itself (0 steps up)
+            # Level 2 = 1 step up from Nth upline
+            # Level 3 = 2 steps up from Nth upline
+            # etc.
+            if level == 1:
+                level_user_id = nth_upline_id
+            else:
+                # For levels 2-16, traverse upward from Nth upline
+                # Level 2 needs 1 step, Level 3 needs 2 steps, etc.
+                level_user_id = self._traverse_upline_upward(nth_upline_id, level - 1)
+            
+            # Step 3: Check if level user has Slot N activated
+            if level_user_id:
+                has_slot_activated = self._check_slot_activation(level_user_id, 'binary', slot_no)
+                
+                if has_slot_activated:
+                    # User has Slot N activated → give reward to this user
+                    print(f"[BINARY_LEVEL_DIST] Level {level}: User {level_user_id} has Slot {slot_no} activated, crediting {level_dist_amount}")
                     distribution = self._create_income_event(
-                        upline_id, user_id, 'binary', slot_no, f'level_{level}_distribution',
-                        level_dist_amount, level_percentage, tx_hash, f"Binary Level {level} Distribution", currency
+                        recipient_id=str(level_user_id),
+                        source_id=user_id,
+                        program='binary',
+                        slot_no=slot_no,
+                        income_type='level_payout',  # Use 'level_payout' as IncomeEvent only accepts this
+                        amount=level_dist_amount,
+                        percentage=level_percentage,
+                        tx_hash=tx_hash,
+                        description=f"Binary Level {level} Distribution",
+                        currency=currency
                     )
                     distributions.append(distribution)
+                else:
+                    # User doesn't have Slot N activated → send to Mother Account
+                    print(f"[BINARY_LEVEL_DIST] Level {level}: User {level_user_id} does NOT have Slot {slot_no} activated, sending to Mother Account")
+                    distribution = self._create_mother_account_income_event(
+                        source_id=user_id,
+                        program='binary',
+                        slot_no=slot_no,
+                        amount=level_dist_amount,
+                        tx_hash=tx_hash,
+                        description=f"Binary Level {level} Distribution (Slot {slot_no} not activated) - Mother Account",
+                        currency=currency
+                    )
+                    distributions.append(distribution)
+            else:
+                # No upline found at this level → send to Mother Account
+                print(f"[BINARY_LEVEL_DIST] Level {level}: No upline found, sending to Mother Account")
+                distribution = self._create_mother_account_income_event(
+                    source_id=user_id,
+                    program='binary',
+                    slot_no=slot_no,
+                    amount=level_dist_amount,
+                    tx_hash=tx_hash,
+                    description=f"Binary Level {level} Distribution (No upline) - Mother Account",
+                    currency=currency
+                )
+                distributions.append(distribution)
         
         return distributions
+    
+    def _get_nth_upline_by_slot_for_distribution(self, user_id: str, slot_no: int) -> Optional[ObjectId]:
+        """
+        Find Nth upline from activating user using base binary tree (slot 1).
+        This ensures ROOT ancestry is correctly identified even if higher-slot placements are absent.
+        """
+        try:
+            # Start from user's base placement (slot 1 preferred)
+            current = TreePlacement.objects(
+                user_id=ObjectId(user_id),
+                program='binary',
+                slot_no=1,
+                is_active=True
+            ).first()
+            
+            if not current:
+                print(f"[BINARY_LEVEL_DIST] No base placement found for user {user_id}")
+                return None
+            
+            steps = 0
+            upline = getattr(current, 'upline_id', None) or getattr(current, 'parent_id', None)
+            
+            while upline and steps < slot_no:
+                steps += 1
+                if steps == slot_no:
+                    return upline
+                
+                # Get next ancestor from base tree (slot 1)
+                next_pl = TreePlacement.objects(
+                    user_id=upline,
+                    program='binary',
+                    slot_no=1,
+                    is_active=True
+                ).first()
+                
+                if not next_pl:
+                    break
+                    
+                upline = getattr(next_pl, 'upline_id', None) or getattr(next_pl, 'parent_id', None)
+            
+            print(f"[BINARY_LEVEL_DIST] Reached root or missing upline at step {steps}, needed step {slot_no}")
+            return None
+            
+        except Exception as e:
+            print(f"[BINARY_LEVEL_DIST] Error finding {slot_no}th upline: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _traverse_upline_upward(self, start_upline_id: ObjectId, steps: int) -> Optional[ObjectId]:
+        """
+        Traverse upward from a starting upline for the specified number of steps.
+        Uses base binary tree (slot 1) for traversal.
+        """
+        try:
+            current_id = start_upline_id
+            steps_taken = 0
+            
+            while steps_taken < steps:
+                # Get current upline's placement in base tree (slot 1)
+                current_placement = TreePlacement.objects(
+                    user_id=current_id,
+                    program='binary',
+                    slot_no=1,
+                    is_active=True
+                ).first()
+                
+                if not current_placement:
+                    return None
+                
+                # Get next upline (parent in base tree)
+                next_upline = getattr(current_placement, 'upline_id', None) or getattr(current_placement, 'parent_id', None)
+                
+                if not next_upline:
+                    return None
+                
+                current_id = next_upline
+                steps_taken += 1
+            
+            return current_id
+            
+        except Exception as e:
+            print(f"[BINARY_LEVEL_DIST] Error traversing upline upward: {e}")
+            return None
+    
+    def _check_slot_activation(self, user_id: ObjectId, program: str, slot_no: int) -> bool:
+        """
+        Check if a user has activated a specific slot.
+        Returns True if SlotActivation exists with program='binary', slot_no=slot_no, status='completed'.
+        """
+        try:
+            from modules.slot.model import SlotActivation
+            activation = SlotActivation.objects(
+                user_id=user_id,
+                program=program,
+                slot_no=slot_no,
+                status='completed'
+            ).first()
+            return activation is not None
+        except Exception as e:
+            print(f"[BINARY_LEVEL_DIST] Error checking slot activation for user {user_id}, slot {slot_no}: {e}")
+            return False
+    
+    def _create_mother_account_income_event(self, source_id: str, program: str, slot_no: int,
+                                            amount: Decimal, tx_hash: str, description: str,
+                                            currency: str = 'BNB') -> Dict[str, Any]:
+        """
+        Create income event for Mother Account when upline not found or slot not activated.
+        Also credits Mother Account wallet.
+        """
+        try:
+            mother_account_id = ObjectId("000000000000000000000000")
+            
+            # Create IncomeEvent for tracking (using level_payout as income_type)
+            income_event = IncomeEvent(
+                user_id=mother_account_id,
+                source_user_id=ObjectId(source_id),
+                program=program,
+                slot_no=slot_no,
+                income_type='level_payout',  # Using existing income_type for mother account
+                amount=amount,
+                percentage=Decimal('0'),
+                tx_hash=tx_hash,
+                status='completed',
+                description=description,
+                created_at=datetime.utcnow()
+            )
+            income_event.save()
+            
+            # Credit Mother Account wallet
+            try:
+                from modules.wallet.service import WalletService
+                wallet_service = WalletService()
+                wallet_reason = f"{program}_mother_account_level_distribution"
+                credit_result = wallet_service.credit_main_wallet(
+                    user_id=str(mother_account_id),
+                    amount=amount,
+                    currency=currency,
+                    reason=wallet_reason,
+                    tx_hash=tx_hash
+                )
+                
+                return {
+                    "success": True,
+                    "type": "mother_account_level_distribution",
+                    "recipient_id": str(mother_account_id),
+                    "source_id": source_id,
+                    "amount": float(amount),
+                    "wallet_credited": credit_result.get("success", False),
+                    "description": description
+                }
+            except Exception as e:
+                print(f"[BINARY_LEVEL_DIST] Error crediting Mother Account wallet: {e}")
+                return {
+                    "success": True,
+                    "type": "mother_account_level_distribution",
+                    "recipient_id": str(mother_account_id),
+                    "source_id": source_id,
+                    "amount": float(amount),
+                    "wallet_credited": False,
+                    "description": description,
+                    "error": str(e)
+                }
+                
+        except Exception as e:
+            print(f"[BINARY_LEVEL_DIST] Error creating Mother Account income event: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     def _distribute_matrix_levels(self, user_id: str, amount: Decimal, percentage: Decimal,
                                  slot_no: int, tx_hash: str, currency: str = 'USDT') -> List[Dict[str, Any]]:

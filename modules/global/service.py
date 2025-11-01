@@ -4041,9 +4041,9 @@ class GlobalService:
                         created_at=datetime.utcnow()
                     )
 
-                # Add contribution to fund
-                shareholders_fund.total_contributed += shareholders_contribution
-                shareholders_fund.available_amount += shareholders_contribution
+                # Add contribution to fund (convert Decimal to float for FloatField)
+                shareholders_fund.total_contributed = float(Decimal(str(shareholders_fund.total_contributed or 0.0)) + shareholders_contribution)
+                shareholders_fund.available_amount = float(Decimal(str(shareholders_fund.available_amount or 0.0)) + shareholders_contribution)
                 shareholders_fund.last_updated = datetime.utcnow()
                 shareholders_fund.save()
 
