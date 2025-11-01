@@ -526,11 +526,21 @@ async def get_leadership_stipend_income(
         ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
         
         # If LeadershipStipend exists but tiers are empty, initialize them
-        if ls and (not ls.tiers or len(ls.tiers) == 0):
-            from modules.leadership_stipend.router import _initialize_leadership_stipend_tiers
-            ls.tiers = _initialize_leadership_stipend_tiers()
-            ls.save()
-            print(f"✅ Auto-initialized Leadership Stipend tiers for user {user_id}")
+        if ls:
+            if not ls.tiers or len(ls.tiers) == 0:
+                try:
+                    from modules.leadership_stipend.router import _initialize_leadership_stipend_tiers
+                    ls.tiers = _initialize_leadership_stipend_tiers()
+                    ls.save()
+                    # Reload to ensure tiers are persisted
+                    ls.reload()
+                    print(f"✅ Auto-initialized Leadership Stipend tiers for user {user_id}, count: {len(ls.tiers)}")
+                except Exception as e:
+                    print(f"❌ Error initializing tiers for user {user_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"✅ User {user_id} already has {len(ls.tiers)} tiers")
         
         # Preload payments first and compute per-slot totals
         from modules.leadership_stipend.model import LeadershipStipendPayment as _LSP
