@@ -341,10 +341,35 @@ class SparkService:
             }
         }
 
+        # Get total global Spark Bonus fund amounts from BonusFund (separate USDT and BNB)
+        total_global_usdt = 0.0
+        total_global_bnb = 0.0
+        try:
+            from modules.income.bonus_fund import BonusFund
+            # Get USDT fund (from matrix program)
+            usdt_fund = BonusFund.objects(fund_type='spark_bonus', program='matrix').first()
+            if usdt_fund:
+                total_global_usdt = float(usdt_fund.current_balance or 0.0)
+            
+            # Get BNB fund (from binary program)
+            bnb_fund = BonusFund.objects(fund_type='spark_bonus', program='binary').first()
+            if bnb_fund:
+                total_global_bnb = float(bnb_fund.current_balance or 0.0)
+        except Exception as e:
+            print(f"Error fetching spark bonus global funds: {e}")
+        
+        # Add global totals to each slot (since we don't track per-slot, use global totals)
+        slots_with_global = []
+        for slot in slots_combined:
+            slot_with_global = slot.copy()
+            slot_with_global["total_global_usdt"] = total_global_usdt  # Global total for reference
+            slot_with_global["total_global_bnb"] = total_global_bnb    # Global total for reference
+            slots_with_global.append(slot_with_global)
+        
         return {
             "success": True,
             "funds": funds,
-            "slots": slots_combined,
+            "slots": slots_with_global,  # Now includes global totals per slot
             "user": {
                 "user_id": user_id,
                 "is_triple_entry_eligible": is_user_eligible,
@@ -356,6 +381,9 @@ class SparkService:
             "baseline_amount": funds.get((currency or "USDT").upper(), {}).get("baseline_amount"),
             "total_allocated": funds.get((currency or "USDT").upper(), {}).get("total_allocated"),
             "unallocated": funds.get((currency or "USDT").upper(), {}).get("unallocated"),
+            # Global totals (outside slots = global total)
+            "total_global_usdt": total_global_usdt,  # Total Spark Bonus fund in USDT
+            "total_global_bnb": total_global_bnb,    # Total Spark Bonus fund in BNB
         }
 
     # ------------------ Claim Processing ------------------
