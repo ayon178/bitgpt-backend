@@ -524,6 +524,14 @@ async def get_leadership_stipend_income(
         from decimal import Decimal
 
         ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+        
+        # If LeadershipStipend exists but tiers are empty, initialize them
+        if ls and (not ls.tiers or len(ls.tiers) == 0):
+            from modules.leadership_stipend.router import _initialize_leadership_stipend_tiers
+            ls.tiers = _initialize_leadership_stipend_tiers()
+            ls.save()
+            print(f"✅ Auto-initialized Leadership Stipend tiers for user {user_id}")
+        
         # Preload payments first and compute per-slot totals
         from modules.leadership_stipend.model import LeadershipStipendPayment as _LSP
         pay_q = {"user_id": ObjectId(user_id)}
@@ -550,8 +558,23 @@ async def get_leadership_stipend_income(
                 "paid_at": p.paid_at,
             })
 
+        # Get total Leadership Stipend fund amounts from BonusFund (calculate before checking ls)
+        from modules.income.bonus_fund import BonusFund
+        total_global_bnb = 0.0
+        total_global_usdt = 0.0
+        
+        # Get BNB fund (from binary program)
+        bnb_fund = BonusFund.objects(fund_type='leadership_stipend', program='binary').first()
+        if bnb_fund:
+            total_global_bnb = float(bnb_fund.current_balance or 0.0)
+        
+        # Get USDT fund (from matrix program)
+        usdt_fund = BonusFund.objects(fund_type='leadership_stipend', program='matrix').first()
+        if usdt_fund:
+            total_global_usdt = float(usdt_fund.current_balance or 0.0)
+        
         if not ls:
-            # If user not in stipend yet, still return payments summary
+            # If user not in stipend yet, still return payments summary with global totals
             return success_response({
                 "user_id": user_id,
                 "summary": {
@@ -563,11 +586,13 @@ async def get_leadership_stipend_income(
                     "total_earned": 0,
                     "total_paid": 0,
                     "pending_amount": 0,
+                    "total_global_bnb": total_global_bnb,  # Total Leadership Stipend fund in BNB
+                    "total_global_usdt": total_global_usdt,  # Total Leadership Stipend fund in USDT
                 },
                 "tiers": [],
                 "payments": payments,
             }, "Leadership Stipend income fetched")
-
+        
         # Build tier summaries
         tiers = []
         day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -652,6 +677,8 @@ async def get_leadership_stipend_income(
                 "total_earned": ls.total_earned,
                 "total_paid": ls.total_paid,
                 "pending_amount": ls.pending_amount,
+                "total_global_bnb": total_global_bnb,  # Total Leadership Stipend fund in BNB
+                "total_global_usdt": total_global_usdt,  # Total Leadership Stipend fund in USDT
             },
             "tiers": tiers,
             "payments": payments,

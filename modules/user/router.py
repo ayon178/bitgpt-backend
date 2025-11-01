@@ -546,6 +546,14 @@ async def get_leadership_stipend_income(
         from decimal import Decimal
 
         ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+        
+        # If LeadershipStipend exists but tiers are empty, initialize them
+        if ls and (not ls.tiers or len(ls.tiers) == 0):
+            from modules.leadership_stipend.router import _initialize_leadership_stipend_tiers
+            ls.tiers = _initialize_leadership_stipend_tiers()
+            ls.save()
+            print(f"✅ Auto-initialized Leadership Stipend tiers for user {user_id}")
+        
         # Preload payments first and compute per-slot totals
         from modules.leadership_stipend.model import LeadershipStipendPayment as _LSP
         pay_q = {"user_id": ObjectId(user_id)}
