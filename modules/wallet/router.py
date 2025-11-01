@@ -525,22 +525,64 @@ async def get_leadership_stipend_income(
 
         ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
         
+        # If LeadershipStipend doesn't exist, create it with initialized tiers
+        if not ls:
+            try:
+                from modules.leadership_stipend.router import _initialize_leadership_stipend_tiers
+                from datetime import datetime
+                ls = LeadershipStipend(
+                    user_id=ObjectId(user_id),
+                    joined_at=datetime.utcnow(),
+                    is_active=True,
+                    tiers=_initialize_leadership_stipend_tiers()
+                )
+                ls.save()
+                print(f"✅ Auto-created Leadership Stipend record for user {user_id} with {len(ls.tiers)} tiers")
+            except Exception as e:
+                print(f"❌ Error creating Leadership Stipend record for user {user_id}: {e}")
+                import traceback
+                traceback.print_exc()
+        
         # If LeadershipStipend exists but tiers are empty, initialize them
         if ls:
-            if not ls.tiers or len(ls.tiers) == 0:
+            # Check if tiers need initialization (None, empty list, or length 0)
+            tiers_needs_init = False
+            try:
+                if ls.tiers is None:
+                    tiers_needs_init = True
+                    print(f"⚠️ User {user_id} has None tiers")
+                elif not hasattr(ls.tiers, '__len__'):
+                    tiers_needs_init = True
+                    print(f"⚠️ User {user_id} tiers has no len attribute")
+                elif len(ls.tiers) == 0:
+                    tiers_needs_init = True
+                    print(f"⚠️ User {user_id} has empty tiers list")
+            except Exception as e:
+                tiers_needs_init = True
+                print(f"⚠️ Error checking tiers for user {user_id}: {e}")
+            
+            if tiers_needs_init:
                 try:
                     from modules.leadership_stipend.router import _initialize_leadership_stipend_tiers
                     ls.tiers = _initialize_leadership_stipend_tiers()
                     ls.save()
-                    # Reload to ensure tiers are persisted
+                    # Force reload to ensure tiers are persisted
                     ls.reload()
-                    print(f"✅ Auto-initialized Leadership Stipend tiers for user {user_id}, count: {len(ls.tiers)}")
+                    # Verify tiers were saved
+                    if ls.tiers and len(ls.tiers) > 0:
+                        print(f"✅ Auto-initialized Leadership Stipend tiers for user {user_id}, count: {len(ls.tiers)}")
+                    else:
+                        print(f"⚠️ Tiers still empty after save for user {user_id}, attempting manual reload...")
+                        # Try fetching fresh from DB
+                        ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+                        if ls and ls.tiers and len(ls.tiers) > 0:
+                            print(f"✅ Tiers found after manual reload: {len(ls.tiers)}")
                 except Exception as e:
                     print(f"❌ Error initializing tiers for user {user_id}: {e}")
                     import traceback
                     traceback.print_exc()
             else:
-                print(f"✅ User {user_id} already has {len(ls.tiers)} tiers")
+                print(f"✅ User {user_id} already has {len(ls.tiers) if ls.tiers else 0} tiers")
         
         # Preload payments first and compute per-slot totals
         from modules.leadership_stipend.model import LeadershipStipendPayment as _LSP
@@ -607,7 +649,20 @@ async def get_leadership_stipend_income(
         tiers = []
         day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         
-        for t in ls.tiers:
+        # Ensure ls exists and has tiers before iterating
+        if not ls:
+            # This shouldn't happen if auto-create worked, but handle gracefully
+            print(f"⚠️ Warning: ls is None for user {user_id} after initialization attempt")
+        elif not ls.tiers or len(ls.tiers) == 0:
+            print(f"⚠️ Warning: User {user_id} has LeadershipStipend but tiers are still empty after initialization")
+            # Try one more time to fetch from DB
+            ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
+            if ls and ls.tiers and len(ls.tiers) > 0:
+                print(f"✅ Tiers found after final DB fetch: {len(ls.tiers)}")
+        
+        # Iterate over tiers (will be empty if ls or ls.tiers is None/empty)
+        tiers_to_iterate = ls.tiers if ls and ls.tiers else []
+        for t in tiers_to_iterate:
             if t.slot_number < 10 or t.slot_number > 16:
                 continue
             if slot and t.slot_number != int(slot):
