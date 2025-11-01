@@ -668,6 +668,23 @@ async def get_royal_captain_claim_history(
         service = RoyalCaptainService()
         claimable_info = service.get_claimable_amount(user_id)
         
+        # Get total Royal Captain fund amounts from BonusFund
+        total_global_usdt = 0.0
+        total_global_bnb = 0.0
+        try:
+            from modules.income.bonus_fund import BonusFund
+            # Get USDT fund (from matrix program)
+            usdt_fund = BonusFund.objects(fund_type='royal_captain', program='matrix').first()
+            if usdt_fund:
+                total_global_usdt = float(usdt_fund.current_balance or 0.0)
+            
+            # Get BNB fund (from binary program)
+            bnb_fund = BonusFund.objects(fund_type='royal_captain', program='binary').first()
+            if bnb_fund:
+                total_global_bnb = float(bnb_fund.current_balance or 0.0)
+        except Exception as e:
+            print(f"Error fetching royal captain global funds: {e}")
+        
         return success_response({
             "claims": data,
             "claimable_amounts": claimable_info.get("claimable_amounts", {"USDT": 0, "BNB": 0}),
@@ -682,7 +699,9 @@ async def get_royal_captain_claim_history(
                 "limit": limit,
                 "total": total,
                 "total_pages": (total + limit - 1) // limit,
-            }
+            },
+            "total_global_usdt": total_global_usdt,  # Total Royal Captain fund in USDT
+            "total_global_bnb": total_global_bnb,    # Total Royal Captain fund in BNB
         }, "Royal Captain claim history fetched")
     except Exception as e:
         return error_response(str(e))

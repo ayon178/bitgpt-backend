@@ -782,6 +782,23 @@ async def get_president_reward_claim_history(
             if "eligibility_details" in claimable_info:
                 eligibility["eligibility_details"] = claimable_info["eligibility_details"]
         
+        # Get total President Reward fund amounts from BonusFund
+        total_global_usdt = 0.0
+        total_global_bnb = 0.0
+        try:
+            from modules.income.bonus_fund import BonusFund
+            # Get USDT fund (from matrix program)
+            usdt_fund = BonusFund.objects(fund_type='president_reward', program='matrix').first()
+            if usdt_fund:
+                total_global_usdt = float(usdt_fund.current_balance or 0.0)
+            
+            # Get BNB fund (from binary program)
+            bnb_fund = BonusFund.objects(fund_type='president_reward', program='binary').first()
+            if bnb_fund:
+                total_global_bnb = float(bnb_fund.current_balance or 0.0)
+        except Exception as e:
+            print(f"Error fetching president reward global funds: {e}")
+        
         return success_response(
             data={
                 "claims": claims_list,
@@ -792,7 +809,9 @@ async def get_president_reward_claim_history(
                     "limit": limit,
                     "total": total,
                     "total_pages": (total + limit - 1) // limit
-                }
+                },
+                "total_global_usdt": total_global_usdt,  # Total President Reward fund in USDT
+                "total_global_bnb": total_global_bnb,    # Total President Reward fund in BNB
             },
             message="President Reward claim history fetched"
         )
