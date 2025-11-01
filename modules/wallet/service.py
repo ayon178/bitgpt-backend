@@ -1082,12 +1082,24 @@ class WalletService:
                     "description": entry.source_description or entry.bonus_name or ""
                 })
 
+            # Get total Newcomer Growth Support fund amount from BonusFund
+            total_global_usdt = 0.0
+            try:
+                from ..income.bonus_fund import BonusFund
+                # Get USDT fund (from matrix program - newcomer support is part of matrix)
+                usdt_fund = BonusFund.objects(fund_type='newcomer_support', program='matrix').first()
+                if usdt_fund:
+                    total_global_usdt = float(usdt_fund.current_balance or 0.0)
+            except Exception as e:
+                print(f"Error fetching newcomer support fund: {e}")
+
             return {
                 "success": True,
                 "data": {
                     "page": page,
                     "limit": limit,
                     "total": total,
+                    "total_global_usdt": total_global_usdt,  # Total Newcomer Growth Support fund in USDT
                     "items": rows
                 }
             }
