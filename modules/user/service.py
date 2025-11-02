@@ -259,8 +259,9 @@ class UserService:
     
     def get_my_community(self, user_id: str, program_type: str = "binary", slot_number: Optional[int] = None, page: int = 1, limit: int = 10) -> Dict[str, Any]:
         """
-        Get community members (direct referrals) for a user
-        Filters by program and optionally by slot
+        Get ALL community members (all downline users, all levels) for a user
+        Slot-wise filtering: Only users from specified slot tree
+        Uses BFS traversal to get all descendants
         """
         try:
             from modules.tree.model import TreePlacement
@@ -276,29 +277,42 @@ class UserService:
             
             user_oid = ObjectId(user_id)
             
-            # Get user IDs who are direct referrals AND joined the specified program
-            # Use parent_id for direct referrals (not upline_id which is for tree placement)
-            placement_query = {
-                "parent_id": user_oid,
-                "program": program_type
-            }
+            # Default to Slot 1 if not specified
+            if slot_number is None:
+                slot_number = 1
             
-            # Add slot filter if specified
-            if slot_number is not None:
-                placement_query["slot_no"] = slot_number
-            
-            # Get TreePlacement entries for direct referrals in this program
-            placements = TreePlacement.objects(**placement_query).order_by('-created_at')
-            
-            # Collect unique user_ids (avoid duplicates from multiple slots)
+            # Use BFS traversal to get ALL downline users (all levels) in this slot tree
             unique_user_ids = []
-            seen_users = set()
+            queue = [user_oid]  # Start from root user
+            visited = set()
+            visited.add(str(user_oid))  # Don't include root user in results
             
-            for placement in placements:
-                user_id_str = str(placement.user_id)
-                if user_id_str not in seen_users:
-                    seen_users.add(user_id_str)
-                    unique_user_ids.append(placement.user_id)
+            print(f"[MY-COMMUNITY] Starting BFS traversal for user {user_id}, program={program_type}, slot={slot_number}")
+            
+            # BFS traversal: collect all descendants
+            while queue:
+                current_upline_id = queue.pop(0)
+                
+                # Get all children of current user in this slot tree
+                children_query = {
+                    "upline_id": current_upline_id,
+                    "program": program_type,
+                    "slot_no": slot_number,
+                    "is_active": True
+                }
+                
+                children = TreePlacement.objects(**children_query).order_by('created_at')
+                
+                for child_placement in children:
+                    child_user_id_str = str(child_placement.user_id)
+                    
+                    # Avoid duplicates and avoid cycles
+                    if child_user_id_str not in visited:
+                        visited.add(child_user_id_str)
+                        unique_user_ids.append(child_placement.user_id)
+                        queue.append(child_placement.user_id)  # Add to queue for next level traversal
+            
+            print(f"[MY-COMMUNITY] Found {len(unique_user_ids)} total downline users in slot {slot_number} tree")
             
             # Get total count
             total_count = len(unique_user_ids)
