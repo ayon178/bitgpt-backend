@@ -713,7 +713,7 @@ async def get_user_by_uid(uid: str):
 async def get_my_team(
     user_id: str = Query(..., description="User ID"),
     program: str = Query(..., description="Program type: binary or matrix"),
-    level: int = Query(..., ge=1, le=16, description="Tree level (1-16)"),
+    level: int = Query(None, ge=1, le=16, description="Tree level (1-16). If not provided, returns all direct referrals"),
     slot_no: int = Query(None, description="Slot number filter (default: 1)")
 ):
     """

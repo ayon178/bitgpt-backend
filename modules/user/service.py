@@ -365,17 +365,20 @@ class UserService:
                 "error": f"Failed to get community members: {str(e)}"
             }
 
-    def get_my_team(self, user_id: str, program: str, level: int, slot_no: int = None) -> Dict[str, Any]:
+    def get_my_team(self, user_id: str, program: str, level: int = None, slot_no: int = None) -> Dict[str, Any]:
         """
         Get team members for a specific program and level
         
-        Level logic:
+        If level is provided:
         - Uses upline_id for tree structure (not parent_id)
         - Level 1: Direct tree children (upline_id = user_id)
         - Level 2: Grandchildren (children of Level 1)
         - Level 3: Great-grandchildren (children of Level 2)
         
-        Level maximum:
+        If level is NOT provided:
+        - Returns all direct referrals (parent_id = user_id) regardless of tree placement
+        
+        Level maximum (when level is provided):
         - Binary: L1=2, L2=4, L3=8, etc (2^level)
         - Matrix: L1=3, L2=9, L3=27, etc (3^level)
         
@@ -399,6 +402,54 @@ class UserService:
             # Default to Slot 1 if not specified
             if slot_no is None:
                 slot_no = 1
+            
+            # If level is not provided, return ALL direct referrals (parent_id = user_id)
+            if level is None:
+                # Get all direct referrals (who this user directly referred)
+                direct_referrals = TreePlacement.objects(
+                    parent_id=uid,  # Direct referrals use parent_id
+                    program=program_lower,
+                    slot_no=slot_no,
+                    is_active=True
+                ).order_by('created_at')
+                
+                team_data = []
+                for member in direct_referrals:
+                    user = User.objects(id=member.user_id).first()
+                    if user:
+                        # Fetch inviter's refer_code (should be this user)
+                        inviter_code = None
+                        try:
+                            inviter = User.objects(id=uid).only('refer_code').first()
+                            inviter_code = getattr(inviter, 'refer_code', None) if inviter else None
+                        except Exception:
+                            inviter_code = None
+                        
+                        team_data.append({
+                            "s_no": len(team_data) + 1,
+                            "id": str(user.id),
+                            "uid": user.uid,
+                            "refer_code": getattr(user, 'refer_code', None),
+                            "inviter_refer_code": inviter_code,
+                            "address": user.wallet_address,
+                            "inviter_id": str(user.refered_by) if user.refered_by else "--",
+                            "activation_date": member.created_at.strftime("%d %b %Y (%H:%M)"),
+                            "rank": "--",  # TODO: Implement rank calculation
+                            "direct_partner": self._count_direct_partners(str(user.id))
+                        })
+                
+                return {
+                    "success": True,
+                    "data": {
+                        "program": program_lower,
+                        "level": None,
+                        "slot_no": slot_no,
+                        "level_maximum": None,
+                        "total_members": len(team_data),
+                        "displayed_members": len(team_data),
+                        "team_members": team_data
+                    }
+                }
             
             # Recursive function to get descendants at specific depth using upline_id
             def get_descendants_at_depth(upline_id, current_depth, target_depth):
@@ -437,17 +488,20 @@ class UserService:
                     seen_users.add(user_id_str)
                     unique_members.append(member)
             
+            # Store actual total count BEFORE limiting
+            actual_total_members = len(unique_members)
+            
             # Calculate level maximum based on program
             if program_lower == 'binary':
                 level_max = 2 ** level  # Binary: 2^level (2, 4, 8, 16, ...)
             else:  # matrix
                 level_max = 3 ** level  # Matrix: 3^level (3, 9, 27, ...)
             
-            # Apply level maximum limit
-            unique_members = unique_members[:level_max]
+            # Apply level maximum limit for display (but keep actual total)
+            limited_members = unique_members[:level_max]
             
             team_data = []
-            for member in unique_members:
+            for member in limited_members:
                 # Get user details
                 user = User.objects(id=member.user_id).first()
                 if user:
@@ -479,7 +533,8 @@ class UserService:
                     "level": level,
                     "slot_no": slot_no,
                     "level_maximum": level_max,
-                    "total_members": len(team_data),
+                    "total_members": actual_total_members,  # Show actual total, not limited list size
+                    "displayed_members": len(team_data),  # Number of members shown in response
                     "team_members": team_data
                 }
             }
