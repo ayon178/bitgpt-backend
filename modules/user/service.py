@@ -490,26 +490,26 @@ class UserService:
                 # Store actual total count BEFORE limiting
                 actual_total_members = len(team_data)
                 
-                # For level=1, show ALL direct referrals (no limit)
-                # Level maximum is informational only, but we show all actual direct referrals
+                # Apply level maximum limit for level=1
                 if level == 1:
                     if program_lower == 'binary':
-                        level_max = 2 ** 1  # Binary: 2 (informational)
+                        level_max = 2 ** 1  # Binary: Level 1 = 2
                     else:  # matrix
-                        level_max = 3 ** 1  # Matrix: 3 (informational)
+                        level_max = 3 ** 1  # Matrix: Level 1 = 3
                     
-                    # Return ALL direct referrals (no limiting for level=1)
-                    # Level maximum is just informational, actual direct referrals can be more
+                    # Apply level maximum limit for display
+                    limited_members = team_data[:level_max]
+                    
                     return {
                         "success": True,
                         "data": {
                             "program": program_lower,
                             "level": 1,
                             "slot_no": slot_no,
-                            "level_maximum": level_max,  # Informational only
-                            "total_members": actual_total_members,  # All direct referrals
-                            "displayed_members": actual_total_members,  # All shown (no limit)
-                            "team_members": team_data  # Return all, not limited
+                            "level_maximum": level_max,
+                            "total_members": actual_total_members,  # Actual total before limit
+                            "displayed_members": len(limited_members),  # Number shown (limited)
+                            "team_members": limited_members  # Return limited list
                         }
                     }
                 else:
