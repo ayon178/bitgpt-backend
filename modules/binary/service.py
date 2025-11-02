@@ -1,9 +1,10 @@
 from typing import Dict, Any, Optional, List
 from bson import ObjectId
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 from mongoengine.errors import ValidationError
 import os
+import time
 
 from ..user.model import User, EarningHistory
 from ..slot.model import SlotActivation, SlotCatalog
@@ -20,6 +21,10 @@ from utils import ensure_currency_for_program
 
 class BinaryService:
     """Binary Program Business Logic Service"""
+    
+    # Cache for team member counts: {user_id_str: (count, timestamp)}
+    _team_count_cache = {}
+    _cache_ttl_seconds = 300  # 5 minutes cache TTL
     
     def __init__(self):
         self.commission_service = CommissionService()
@@ -1393,9 +1398,9 @@ class BinaryService:
             result = {
                 "tree": {
                     "userId": str(user_info.uid) if user_info and user_info.uid else str(user_oid),
-                    "totalMembers": max(0, total_nodes_count - 1),  # Exclude the root user
-                    "levels": depth,
-                    "nodes": [root_node]  # Root node with nested directDownline structure
+                    "totalMembers": actual_total_team_members,  # Use actual total team count (all levels), not limited tree visualization
+                    "levels": depth,  # Depth of the visualized tree (limited to 3 levels for performance)
+                    "nodes": [root_node]  # Root node with nested directDownline structure (limited to 3 levels for visualization)
                 },
                 "slots": slots_summary,
                 "totalSlots": len(slots_summary),
@@ -1585,38 +1590,136 @@ class BinaryService:
                 "position": "root"
             }, 0, 1
 
-    def _count_all_team_members(self, user_oid) -> int:
+    def _count_all_team_members(self, user_oid, use_cache: bool = True, timeout_seconds: float = 10.0) -> int:
         """
-        Count ALL team members under a user recursively (all levels)
-        Used for slot progress calculation based on member requirements
+        Count ALL team members under a user using optimized BFS traversal (all levels)
+        Used for slot progress calculation based on member requirements.
+        
+        Optimizations:
+        - Uses BFS instead of recursive DFS to reduce stack depth
+        - Implements caching to avoid frequent recalculations
+        - Uses visited set to prevent infinite loops
+        - Adds timeout protection for very large trees
+        - Batches queries where possible
+        
+        Args:
+            user_oid: User ObjectId to count team members for
+            use_cache: Whether to use cached values (default: True)
+            timeout_seconds: Maximum time to spend counting (default: 10 seconds)
+        
+        Returns:
+            Total count of team members, or cached/0 if timeout
         """
         try:
             from ..tree.model import TreePlacement
             
-            def count_recursive(parent_id) -> int:
-                """Recursively count all descendants"""
-                # Get direct children under this user (using upline_id for tree structure)
-                children = TreePlacement.objects(
-                    program='binary',
-                    upline_id=parent_id,
-                    is_active=True
-                )
-                
-                # Count direct children
-                count = children.count()
-                
-                # Recursively count all descendants of each child
-                for child in children:
-                    count += count_recursive(child.user_id)
-                
-                return count
+            user_id_str = str(user_oid)
             
-            # Count all team members recursively
-            total_count = count_recursive(user_oid)
+            # Check cache first
+            if use_cache:
+                cache_entry = self._team_count_cache.get(user_id_str)
+                if cache_entry:
+                    count, timestamp = cache_entry
+                    # Check if cache is still valid (within TTL)
+                    if time.time() - timestamp < self._cache_ttl_seconds:
+                        print(f"Using cached team count for user {user_id_str}: {count}")
+                        return count
+                    else:
+                        # Cache expired, remove it
+                        del self._team_count_cache[user_id_str]
+            
+            start_time = time.time()
+            visited = set()
+            queue = [user_oid]
+            visited.add(user_id_str)
+            total_count = 0
+            max_depth = 50  # Safety limit to prevent infinite loops
+            depth = 0
+            batch_size = 1000  # Process in batches to avoid memory issues
+            
+            # BFS traversal instead of recursive DFS
+            while queue and (time.time() - start_time) < timeout_seconds:
+                # Process current level
+                current_level = queue
+                queue = []
+                
+                # Batch query: get all children for current level users at once
+                if current_level:
+                    # Query all children of users in current level
+                    children_batch = TreePlacement.objects(
+                        program='binary',
+                        upline_id__in=current_level,
+                        is_active=True
+                    ).only('user_id', 'upline_id')
+                    
+                    # Count unique children
+                    children_list = []
+                    for child in children_batch:
+                        child_id_str = str(child.user_id)
+                        if child_id_str not in visited:
+                            visited.add(child_id_str)
+                            children_list.append(child.user_id)
+                            total_count += 1
+                    
+                    # Add children to next level queue
+                    if children_list:
+                        queue.extend(children_list)
+                
+                depth += 1
+                if depth >= max_depth:
+                    print(f"Warning: Reached max depth {max_depth} for user {user_id_str}, stopping count")
+                    break
+                
+                # Memory optimization: clear visited set if it gets too large
+                if len(visited) > 50000:  # If more than 50k nodes visited
+                    # Keep only recent entries to prevent memory issues
+                    # This is a tradeoff - might recount some nodes but prevents OOM
+                    visited.clear()
+                    visited.add(user_id_str)  # Keep root user
+                    print(f"Warning: Large tree detected for user {user_id_str}, cleared visited set to prevent memory issues")
+            
+            # Check if we hit timeout
+            if (time.time() - start_time) >= timeout_seconds:
+                print(f"Warning: Team count calculation timed out for user {user_id_str} after {timeout_seconds}s")
+                # Return current count (may be partial)
+                # Try to use cached value if available (from previous successful calculation)
+                cache_entry = self._team_count_cache.get(user_id_str)
+                if cache_entry:
+                    cached_count, _ = cache_entry
+                    print(f"Returning cached count due to timeout: {cached_count}")
+                    return cached_count
+                # Otherwise return partial count (better than 0)
+                print(f"Returning partial count due to timeout: {total_count}")
+                return total_count
+            
+            # Store in cache
+            if use_cache:
+                self._team_count_cache[user_id_str] = (total_count, time.time())
+                # Clean up old cache entries (keep cache size manageable)
+                if len(self._team_count_cache) > 1000:
+                    current_time = time.time()
+                    expired_keys = [
+                        key for key, (_, ts) in self._team_count_cache.items()
+                        if current_time - ts > self._cache_ttl_seconds
+                    ]
+                    for key in expired_keys[:500]:  # Remove up to 500 expired entries
+                        del self._team_count_cache[key]
+            
+            print(f"Counted {total_count} team members for user {user_id_str} in {time.time() - start_time:.2f}s")
             return total_count
             
         except Exception as e:
-            print(f"Error counting team members: {e}")
+            try:
+                user_id_str = str(user_oid)
+            except:
+                user_id_str = "unknown"
+            print(f"Error counting team members for user {user_id_str}: {e}")
+            # Try to return cached value on error
+            cache_entry = self._team_count_cache.get(user_id_str) if user_id_str != "unknown" else None
+            if cache_entry:
+                cached_count, _ = cache_entry
+                print(f"Returning cached count due to error: {cached_count}")
+                return cached_count
             return 0
 
     def _get_duel_tree_team_members(self, user_oid, slot_no: int) -> List[Dict[str, Any]]:
