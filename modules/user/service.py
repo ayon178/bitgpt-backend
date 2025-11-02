@@ -366,6 +366,9 @@ class UserService:
                         is_active=True
                     ).count()
                     
+                    # Get user rank (same as current_rank)
+                    user_rank = getattr(member, 'current_rank', 'Bitron')
+                    
                     community_members.append({
                         "id": str(member.id),
                         "uid": member.uid,
@@ -379,7 +382,8 @@ class UserService:
                         "binary_joined": member.binary_joined,
                         "matrix_joined": member.matrix_joined,
                         "global_joined": member.global_joined,
-                        "current_rank": getattr(member, 'current_rank', 'Bitron'),
+                        "current_rank": user_rank,
+                        "rank": user_rank,  # Same as current_rank
                         "direct_partner": direct_partners_in_slot  # Slot-specific count
                     })
             
