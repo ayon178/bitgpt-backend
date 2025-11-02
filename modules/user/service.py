@@ -342,11 +342,63 @@ class UserService:
             # Create a map for quick lookup
             user_map = {str(u.id): u for u in referred_users}
             
+            # Batch fetch ranks and slot activations for better performance
+            from ..rank.model import UserRank, Rank
+            from ..slot.model import SlotActivation
+            from ..matrix.model import MatrixActivation
+            
+            # Get all UserRank objects in one query
+            user_rank_map = {}
+            user_ranks = UserRank.objects(user_id__in=paginated_user_ids)
+            for ur in user_ranks:
+                user_rank_map[str(ur.user_id)] = ur
+            
+            # Get all slot activations in batch
+            binary_slots_map = {}
+            matrix_slots_map = {}
+            matrix_activations_map = {}
+            
+            # Binary slots count
+            binary_activations = SlotActivation.objects(
+                user_id__in=paginated_user_ids,
+                program='binary',
+                status='completed'
+            )
+            for activation in binary_activations:
+                user_id_str = str(activation.user_id)
+                binary_slots_map[user_id_str] = binary_slots_map.get(user_id_str, 0) + 1
+            
+            # Matrix slots from SlotActivation
+            matrix_activations_from_slot = SlotActivation.objects(
+                user_id__in=paginated_user_ids,
+                program='matrix',
+                status='completed'
+            )
+            for activation in matrix_activations_from_slot:
+                user_id_str = str(activation.user_id)
+                matrix_slots_map[user_id_str] = matrix_slots_map.get(user_id_str, 0) + 1
+            
+            # Matrix activations from MatrixActivation
+            matrix_activations_list = MatrixActivation.objects(
+                user_id__in=paginated_user_ids,
+                status='completed'
+            )
+            for activation in matrix_activations_list:
+                user_id_str = str(activation.user_id)
+                matrix_activations_map[user_id_str] = matrix_activations_map.get(user_id_str, 0) + 1
+            
+            # Get all Rank objects (cache for rank name lookup)
+            rank_cache = {}
+            ranks = Rank.objects(rank_number__gte=1, rank_number__lte=15)
+            for rank in ranks:
+                rank_cache[rank.rank_number] = rank.rank_name
+            
             # Format response - all users in paginated_user_ids already have slot placement
             community_members = []
             for user_id_obj in paginated_user_ids:
                 member = user_map.get(str(user_id_obj))
                 if member:
+                    user_id_str = str(user_id_obj)
                     
                     # Fetch inviter's refer_code (who referred this member)
                     inviter_code = None
@@ -366,8 +418,51 @@ class UserService:
                         is_active=True
                     ).count()
                     
-                    # Get user rank (same as current_rank)
-                    user_rank = getattr(member, 'current_rank', 'Bitron')
+                    # Get user's actual rank (calculated based on binary + matrix slots)
+                    # Rank rule: User MUST join BOTH Binary AND Matrix
+                    # Rank = min(Binary Slots, Matrix Slots)
+                    calculated_rank = "No Rank"
+                    
+                    try:
+                        # Check if user has joined both Binary and Matrix
+                        if member.binary_joined and member.matrix_joined:
+                            # Get UserRank if exists
+                            user_rank_obj = user_rank_map.get(user_id_str)
+                            
+                            if user_rank_obj:
+                                # Use stored rank
+                                if user_rank_obj.current_rank_number == 0:
+                                    calculated_rank = "No Rank"
+                                else:
+                                    calculated_rank = user_rank_obj.current_rank_name or "No Rank"
+                            else:
+                                # Calculate rank on-the-fly using cached data
+                                binary_slots = binary_slots_map.get(user_id_str, 0)
+                                matrix_slots = max(
+                                    matrix_slots_map.get(user_id_str, 0),
+                                    matrix_activations_map.get(user_id_str, 0)
+                                )
+                                
+                                # Rank = min(Binary Slots, Matrix Slots)
+                                # If Matrix not joined or no Matrix slots, rank = 0
+                                if matrix_slots < 1:
+                                    calculated_rank = "No Rank"
+                                else:
+                                    rank_number = min(binary_slots, matrix_slots)
+                                    rank_number = min(rank_number, 15)  # Max rank 15
+                                    
+                                    if rank_number == 0:
+                                        calculated_rank = "No Rank"
+                                    else:
+                                        # Get rank name from cache
+                                        calculated_rank = rank_cache.get(rank_number, f"Rank {rank_number}")
+                        else:
+                            # User hasn't joined both programs
+                            calculated_rank = "No Rank"
+                    except Exception as e:
+                        # Fallback to current_rank if calculation fails
+                        calculated_rank = getattr(member, 'current_rank', 'No Rank')
+                        print(f"[MY-COMMUNITY] Error calculating rank for {member.uid}: {e}")
                     
                     community_members.append({
                         "id": str(member.id),
@@ -382,8 +477,8 @@ class UserService:
                         "binary_joined": member.binary_joined,
                         "matrix_joined": member.matrix_joined,
                         "global_joined": member.global_joined,
-                        "current_rank": user_rank,
-                        "rank": user_rank,  # Same as current_rank
+                        "current_rank": calculated_rank,  # Actual calculated rank
+                        "rank": calculated_rank,  # Same as current_rank
                         "direct_partner": direct_partners_in_slot  # Slot-specific count
                     })
             
