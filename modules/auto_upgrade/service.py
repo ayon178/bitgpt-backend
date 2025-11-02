@@ -499,8 +499,9 @@ class AutoUpgradeService:
                 return mother_result
 
             # Check first/second child condition under the Nth upline for this slot tree
+            # For slot N: Check if user is in Nth level of Nth upline in slot-N tree
             is_first_second = self._is_first_or_second_under_upline(ObjectId(user_id), nth_upline, slot_no, required_level=slot_no)
-            print(f"[BINARY_ROUTING] Is first/second under Nth upline: {is_first_second}")
+            print(f"[BINARY_ROUTING] Is first/second under Nth upline (slot {slot_no}, level {slot_no}): {is_first_second}")
 
             if is_first_second:
                 # Route 100% to Nth upline reserve for its next slot (slot_no + 1)
@@ -683,18 +684,25 @@ class AutoUpgradeService:
 
     def _is_first_or_second_under_upline(self, user_id: ObjectId, upline_id: ObjectId, slot_no: int, required_level: int = 2) -> bool:
         """
-        Strict rule: User must be at EXACTLY level-N under the given upline in the BASE (slot 1) tree,
-        and be among the first two positions at that level by deterministic positional order (LL, LR, RL, RR ...),
-        not by join time. Left=0, Right=1; positional index is the binary value of the path from upline.
+        Check if user is at EXACTLY level-N under the given upline in the SPECIFIC SLOT-N tree,
+        and be among the first two positions at that level by deterministic positional order (LL, LR, RL, RR ...).
+        
+        For slot N: Check in slot-N tree (or slot-1 as fallback).
+        Required level: slot_no (Nth level for Nth upline).
+        Position: First (index 0 = LL...L) or Second (index 1 = LL...R) position.
+        
+        Args:
+            user_id: The activating user
+            upline_id: The Nth upline to check under
+            slot_no: The slot number (N)
+            required_level: The level to check (should be slot_no = N)
         """
         try:
             from ..tree.model import TreePlacement
-            
-            # Determine exact path from upline -> user in base tree using parent chain
-            # Build path bits by walking up from user to upline collecting L/R at each step
             from mongoengine.queryset.visitor import Q
 
-            def get_lr_for_child(child_pl) -> str:
+            # Use slot_no specific tree first, fallback to slot-1 if not found
+            def get_lr_for_child(child_pl, check_slot_no: int) -> str:
                 # Prefer explicit position
                 pos = getattr(child_pl, 'position', None)
                 if pos in ('left', 'right'):
@@ -703,50 +711,81 @@ class AutoUpgradeService:
                 parent_id = getattr(child_pl, 'parent_id', None) or getattr(child_pl, 'upline_id', None)
                 if not parent_id:
                     return 'L'  # default
+                # Check in slot-specific tree first
                 sibs = list(TreePlacement.objects(
                     Q(upline_id=parent_id) | Q(parent_id=parent_id),
-                    program='binary', slot_no=1, is_active=True
+                    program='binary', slot_no=check_slot_no, is_active=True
                 ).only('user_id', 'created_at').order_by('created_at'))
+                # If no siblings in slot-N tree, check slot-1
+                if not sibs:
+                    sibs = list(TreePlacement.objects(
+                        Q(upline_id=parent_id) | Q(parent_id=parent_id),
+                        program='binary', slot_no=1, is_active=True
+                    ).only('user_id', 'created_at').order_by('created_at'))
                 # first child => L, second => R
                 for idx, s in enumerate(sibs[:2]):
                     if str(s.user_id) == str(child_pl.user_id):
                         return 'L' if idx == 0 else 'R'
                 return 'L'
 
-            # Start from user's slot-1 placement
-            user_pl = TreePlacement.objects(user_id=user_id, program='binary', slot_no=1, is_active=True).first()
+            # Start from user's slot-N placement (preferred), fallback to slot-1
+            user_pl = TreePlacement.objects(user_id=user_id, program='binary', slot_no=slot_no, is_active=True).first()
             if not user_pl:
+                user_pl = TreePlacement.objects(user_id=user_id, program='binary', slot_no=1, is_active=True).first()
+            if not user_pl:
+                print(f"[BINARY_ROUTING] No placement found for user {user_id} in slot {slot_no} or slot 1")
                 return False
 
             path_bits: List[str] = []
             steps = 0
             curr = user_pl
+            check_slot = slot_no  # Use slot-specific tree
+            
             while curr and steps < required_level:
-                parent = getattr(curr, 'parent_id', None) or getattr(curr, 'upline_id', None)
+                parent = getattr(curr, 'upline_id', None) or getattr(curr, 'parent_id', None)
                 if not parent:
                     break
-                lr = get_lr_for_child(curr)
+                    
+                # Get L/R position for this level
+                lr = get_lr_for_child(curr, check_slot)
                 path_bits.append(lr)
                 steps += 1
+                
                 if parent == upline_id:
                     break
-                curr = TreePlacement.objects(user_id=parent, program='binary', slot_no=1, is_active=True).first()
+                    
+                # Move up: try slot-N tree first, then slot-1
+                next_pl = TreePlacement.objects(user_id=parent, program='binary', slot_no=check_slot, is_active=True).first()
+                if not next_pl:
+                    next_pl = TreePlacement.objects(user_id=parent, program='binary', slot_no=1, is_active=True).first()
+                curr = next_pl
 
             # Validate we reached the upline at exactly required_level
-            if steps != required_level or (getattr(curr, 'parent_id', None) or getattr(curr, 'upline_id', None)) != upline_id:
-                # If loop ended because parent==upline_id, steps should be required_level and we have exactly N steps
-                # Otherwise, not at the exact required level under upline
+            if steps != required_level:
+                print(f"[BINARY_ROUTING] Steps mismatch: got {steps}, required {required_level}")
                 return False
+                
+            # Verify we reached the correct upline
+            if curr:
+                final_parent = getattr(curr, 'upline_id', None) or getattr(curr, 'parent_id', None)
+                if final_parent != upline_id:
+                    print(f"[BINARY_ROUTING] Did not reach correct upline: {final_parent} != {upline_id}")
+                    return False
 
             path_bits = list(reversed(path_bits))  # from upline -> user
 
-            # Compute positional index for this user
+            # Compute positional index for this user (binary path value)
             idx = 0
             for b in path_bits:
                 idx = (idx << 1) | (0 if b == 'L' else 1)
 
-            is_first_or_second = idx in (0, 1)
-            print(f"[BINARY_ROUTING] User path under {upline_id} at level {required_level}: {''.join(path_bits)} (index={idx}), first/second={is_first_or_second}")
+            # Position counting: 1-based (1, 2, 3...), not 0-based (0, 1, 2...)
+            # Index 0 = Position 1 (first)
+            # Index 1 = Position 2 (second)
+            # So first or second position means idx in (0, 1)
+            position_number = idx + 1  # Convert to 1-based position for display
+            is_first_or_second = idx in (0, 1)  # Position 1 or 2 (index 0 or 1)
+            print(f"[BINARY_ROUTING] User {user_id} path under {upline_id} in slot-{slot_no} tree at level {required_level}: {''.join(path_bits)} (index={idx}, position={position_number}), first/second={is_first_or_second}")
             return is_first_or_second
         except Exception as e:
             print(f"[BINARY_ROUTING] Error in _is_first_or_second_under_upline: {e}")
@@ -914,8 +953,79 @@ class AutoUpgradeService:
             debit_entry.save()
             print(f"[BINARY_ROUTING] ✅ ReserveLedger debit created: user={user_id}, slot={slot_no}, amount={slot_cost}")
             
-            # IMPORTANT: For reserve-driven auto-activation, do NOT redistribute slot_cost again.
-            # Just record the activation; funds have already been collected via reserve credits.
+            # IMPORTANT: When a slot auto-upgrades from reserve, the slot_cost must follow
+            # the same reserve routing rules as a regular slot activation (CASCADE):
+            # - Slot 1: Full amount to direct upline
+            # - Slot 2+: Check if user is first/second in Nth upline's slot-N tree
+            #   - If yes: Route to Nth upline's reserve for slot N+1 (cascade)
+            #   - If no: Distribute via pools
+            
+            # Route the slot_cost following reserve routing rules (CASCADE)
+            if slot_no == 1:
+                # Slot 1: Full amount to direct upline
+                from ..wallet.service import WalletService
+                if placement and placement.parent_id:
+                    ws = WalletService()
+                    ws.credit_main_wallet(
+                        user_id=str(placement.parent_id),
+                        amount=slot_cost,
+                        currency='BNB',
+                        reason='binary_slot1_full',
+                        tx_hash=f"auto_cascade_slot1_{user_id}_{int(datetime.utcnow().timestamp())}"
+                    )
+                    print(f"[BINARY_ROUTING] ✅ Cascaded slot 1 cost to direct upline: {placement.parent_id}")
+            else:
+                # Slot 2+: Check reserve routing rules
+                nth_upline_for_cost = self._get_nth_upline_by_slot(user_id, slot_no, slot_no)
+                if nth_upline_for_cost:
+                    is_first_second_cost = self._is_first_or_second_under_upline(user_id, nth_upline_for_cost, slot_no, required_level=slot_no)
+                    if is_first_second_cost:
+                        # Route to Nth upline's reserve for slot N+1 (cascade)
+                        try:
+                            cascade_reserve_entry = ReserveLedger(
+                                user_id=nth_upline_for_cost,
+                                program='binary',
+                                slot_no=slot_no + 1,
+                                amount=slot_cost,
+                                direction='credit',
+                                source='tree_upline_reserve_cascade',
+                                balance_after=Decimal('0'),
+                                created_at=datetime.utcnow()
+                            )
+                            cascade_reserve_entry.save()
+                            print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost ({slot_cost} BNB) to {nth_upline_for_cost}'s reserve for slot {slot_no + 1}")
+                            
+                            # Check if this triggers another auto-upgrade (CASCADE OF CASCADE)
+                            try:
+                                cascade_auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(nth_upline_for_cost, slot_no + 1)
+                                if cascade_auto_upgrade_result.get("auto_upgrade_triggered"):
+                                    print(f"[BINARY_ROUTING] 🚀 CASCADE: Slot {slot_no + 1} auto-upgraded for {nth_upline_for_cost} from cascaded reserve")
+                            except Exception as e:
+                                print(f"[BINARY_ROUTING] ⚠️ Cascade auto-upgrade check failed: {e}")
+                        except Exception as e:
+                            print(f"[BINARY_ROUTING] ❌ Failed to create cascade ReserveLedger: {e}")
+                    else:
+                        # Not first/second: distribute via pools
+                        from ..fund_distribution.service import FundDistributionService
+                        from ..user.model import User
+                        fund = FundDistributionService()
+                        ref = User.objects(id=user_id).only('refered_by').first()
+                        referrer_id = str(ref.refered_by) if ref and ref.refered_by else None
+                        fund.distribute_binary_funds(
+                            user_id=str(user_id),
+                            amount=slot_cost,
+                            slot_no=slot_no,
+                            referrer_id=referrer_id,
+                            tx_hash=f"auto_cascade_pools_slot{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                            currency='BNB'
+                        )
+                        print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost distributed via pools")
+                else:
+                    # No Nth upline: send to mother account
+                    self._send_to_mother_account(slot_cost, slot_no)
+                    print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost sent to mother account")
+            
+            # Record the activation
             activation = SlotActivation(
                 user_id=user_id,
                 program='binary',

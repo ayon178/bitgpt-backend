@@ -97,7 +97,8 @@ class TreeService:
                     created_at=datetime.utcnow()
                 )
                 placement.save()
-                print(f"✅ Created {program} tree placement: User {user_id} at Level {referrer_placement.level + 1}, Position {available_position} under {referrer_id}")
+                user_level = (referrer_level or 1) + 1
+                print(f"✅ Created {program} tree placement: User {user_id} at Level {user_level}, Position {available_position} under {referrer_id}")
                 return True
             
             # All direct positions filled - use level-wise BFS for spillover
