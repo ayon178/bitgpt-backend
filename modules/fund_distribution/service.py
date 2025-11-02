@@ -898,14 +898,16 @@ class FundDistributionService:
             # Skip level distribution (level_1_distribution, level_2_distribution, etc.)
             is_level_dist = 'level_' in income_type and '_distribution' in income_type
             
-            # Partner incentive and level distributions should credit wallet
-            should_credit_wallet = (income_type == 'partner_incentive' or is_level_dist)
+            # Partner incentive, level distributions, and level_payout should credit wallet
+            should_credit_wallet = (income_type == 'partner_incentive' or is_level_dist or income_type == 'level_payout')
             
             # Debug logging
-            if not fund_type and income_type not in ['global_phase_1', 'global_phase_2']:
+            # level_payout is valid - it goes directly to wallet, not BonusFund
+            # Skip warning for level_payout and level distributions
+            if not fund_type and income_type not in ['global_phase_1', 'global_phase_2', 'level_payout']:
                 print(f"⚠️ No mapping for income_type: {income_type}")
-            elif is_level_dist:
-                pass  # Don't log level dist skips
+            elif is_level_dist or income_type == 'level_payout':
+                pass  # Don't log level dist/payout skips (these go to wallet directly)
             
             if fund_type and not is_level_dist:
                 try:
@@ -953,6 +955,8 @@ class FundDistributionService:
                         # Extract level number from income_type (e.g., 'level_1_distribution' -> 'level_1')
                         level_part = income_type.replace('_distribution', '')
                         wallet_reason = f"{program}_dual_tree_{level_part}"
+                    elif income_type == 'level_payout':
+                        wallet_reason = f"{program}_level_payout"
                     else:
                         wallet_reason = f"{program}_{income_type}"
                     

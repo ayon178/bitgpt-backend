@@ -1098,6 +1098,412 @@ class AutoUpgradeService:
                 "error": str(e)
             }
     
+    def manual_upgrade_binary_slot(self, user_id: str, slot_no: int, tx_hash: str = None) -> Dict[str, Any]:
+        """
+        Manual binary slot upgrade using reserve + wallet payment
+        
+        Flow:
+        1. Get slot cost and reserve balance
+        2. Deduct from reserve first (up to available)
+        3. Deduct remaining from wallet
+        4. Create SlotActivation
+        5. Route slot_cost following cascade rules (same as auto-upgrade)
+           - Check Nth upline has slot N active before routing to reserve
+           - If not active: route to mother wallet
+           - For distribution: check user has slot N active
+           - If not active: send that portion to mother wallet
+        
+        Returns:
+            Dict with success status and activation details
+        """
+        try:
+            from ..wallet.model import ReserveLedger, WalletLedger
+            from ..slot.model import SlotActivation
+            from ..wallet.service import WalletService
+            from ..user.tree_reserve_service import TreeUplineReserveService
+            from ..user.model import User
+            
+            user_oid = ObjectId(user_id)
+            slot_cost = self._get_binary_slot_cost(slot_no)
+            
+            print(f"[MANUAL_UPGRADE] Starting manual upgrade for user {user_id} to slot {slot_no}, cost={slot_cost}")
+            
+            # Get reserve balance
+            reserve_service = TreeUplineReserveService()
+            reserve_balance = reserve_service.get_reserve_balance(user_id, 'binary', slot_no)
+            
+            print(f"[MANUAL_UPGRADE] Reserve balance: {reserve_balance}, Slot cost: {slot_cost}")
+            
+            # Calculate amounts: reserve first, then wallet
+            reserve_amount = min(reserve_balance, slot_cost)
+            wallet_amount = slot_cost - reserve_amount
+            
+            print(f"[MANUAL_UPGRADE] Reserve payment: {reserve_amount}, Wallet payment: {wallet_amount}")
+            
+            # Check wallet balance if needed
+            if wallet_amount > 0:
+                ws = WalletService()
+                wallet = ws._get_or_create_wallet(user_id, 'main', 'BNB')
+                current_wallet_balance = wallet.balance or Decimal('0')
+                
+                if current_wallet_balance < wallet_amount:
+                    return {
+                        "success": False,
+                        "error": f"Insufficient balance. Need {wallet_amount} BNB in wallet, have {current_wallet_balance} BNB. Reserve: {reserve_balance} BNB"
+                    }
+            
+            # Deduct from reserve (if any)
+            if reserve_amount > 0:
+                # Calculate new reserve balance after debit
+                reserve_entries = list(ReserveLedger.objects(
+                    user_id=user_oid,
+                    program='binary',
+                    slot_no=slot_no
+                ))
+                current_reserve_total = Decimal('0')
+                for entry in reserve_entries:
+                    if entry.direction == 'credit':
+                        current_reserve_total += entry.amount
+                    elif entry.direction == 'debit':
+                        current_reserve_total -= entry.amount
+                
+                new_reserve_balance = current_reserve_total - reserve_amount
+                
+                reserve_debit = ReserveLedger(
+                    user_id=user_oid,
+                    program='binary',
+                    slot_no=slot_no,
+                    amount=reserve_amount,
+                    direction='debit',
+                    source='manual_upgrade',
+                    balance_after=new_reserve_balance,
+                    tx_hash=tx_hash or f"manual_reserve_debit_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                    created_at=datetime.utcnow()
+                )
+                reserve_debit.save()
+                print(f"[MANUAL_UPGRADE] ✅ Reserve debit: {reserve_amount} BNB, new balance: {new_reserve_balance}")
+            
+            # Deduct from wallet (if any)
+            if wallet_amount > 0:
+                ws = WalletService()
+                wallet_debit_result = ws.debit_main_wallet(
+                    user_id=user_id,
+                    amount=wallet_amount,
+                    currency='BNB',
+                    reason=f'manual_binary_slot_{slot_no}_upgrade',
+                    tx_hash=tx_hash or f"manual_wallet_debit_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}"
+                )
+                
+                if not wallet_debit_result.get("success"):
+                    # Rollback reserve debit if wallet debit fails
+                    if reserve_amount > 0:
+                        # Create a credit to reverse the debit
+                        reserve_credit = ReserveLedger(
+                            user_id=user_oid,
+                            program='binary',
+                            slot_no=slot_no,
+                            amount=reserve_amount,
+                            direction='credit',
+                            source='manual_upgrade_rollback',
+                            balance_after=current_reserve_total,  # Restore original balance
+                            tx_hash=f"rollback_{reserve_debit.tx_hash}" if reserve_amount > 0 else None,
+                            created_at=datetime.utcnow()
+                        )
+                        reserve_credit.save()
+                    
+                    return {
+                        "success": False,
+                        "error": wallet_debit_result.get("error", "Wallet debit failed")
+                    }
+                
+                print(f"[MANUAL_UPGRADE] ✅ Wallet debit: {wallet_amount} BNB")
+            
+            # Create SlotActivation record
+            slot_names = ['Explorer', 'Contributor', 'Supporter', 'Promoter', 'Developer', 'Manager', 
+                         'Director', 'Executive', 'Leader', 'Master', 'Expert', 'Professional', 
+                         'Specialist', 'Consultant', 'Advisor', 'Partner']
+            slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
+            
+            activation = SlotActivation(
+                user_id=user_oid,
+                program='binary',
+                slot_no=slot_no,
+                slot_name=slot_name,
+                amount_paid=slot_cost,
+                currency='BNB',
+                status='completed',
+                activation_type='manual',
+                upgrade_source='mixed' if (reserve_amount > 0 and wallet_amount > 0) else ('reserve' if reserve_amount > 0 else 'wallet'),
+                tx_hash=tx_hash or f"manual_slot_{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                activated_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                created_at=datetime.utcnow(),
+                is_auto_upgrade=False,
+                metadata={
+                    'reserve_used': float(reserve_amount),
+                    'wallet_used': float(wallet_amount),
+                    'payment_method': 'reserve_wallet_combined'
+                }
+            )
+            activation.save()
+            print(f"[MANUAL_UPGRADE] ✅ SlotActivation created: user={user_id}, slot={slot_no}")
+            
+            # Route slot_cost following cascade rules (same as auto-upgrade)
+            self._route_manual_upgrade_cost(user_id, slot_no, slot_cost)
+            
+            # Update BinaryAutoUpgrade if exists
+            binary_status = BinaryAutoUpgrade.objects(user_id=user_oid).first()
+            if binary_status:
+                binary_status.current_slot_no = max(binary_status.current_slot_no, slot_no)
+                binary_status.updated_at = datetime.utcnow()
+                binary_status.save()
+            
+            return {
+                "success": True,
+                "activation_id": str(activation.id),
+                "slot_no": slot_no,
+                "slot_name": slot_name,
+                "amount_paid": float(slot_cost),
+                "reserve_used": float(reserve_amount),
+                "wallet_used": float(wallet_amount),
+                "message": f"Successfully upgraded to {slot_name} (Slot {slot_no})"
+            }
+            
+        except Exception as e:
+            print(f"[MANUAL_UPGRADE] ❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}
+    
+    def _route_manual_upgrade_cost(self, user_id: str, slot_no: int, slot_cost: Decimal) -> None:
+        """
+        Route manual upgrade cost following cascade rules
+        
+        Special rules:
+        - Check if Nth upline has slot N active before routing to reserve
+        - If not active: route to mother wallet
+        - For distribution: check if user has slot N active
+        - If not active: send that portion to mother wallet (only for level distribution)
+        """
+        try:
+            from ..wallet.model import ReserveLedger
+            from ..slot.model import SlotActivation
+            from ..wallet.service import WalletService
+            from ..tree.model import TreePlacement
+            
+            user_oid = ObjectId(user_id)
+            
+            print(f"[MANUAL_UPGRADE] Routing slot {slot_no} cost ({slot_cost} BNB) following cascade rules")
+            
+            # Get user's tree placement for this slot
+            placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+            
+            if not placement:
+                # Try slot 1 placement as fallback
+                placement = TreePlacement.objects(
+                    user_id=user_oid,
+                    program='binary',
+                    slot_no=1,
+                    is_active=True
+                ).first()
+            
+            if slot_no == 1:
+                # Slot 1: Full amount to direct upline
+                ws = WalletService()
+                if placement and placement.parent_id:
+                    # Check if upline has slot 1 active
+                    upline_slot1 = SlotActivation.objects(
+                        user_id=placement.parent_id,
+                        program='binary',
+                        slot_no=1,
+                        status='completed'
+                    ).first()
+                    
+                    if upline_slot1:
+                        ws.credit_main_wallet(
+                            user_id=str(placement.parent_id),
+                            amount=slot_cost,
+                            currency='BNB',
+                            reason='binary_slot1_full',
+                            tx_hash=f"manual_cascade_slot1_{user_id}_{int(datetime.utcnow().timestamp())}"
+                        )
+                        print(f"[MANUAL_UPGRADE] ✅ Routed slot 1 cost to direct upline: {placement.parent_id}")
+                    else:
+                        # Upline doesn't have slot 1: send to mother wallet
+                        self._send_to_mother_account(slot_cost, slot_no)
+                        print(f"[MANUAL_UPGRADE] ✅ Routed slot 1 cost to mother wallet (upline has no slot 1)")
+            else:
+                # Slot 2+: Check reserve routing rules
+                nth_upline = self._get_nth_upline_by_slot(user_oid, slot_no, slot_no)
+                
+                if nth_upline:
+                    # Check if Nth upline has slot N active
+                    nth_upline_slot_n = SlotActivation.objects(
+                        user_id=nth_upline,
+                        program='binary',
+                        slot_no=slot_no,
+                        status='completed'
+                    ).first()
+                    
+                    if not nth_upline_slot_n:
+                        # Nth upline doesn't have slot N: send to mother wallet
+                        self._send_to_mother_account(slot_cost, slot_no)
+                        print(f"[MANUAL_UPGRADE] ✅ Routed slot {slot_no} cost to mother wallet (Nth upline has no slot {slot_no})")
+                        return
+                    
+                    # Check first/second position
+                    is_first_second = self._is_first_or_second_under_upline(user_oid, nth_upline, slot_no, required_level=slot_no)
+                    
+                    if is_first_second:
+                        # Route to Nth upline's reserve for slot N+1 (cascade)
+                        try:
+                            cascade_reserve_entry = ReserveLedger(
+                                user_id=nth_upline,
+                                program='binary',
+                                slot_no=slot_no + 1,
+                                amount=slot_cost,
+                                direction='credit',
+                                source='tree_upline_reserve',  # Same as auto-upgrade cascade
+                                balance_after=Decimal('0'),
+                                created_at=datetime.utcnow()
+                            )
+                            cascade_reserve_entry.save()
+                            print(f"[MANUAL_UPGRADE] ✅ Routed slot {slot_no} cost ({slot_cost} BNB) to {nth_upline}'s reserve for slot {slot_no + 1}")
+                            
+                            # Check if this triggers auto-upgrade (CASCADE)
+                            try:
+                                cascade_auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(nth_upline, slot_no + 1)
+                                if cascade_auto_upgrade_result.get("auto_upgrade_triggered"):
+                                    print(f"[MANUAL_UPGRADE] 🚀 CASCADE: Slot {slot_no + 1} auto-upgraded for {nth_upline} from cascaded reserve")
+                            except Exception as e:
+                                print(f"[MANUAL_UPGRADE] ⚠️ Cascade auto-upgrade check failed: {e}")
+                        except Exception as e:
+                            print(f"[MANUAL_UPGRADE] ❌ Failed to create cascade ReserveLedger: {e}")
+                    else:
+                        # Not first/second: distribute via pools (with slot N active check)
+                        self._distribute_with_slot_check(user_id, slot_no, slot_cost)
+                else:
+                    # No Nth upline: send to mother wallet
+                    self._send_to_mother_account(slot_cost, slot_no)
+                    print(f"[MANUAL_UPGRADE] ✅ Routed slot {slot_no} cost to mother wallet (no Nth upline)")
+            
+        except Exception as e:
+            print(f"[MANUAL_UPGRADE] ❌ Error routing cost: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _distribute_with_slot_check(self, user_id: str, slot_no: int, amount: Decimal) -> None:
+        """
+        Distribute funds via pools, but check if user has slot N active
+        If not active, send level distribution portion (60%) to mother wallet
+        Only level distribution goes to mother, other pools (40%) distribute normally
+        """
+        try:
+            from ..fund_distribution.service import FundDistributionService
+            from ..user.model import User
+            from ..slot.model import SlotActivation
+            from ..income.model import IncomeEvent
+            from ..wallet.service import WalletService
+            
+            user_oid = ObjectId(user_id)
+            
+            # Check if user has slot N active
+            user_slot_n = SlotActivation.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no=slot_no,
+                status='completed'
+            ).first()
+            
+            # Get level distribution percentage (60% of total)
+            level_distribution_pct = Decimal('60.0')  # 60% for level distribution
+            level_distribution_amount = amount * level_distribution_pct / Decimal('100.0')
+            other_distribution_amount = amount - level_distribution_amount  # 40%
+            
+            if not user_slot_n:
+                # User doesn't have slot N: send level distribution (60%) to mother wallet
+                print(f"[MANUAL_UPGRADE] User {user_id} doesn't have slot {slot_no}, sending level distribution ({level_distribution_amount} BNB) to mother wallet")
+                self._send_to_mother_account(level_distribution_amount, slot_no)
+                
+                # Distribute remaining funds (40%: spark_bonus, royal_captain, etc.) normally
+                if other_distribution_amount > 0:
+                    # Manually distribute the 40% to non-level pools
+                    self._distribute_non_level_funds(user_id, slot_no, other_distribution_amount)
+                    print(f"[MANUAL_UPGRADE] ✅ Distributed non-level funds ({other_distribution_amount} BNB), level portion sent to mother")
+            else:
+                # User has slot N: distribute normally (100%)
+                fund = FundDistributionService()
+                ref = User.objects(id=user_oid).only('refered_by').first()
+                referrer_id = str(ref.refered_by) if ref and ref.refered_by else None
+                
+                fund.distribute_binary_funds(
+                    user_id=user_id,
+                    amount=amount,
+                    slot_no=slot_no,
+                    referrer_id=referrer_id,
+                    tx_hash=f"manual_dist_slot{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                    currency='BNB'
+                )
+                print(f"[MANUAL_UPGRADE] ✅ Distributed via pools normally (user has slot {slot_no})")
+            
+        except Exception as e:
+            print(f"[MANUAL_UPGRADE] ❌ Error in distribution with slot check: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _distribute_non_level_funds(self, user_id: str, slot_no: int, amount: Decimal) -> None:
+        """
+        Distribute non-level funds (40%): spark_bonus, royal_captain, president_reward,
+        leadership_stipend, jackpot, partner_incentive, shareholders
+        """
+        try:
+            from ..income.model import IncomeEvent
+            from ..fund_distribution.service import FundDistributionService
+            
+            # These percentages are out of 100%, but we're distributing only 40% total
+            # So we need to scale them proportionally
+            non_level_percentages = {
+                "spark_bonus": Decimal('8.0'),  # 8% of original 100% = 8% of 100%
+                "royal_captain": Decimal('4.0'),
+                "president_reward": Decimal('3.0'),
+                "leadership_stipend": Decimal('5.0'),
+                "jackpot": Decimal('5.0'),
+                "partner_incentive": Decimal('10.0'),
+                "shareholders": Decimal('5.0')
+            }
+            
+            # Total non-level percentage = 40% of original
+            # When distributing 40% amount, we maintain same percentages
+            total_non_level_pct = sum(non_level_percentages.values())  # Should be 40%
+            
+            for income_type, pct in non_level_percentages.items():
+                # Calculate amount for this pool (maintain same percentage)
+                dist_amount = amount * (pct / total_non_level_pct)
+                
+                if dist_amount > 0:
+                    IncomeEvent(
+                        user_id=ObjectId(user_id),
+                        program='binary',
+                        slot_no=slot_no,
+                        income_type=income_type,
+                        amount=dist_amount,
+                        currency='BNB',
+                        source='manual_upgrade_distribution',
+                        created_at=datetime.utcnow()
+                    ).save()
+                    
+            print(f"[MANUAL_UPGRADE] ✅ Distributed non-level funds: {amount} BNB across {len(non_level_percentages)} pools")
+            
+        except Exception as e:
+            print(f"[MANUAL_UPGRADE] ❌ Error distributing non-level funds: {e}")
+            import traceback
+            traceback.print_exc()
+    
     def _send_to_mother_account(self, amount: Decimal, slot_no: int) -> Dict[str, Any]:
         """Send fund to mother account when tree upline hasn't activated slot"""
         try:

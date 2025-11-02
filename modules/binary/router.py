@@ -90,6 +90,69 @@ async def upgrade_binary_slot(
     except Exception as e:
         return error_response(str(e))
 
+class ManualUpgradeRequest(BaseModel):
+    user_id: str
+    slot_no: int
+    tx_hash: Optional[str] = None
+
+@router.post("/manual-upgrade", response_model=BinaryUpgradeResponse)
+async def manual_upgrade_binary_slot(
+    request: ManualUpgradeRequest,
+    current_user: dict = Depends(authentication_service.verify_authentication)
+):
+    """
+    Manual binary slot upgrade using reserve + wallet payment
+    
+    Flow:
+    1. Uses reserve funds first (if available)
+    2. Deducts remaining from wallet
+    3. Routes slot cost following cascade rules
+    4. Checks Nth upline has slot N active before routing
+    """
+    try:
+        from ..auto_upgrade.service import AutoUpgradeService
+        
+        # Validate user exists
+        user = User.objects(id=ObjectId(request.user_id)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Validate slot upgrade
+        if request.slot_no < 1 or request.slot_no > 17:
+            raise HTTPException(status_code=400, detail="Invalid slot number. Must be between 1-17")
+        
+        # Check authorization
+        if str(current_user.get("user_id")) != request.user_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to upgrade this user's slot")
+        
+        # Initialize service
+        auto_upgrade_service = AutoUpgradeService()
+        
+        # Process manual upgrade
+        result = auto_upgrade_service.manual_upgrade_binary_slot(
+            user_id=request.user_id,
+            slot_no=request.slot_no,
+            tx_hash=request.tx_hash
+        )
+        
+        if result["success"]:
+            return BinaryUpgradeResponse(
+                success=True,
+                activation_id=result.get("activation_id"),
+                new_slot=result.get("slot_name"),
+                slot_no=result.get("slot_no"),
+                amount=result.get("amount_paid"),
+                currency="BNB",
+                message=result.get("message")
+            )
+        else:
+            raise HTTPException(status_code=400, detail=result.get("error", "Manual upgrade failed"))
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(str(e))
+
 @router.get("/upgrade-status/{user_id}")
 async def get_binary_upgrade_status(
     user_id: str,
