@@ -314,12 +314,27 @@ class UserService:
             
             print(f"[MY-COMMUNITY] Found {len(unique_user_ids)} total downline users in slot {slot_number} tree")
             
-            # Get total count
-            total_count = len(unique_user_ids)
+            # Filter: Only keep users who actually have placement in this slot
+            # This ensures slot-wise filtering is accurate
+            users_with_slot_placement = []
+            for user_id_obj in unique_user_ids:
+                placement = TreePlacement.objects(
+                    user_id=user_id_obj,
+                    program=program_type,
+                    slot_no=slot_number,
+                    is_active=True
+                ).first()
+                if placement:
+                    users_with_slot_placement.append(user_id_obj)
             
-            # Apply pagination to user IDs
+            print(f"[MY-COMMUNITY] After slot placement verification: {len(users_with_slot_placement)} users")
+            
+            # Get total count (only users with placement in this slot)
+            total_count = len(users_with_slot_placement)
+            
+            # Apply pagination to filtered user IDs
             skip = (page - 1) * limit
-            paginated_user_ids = unique_user_ids[skip:skip + limit]
+            paginated_user_ids = users_with_slot_placement[skip:skip + limit]
             
             # Get User details for paginated IDs
             referred_users = User.objects(id__in=paginated_user_ids)
@@ -327,11 +342,12 @@ class UserService:
             # Create a map for quick lookup
             user_map = {str(u.id): u for u in referred_users}
             
-            # Format response (maintain order from placements)
+            # Format response - all users in paginated_user_ids already have slot placement
             community_members = []
             for user_id_obj in paginated_user_ids:
                 member = user_map.get(str(user_id_obj))
                 if member:
+                    
                     # Fetch inviter's refer_code (who referred this member)
                     inviter_code = None
                     try:
@@ -340,8 +356,15 @@ class UserService:
                             inviter_code = getattr(inviter, 'refer_code', None) if inviter else None
                     except Exception:
                         inviter_code = None
-                    # Count direct partners for this member
-                    direct_partner_count = User.objects(refered_by=member.id).count()
+                    
+                    # Count direct partners for this member (only in this slot)
+                    # Only count partners who have placement in this slot
+                    direct_partners_in_slot = TreePlacement.objects(
+                        parent_id=member.id,
+                        program=program_type,
+                        slot_no=slot_number,
+                        is_active=True
+                    ).count()
                     
                     community_members.append({
                         "id": str(member.id),
@@ -357,7 +380,7 @@ class UserService:
                         "matrix_joined": member.matrix_joined,
                         "global_joined": member.global_joined,
                         "current_rank": getattr(member, 'current_rank', 'Bitron'),
-                        "direct_partner": direct_partner_count
+                        "direct_partner": direct_partners_in_slot  # Slot-specific count
                     })
             
             return {
@@ -417,8 +440,9 @@ class UserService:
             if slot_no is None:
                 slot_no = 1
             
-            # If level is not provided, return ALL direct referrals (parent_id = user_id)
-            if level is None:
+            # If level is not provided OR level=1, return ALL direct referrals (parent_id = user_id)
+            # Level 1 means direct referrals (who this user directly referred)
+            if level is None or level == 1:
                 # Get all direct referrals (who this user directly referred)
                 direct_referrals = TreePlacement.objects(
                     parent_id=uid,  # Direct referrals use parent_id
@@ -426,6 +450,17 @@ class UserService:
                     slot_no=slot_no,
                     is_active=True
                 ).order_by('created_at')
+                
+                # If no direct referrals found, fallback to tree children (upline_id)
+                # This handles cases where users were placed in tree but parent_id wasn't set
+                if direct_referrals.count() == 0:
+                    direct_referrals = TreePlacement.objects(
+                        upline_id=uid,  # Fallback to tree structure
+                        program=program_lower,
+                        slot_no=slot_no,
+                        is_active=True
+                    ).order_by('created_at')
+                    print(f"[MY-TEAM] No parent_id referrals found, using upline_id fallback for user {user_id}")
                 
                 team_data = []
                 for member in direct_referrals:
@@ -452,20 +487,47 @@ class UserService:
                             "direct_partner": self._count_direct_partners(str(user.id))
                         })
                 
-                return {
-                    "success": True,
-                    "data": {
-                        "program": program_lower,
-                        "level": None,
-                        "slot_no": slot_no,
-                        "level_maximum": None,
-                        "total_members": len(team_data),
-                        "displayed_members": len(team_data),
-                        "team_members": team_data
+                # Store actual total count BEFORE limiting
+                actual_total_members = len(team_data)
+                
+                # For level=1, show ALL direct referrals (no limit)
+                # Level maximum is informational only, but we show all actual direct referrals
+                if level == 1:
+                    if program_lower == 'binary':
+                        level_max = 2 ** 1  # Binary: 2 (informational)
+                    else:  # matrix
+                        level_max = 3 ** 1  # Matrix: 3 (informational)
+                    
+                    # Return ALL direct referrals (no limiting for level=1)
+                    # Level maximum is just informational, actual direct referrals can be more
+                    return {
+                        "success": True,
+                        "data": {
+                            "program": program_lower,
+                            "level": 1,
+                            "slot_no": slot_no,
+                            "level_maximum": level_max,  # Informational only
+                            "total_members": actual_total_members,  # All direct referrals
+                            "displayed_members": actual_total_members,  # All shown (no limit)
+                            "team_members": team_data  # Return all, not limited
+                        }
                     }
-                }
+                else:
+                    # level is None - return all without limit
+                    return {
+                        "success": True,
+                        "data": {
+                            "program": program_lower,
+                            "level": None,
+                            "slot_no": slot_no,
+                            "level_maximum": None,
+                            "total_members": len(team_data),
+                            "displayed_members": len(team_data),
+                            "team_members": team_data
+                        }
+                    }
             
-            # Recursive function to get descendants at specific depth using upline_id
+            # For level > 1, use recursive function to get descendants at specific depth using upline_id
             def get_descendants_at_depth(upline_id, current_depth, target_depth):
                 """Get all descendants at target depth from upline"""
                 # Get direct children using upline_id (tree structure) and slot filter
