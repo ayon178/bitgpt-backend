@@ -834,6 +834,15 @@ class AutoUpgradeService:
             
             # Get target slot cost
             target_slot_cost = self._get_binary_slot_cost(target_slot_no)
+
+            # Guard: invalid or undefined slot costs must never trigger activation
+            if target_slot_cost <= 0:
+                return {
+                    "auto_upgrade_triggered": False,
+                    "total_reserve": float(total_reserve),
+                    "target_slot_cost": float(target_slot_cost),
+                    "message": "Invalid target slot cost"
+                }
             
             if total_reserve >= target_slot_cost:
                 # Check if slot is already activated
@@ -988,7 +997,7 @@ class AutoUpgradeService:
                                 slot_no=slot_no + 1,
                                 amount=slot_cost,
                                 direction='credit',
-                                source='tree_upline_reserve_cascade',
+                                source='tree_upline_reserve',  # Changed from 'tree_upline_reserve_cascade' (not in model choices)
                                 balance_after=Decimal('0'),
                                 created_at=datetime.utcnow()
                             )
@@ -1338,25 +1347,15 @@ class AutoUpgradeService:
                         self._send_to_mother_account(slot_cost, slot_no)
                         print(f"[MANUAL_UPGRADE] ✅ Routed slot 1 cost to mother wallet (upline has no slot 1)")
             else:
-                # Slot 2+: Check reserve routing rules
+                # Slot 2+: Check reserve routing rules (CASCADE LOGIC)
+                # According to CASCADE_AUTO_UPGRADE_EXPLANATION.md:
+                # - Route based on first/second position ONLY
+                # - Do NOT require Nth upline to have slot N active
+                # - This enables infinite cascade chains
                 nth_upline = self._get_nth_upline_by_slot(user_oid, slot_no, slot_no)
                 
                 if nth_upline:
-                    # Check if Nth upline has slot N active
-                    nth_upline_slot_n = SlotActivation.objects(
-                        user_id=nth_upline,
-                        program='binary',
-                        slot_no=slot_no,
-                        status='completed'
-                    ).first()
-                    
-                    if not nth_upline_slot_n:
-                        # Nth upline doesn't have slot N: send to mother wallet
-                        self._send_to_mother_account(slot_cost, slot_no)
-                        print(f"[MANUAL_UPGRADE] ✅ Routed slot {slot_no} cost to mother wallet (Nth upline has no slot {slot_no})")
-                        return
-                    
-                    # Check first/second position
+                    # Check first/second position (primary condition for cascade)
                     is_first_second = self._is_first_or_second_under_upline(user_oid, nth_upline, slot_no, required_level=slot_no)
                     
                     if is_first_second:
@@ -1731,3 +1730,182 @@ class AutoUpgradeService:
         """Update Global phase progression status"""
         # Implementation for updating global status
         return {"success": True, "message": "Global status updated"}
+
+    def check_cascade_auto_upgrade_up_to_17_levels(self, new_user_id: str) -> Dict[str, Any]:
+        """
+        Check cascade auto-upgrade for all slots up to 17 levels in the upline.
+        For each level N (1-17), if that level has N slots activated, check level N+1.
+        Also check auto-upgrade for each slot in each upline.
+        
+        Args:
+            new_user_id: The newly created user ID
+            
+        Returns:
+            Dict with results of the cascade check
+        """
+        try:
+            from ..tree.model import TreePlacement
+            from ..slot.model import SlotActivation
+            
+            print(f"[CASCADE_CHECK] Starting cascade auto-upgrade check for user {new_user_id} up to 17 levels")
+            
+            # Get the newly created user's placement to start traversing upline
+            user_placement = TreePlacement.objects(
+                user_id=ObjectId(new_user_id),
+                program='binary',
+                slot_no=1,
+                is_active=True
+            ).first()
+            
+            if not user_placement:
+                print(f"[CASCADE_CHECK] No placement found for user {new_user_id}")
+                return {"success": False, "error": "No placement found for new user"}
+            
+            # Helper function to count activated binary slots for a user
+            def count_activated_slots(user_id: ObjectId) -> int:
+                try:
+                    return SlotActivation.objects(
+                        user_id=user_id,
+                        program='binary',
+                        status='completed'
+                    ).count()
+                except Exception:
+                    return 0
+            
+            # Helper function to get Nth upline
+            def get_upline_at_level(start_user_id: ObjectId, level: int) -> Optional[ObjectId]:
+                try:
+                    current_placement = TreePlacement.objects(
+                        user_id=start_user_id,
+                        program='binary',
+                        slot_no=1,
+                        is_active=True
+                    ).first()
+                    
+                    if not current_placement:
+                        return None
+                    
+                    steps = 0
+                    current_upline = getattr(current_placement, 'upline_id', None) or getattr(current_placement, 'parent_id', None)
+                    
+                    while current_upline and steps < level:
+                        steps += 1
+                        if steps == level:
+                            return current_upline
+                        
+                        # Move to next upline
+                        next_placement = TreePlacement.objects(
+                            user_id=current_upline,
+                            program='binary',
+                            slot_no=1,
+                            is_active=True
+                        ).first()
+                        
+                        if not next_placement:
+                            break
+                            
+                        current_upline = getattr(next_placement, 'upline_id', None) or getattr(next_placement, 'parent_id', None)
+                    
+                    return None
+                except Exception as e:
+                    print(f"[CASCADE_CHECK] Error getting upline at level {level}: {e}")
+                    return None
+            
+            results = {
+                "levels_checked": [],
+                "auto_upgrades_triggered": [],
+                "total_levels": 0,
+                "total_checks": 0
+            }
+            
+            # Traverse up to 17 levels
+            # Logic: Check all levels up to 17, and for each level check all slots
+            # If level N has N slots activated, continue checking level N+1
+            max_level = 17
+            checked_levels = set()  # Track which levels we've checked to avoid duplicates
+            
+            for level in range(1, max_level + 1):
+                try:
+                    # Get upline at this level
+                    upline_id = get_upline_at_level(ObjectId(new_user_id), level)
+                    
+                    if not upline_id:
+                        print(f"[CASCADE_CHECK] No upline found at level {level}")
+                        break
+                    
+                    # Skip if we've already checked this upline at a different level
+                    if str(upline_id) in checked_levels:
+                        continue
+                    
+                    checked_levels.add(str(upline_id))
+                    
+                    # Count activated slots for this upline
+                    activated_slots_count = count_activated_slots(upline_id)
+                    
+                    print(f"[CASCADE_CHECK] Level {level} - Upline {upline_id} has {activated_slots_count} slots activated")
+                    
+                    level_result = {
+                        "level": level,
+                        "upline_id": str(upline_id),
+                        "activated_slots": activated_slots_count,
+                        "checks_performed": []
+                    }
+                    
+                    # Check auto-upgrade for valid binary slots only (1-16)
+                    # This avoids zero-cost or undefined slots from triggering
+                    slots_to_check = list(range(1, 17))  # Slots 1 to 16
+                    
+                    # Check auto-upgrade for each slot
+                    for slot_no in slots_to_check:
+                            
+                        try:
+                            auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(upline_id, slot_no)
+                            
+                            check_info = {
+                                "slot_no": slot_no,
+                                "auto_upgrade_triggered": auto_upgrade_result.get("auto_upgrade_triggered", False),
+                                "message": auto_upgrade_result.get("message", "")
+                            }
+                            
+                            level_result["checks_performed"].append(check_info)
+                            results["total_checks"] += 1
+                            
+                            if auto_upgrade_result.get("auto_upgrade_triggered"):
+                                results["auto_upgrades_triggered"].append({
+                                    "level": level,
+                                    "upline_id": str(upline_id),
+                                    "slot_no": slot_no
+                                })
+                                print(f"[CASCADE_CHECK] ✅ Auto-upgrade triggered for upline {upline_id} at level {level}, slot {slot_no}")
+                            
+                        except Exception as e:
+                            print(f"[CASCADE_CHECK] Error checking slot {slot_no} for upline {upline_id}: {e}")
+                    
+                    results["levels_checked"].append(level_result)
+                    results["total_levels"] += 1
+                    
+                    # Log if this level has N slots activated (where N = level number)
+                    # Example: If level 3 has 3 slots, continue to check level 4. If level 4 has 4 slots, continue to level 5.
+                    if activated_slots_count >= level:
+                        print(f"[CASCADE_CHECK] Level {level} has {activated_slots_count} slots (>= {level}), continuing to check level {level + 1}")
+                    else:
+                        print(f"[CASCADE_CHECK] Level {level} has {activated_slots_count} slots (< {level}), but will continue checking all levels up to 17")
+                    
+                except Exception as e:
+                    print(f"[CASCADE_CHECK] Error checking level {level}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            
+            print(f"[CASCADE_CHECK] Completed cascade check: {results['total_levels']} levels, {results['total_checks']} slot checks, {len(results['auto_upgrades_triggered'])} auto-upgrades triggered")
+            
+            return {
+                "success": True,
+                **results
+            }
+            
+        except Exception as e:
+            print(f"[CASCADE_CHECK] Error in check_cascade_auto_upgrade_up_to_17_levels: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}

@@ -1,0 +1,2760 @@
+{
+  "slot_analysis": {
+    "2": [
+      {
+        "user_name": "L2_First",
+        "user_code": "RC1762092152819716",
+        "user_level": 2,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L2_Second",
+        "user_code": "RC1762092175686620",
+        "user_level": 2,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L3_First",
+        "user_code": "RC1762092210666602",
+        "user_level": 3,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L3_Second",
+        "user_code": "RC1762092232217795",
+        "user_level": 3,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L4_First",
+        "user_code": "RC1762092298010218",
+        "user_level": 4,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L4_Second",
+        "user_code": "RC1762092319389101",
+        "user_level": 4,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L5_First",
+        "user_code": "RC1762092390428280",
+        "user_level": 5,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L5_Second",
+        "user_code": "RC1762092412427787",
+        "user_level": 5,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_First",
+        "user_code": "RC1762092440113127",
+        "user_level": 6,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_Second",
+        "user_code": "RC1762092462093910",
+        "user_level": 6,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_First",
+        "user_code": "RC1762092490116773",
+        "user_level": 7,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_Second",
+        "user_code": "RC1762092511026217",
+        "user_level": 7,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_First",
+        "user_code": "RC1762092538804424",
+        "user_level": 8,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_Second",
+        "user_code": "RC1762092560589675",
+        "user_level": 8,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092787063763",
+        "nth_upline_level": 13,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092787063763",
+        "nth_upline_level": 13,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092837540146",
+        "nth_upline_level": 14,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092837540146",
+        "nth_upline_level": 14,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092887432738",
+        "nth_upline_level": 15,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 2,
+        "nth_upline_code": "RC1762092887432738",
+        "nth_upline_level": 15,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "3": [
+      {
+        "user_name": "L3_First",
+        "user_code": "RC1762092210666602",
+        "user_level": 3,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L3_Second",
+        "user_code": "RC1762092232217795",
+        "user_level": 3,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L4_First",
+        "user_code": "RC1762092298010218",
+        "user_level": 4,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L4_Second",
+        "user_code": "RC1762092319389101",
+        "user_level": 4,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L5_First",
+        "user_code": "RC1762092390428280",
+        "user_level": 5,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L5_Second",
+        "user_code": "RC1762092412427787",
+        "user_level": 5,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_First",
+        "user_code": "RC1762092440113127",
+        "user_level": 6,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_Second",
+        "user_code": "RC1762092462093910",
+        "user_level": 6,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_First",
+        "user_code": "RC1762092490116773",
+        "user_level": 7,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_Second",
+        "user_code": "RC1762092511026217",
+        "user_level": 7,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_First",
+        "user_code": "RC1762092538804424",
+        "user_level": 8,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_Second",
+        "user_code": "RC1762092560589675",
+        "user_level": 8,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092787063763",
+        "nth_upline_level": 13,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092787063763",
+        "nth_upline_level": 13,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092837540146",
+        "nth_upline_level": 14,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 3,
+        "nth_upline_code": "RC1762092837540146",
+        "nth_upline_level": 14,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "4": [
+      {
+        "user_name": "L4_First",
+        "user_code": "RC1762092298010218",
+        "user_level": 4,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L4_Second",
+        "user_code": "RC1762092319389101",
+        "user_level": 4,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L5_First",
+        "user_code": "RC1762092390428280",
+        "user_level": 5,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L5_Second",
+        "user_code": "RC1762092412427787",
+        "user_level": 5,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_First",
+        "user_code": "RC1762092440113127",
+        "user_level": 6,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_Second",
+        "user_code": "RC1762092462093910",
+        "user_level": 6,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_First",
+        "user_code": "RC1762092490116773",
+        "user_level": 7,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_Second",
+        "user_code": "RC1762092511026217",
+        "user_level": 7,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_First",
+        "user_code": "RC1762092538804424",
+        "user_level": 8,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_Second",
+        "user_code": "RC1762092560589675",
+        "user_level": 8,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092787063763",
+        "nth_upline_level": 13,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 4,
+        "nth_upline_code": "RC1762092787063763",
+        "nth_upline_level": 13,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "5": [
+      {
+        "user_name": "L5_First",
+        "user_code": "RC1762092390428280",
+        "user_level": 5,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L5_Second",
+        "user_code": "RC1762092412427787",
+        "user_level": 5,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_First",
+        "user_code": "RC1762092440113127",
+        "user_level": 6,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_Second",
+        "user_code": "RC1762092462093910",
+        "user_level": 6,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_First",
+        "user_code": "RC1762092490116773",
+        "user_level": 7,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_Second",
+        "user_code": "RC1762092511026217",
+        "user_level": 7,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_First",
+        "user_code": "RC1762092538804424",
+        "user_level": 8,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_Second",
+        "user_code": "RC1762092560589675",
+        "user_level": 8,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 5,
+        "nth_upline_code": "RC1762092738079310",
+        "nth_upline_level": 12,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "6": [
+      {
+        "user_name": "L6_First",
+        "user_code": "RC1762092440113127",
+        "user_level": 6,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L6_Second",
+        "user_code": "RC1762092462093910",
+        "user_level": 6,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_First",
+        "user_code": "RC1762092490116773",
+        "user_level": 7,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_Second",
+        "user_code": "RC1762092511026217",
+        "user_level": 7,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_First",
+        "user_code": "RC1762092538804424",
+        "user_level": 8,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_Second",
+        "user_code": "RC1762092560589675",
+        "user_level": 8,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 6,
+        "nth_upline_code": "RC1762092687609866",
+        "nth_upline_level": 11,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "7": [
+      {
+        "user_name": "L7_First",
+        "user_code": "RC1762092490116773",
+        "user_level": 7,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L7_Second",
+        "user_code": "RC1762092511026217",
+        "user_level": 7,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_First",
+        "user_code": "RC1762092538804424",
+        "user_level": 8,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_Second",
+        "user_code": "RC1762092560589675",
+        "user_level": 8,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 7,
+        "nth_upline_code": "RC1762092637535321",
+        "nth_upline_level": 10,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "8": [
+      {
+        "user_name": "L8_First",
+        "user_code": "RC1762092538804424",
+        "user_level": 8,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L8_Second",
+        "user_code": "RC1762092560589675",
+        "user_level": 8,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 8,
+        "nth_upline_code": "RC1762092588351827",
+        "nth_upline_level": 9,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "9": [
+      {
+        "user_name": "L9_First",
+        "user_code": "RC1762092588351827",
+        "user_level": 9,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L9_Second",
+        "user_code": "RC1762092609784952",
+        "user_level": 9,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 9,
+        "nth_upline_code": "RC1762092538804424",
+        "nth_upline_level": 8,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "10": [
+      {
+        "user_name": "L10_First",
+        "user_code": "RC1762092637535321",
+        "user_level": 10,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L10_Second",
+        "user_code": "RC1762092659779266",
+        "user_level": 10,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 10,
+        "nth_upline_code": "RC1762092490116773",
+        "nth_upline_level": 7,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "11": [
+      {
+        "user_name": "L11_First",
+        "user_code": "RC1762092687609866",
+        "user_level": 11,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L11_Second",
+        "user_code": "RC1762092709641354",
+        "user_level": 11,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 11,
+        "nth_upline_code": "RC1762092440113127",
+        "nth_upline_level": 6,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "12": [
+      {
+        "user_name": "L12_First",
+        "user_code": "RC1762092738079310",
+        "user_level": 12,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L12_Second",
+        "user_code": "RC1762092759231152",
+        "user_level": 12,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 12,
+        "nth_upline_code": "RC1762092390428280",
+        "nth_upline_level": 5,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "13": [
+      {
+        "user_name": "L13_First",
+        "user_code": "RC1762092787063763",
+        "user_level": 13,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L13_Second",
+        "user_code": "RC1762092809713854",
+        "user_level": 13,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 13,
+        "nth_upline_code": "RC1762092298010218",
+        "nth_upline_level": 4,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "14": [
+      {
+        "user_name": "L14_First",
+        "user_code": "RC1762092837540146",
+        "user_level": 14,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L14_Second",
+        "user_code": "RC1762092859654874",
+        "user_level": 14,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 14,
+        "nth_upline_code": "RC1762092210666602",
+        "nth_upline_level": 3,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "15": [
+      {
+        "user_name": "L15_First",
+        "user_code": "RC1762092887432738",
+        "user_level": 15,
+        "slot_no": 15,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L15_Second",
+        "user_code": "RC1762092908441906",
+        "user_level": 15,
+        "slot_no": 15,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 15,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 15,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 15,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 15,
+        "nth_upline_code": "RC1762092152819716",
+        "nth_upline_level": 2,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "16": [
+      {
+        "user_name": "L16_First",
+        "user_code": "RC1762092936218687",
+        "user_level": 16,
+        "slot_no": 16,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L16_Second",
+        "user_code": "RC1762092958393642",
+        "user_level": 16,
+        "slot_no": 16,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 16,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 16,
+        "nth_upline_code": "RC1762092007814483",
+        "nth_upline_level": 1,
+        "position": 2,
+        "qualifies": true
+      }
+    ],
+    "17": [
+      {
+        "user_name": "L17_First",
+        "user_code": "RC1762092986221914",
+        "user_level": 17,
+        "slot_no": 17,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 1,
+        "qualifies": true
+      },
+      {
+        "user_name": "L17_Second",
+        "user_code": "RC1762093007380534",
+        "user_level": 17,
+        "slot_no": 17,
+        "nth_upline_code": "RC1762091019677356",
+        "nth_upline_level": 0,
+        "position": 2,
+        "qualifies": true
+      }
+    ]
+  },
+  "summary": {
+    "total_slots_analyzed": 16,
+    "total_qualifying_users": 272
+  }
+}

@@ -94,6 +94,23 @@ def _post_create_background(user_id: str, referrer_id: str):
     except Exception:
         pass
 
+    # Check cascade auto-upgrade for all slots up to 17 levels in upline
+    try:
+        from modules.auto_upgrade.service import AutoUpgradeService
+        auto_upgrade_service = AutoUpgradeService()
+        cascade_result = auto_upgrade_service.check_cascade_auto_upgrade_up_to_17_levels(user_id)
+        if cascade_result.get("success"):
+            print(f"[USER_CREATE] Cascade check completed: {cascade_result.get('total_levels', 0)} levels, {cascade_result.get('total_checks', 0)} slot checks")
+            if cascade_result.get('auto_upgrades_triggered'):
+                print(f"[USER_CREATE] ✅ {len(cascade_result['auto_upgrades_triggered'])} auto-upgrades triggered")
+        else:
+            print(f"[USER_CREATE] ⚠️ Cascade check failed: {cascade_result.get('error', 'Unknown error')}")
+    except Exception as e:
+        print(f"[USER_CREATE] Error in cascade auto-upgrade check: {e}")
+        import traceback
+        traceback.print_exc()
+        pass
+
 
 @user_router.post("/create")
 async def create_user(payload: CreateUserRequest, background_tasks: BackgroundTasks):

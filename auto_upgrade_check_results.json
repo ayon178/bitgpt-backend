@@ -1,0 +1,430 @@
+{
+  "check_date": "2025-11-02T14:23:22.523412",
+  "summary": {
+    "total_users": 35,
+    "users_with_auto_upgrades": 16,
+    "total_auto_upgrades": 16
+  },
+  "by_slot": {
+    "3": [
+      {
+        "user": "A (ROOT)",
+        "refer_code": "RC1762091019677356",
+        "level": 0,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:03:15.838000"
+      },
+      {
+        "user": "L1_First",
+        "refer_code": "RC1762092007814483",
+        "level": 1,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:04:45.182000"
+      },
+      {
+        "user": "L2_First",
+        "refer_code": "RC1762092152819716",
+        "level": 2,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:06:17.611000"
+      },
+      {
+        "user": "L3_First",
+        "refer_code": "RC1762092210666602",
+        "level": 3,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:07:07.329000"
+      },
+      {
+        "user": "L4_First",
+        "refer_code": "RC1762092298010218",
+        "level": 4,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:07:57.019000"
+      },
+      {
+        "user": "L5_First",
+        "refer_code": "RC1762092390428280",
+        "level": 5,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:08:46"
+      },
+      {
+        "user": "L6_First",
+        "refer_code": "RC1762092440113127",
+        "level": 6,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:09:35.552000"
+      },
+      {
+        "user": "L7_First",
+        "refer_code": "RC1762092490116773",
+        "level": 7,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:10:24.727000"
+      },
+      {
+        "user": "L8_First",
+        "refer_code": "RC1762092538804424",
+        "level": 8,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:11:14.738000"
+      },
+      {
+        "user": "L9_First",
+        "refer_code": "RC1762092588351827",
+        "level": 9,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:12:04.428000"
+      },
+      {
+        "user": "L10_First",
+        "refer_code": "RC1762092637535321",
+        "level": 10,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:12:54.051000"
+      },
+      {
+        "user": "L11_First",
+        "refer_code": "RC1762092687609866",
+        "level": 11,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:13:44.721000"
+      },
+      {
+        "user": "L12_First",
+        "refer_code": "RC1762092738079310",
+        "level": 12,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:14:34.606000"
+      },
+      {
+        "user": "L13_First",
+        "refer_code": "RC1762092787063763",
+        "level": 13,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:15:23.389000"
+      },
+      {
+        "user": "L14_First",
+        "refer_code": "RC1762092837540146",
+        "level": 14,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:16:13.368000"
+      },
+      {
+        "user": "L15_First",
+        "refer_code": "RC1762092887432738",
+        "level": 15,
+        "amount": 0.0088,
+        "activated_at": "2025-11-02T14:17:02.725000"
+      }
+    ]
+  },
+  "users_with_auto_upgrades": [
+    {
+      "user": {
+        "name": "A (ROOT)",
+        "refer_code": "RC1762091019677356",
+        "user_id": "6907600d2be775b3892180a5",
+        "uid": "user17620910196137124",
+        "level": 0
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:03:15.838000",
+          "tx_hash": "auto_reserve_3_6907600d2be775b3892180a5_1762070595"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L1_First",
+        "refer_code": "RC1762092007814483",
+        "user_id": "690763e875e44076ffdbb182",
+        "uid": "user17620920075076909",
+        "level": 1
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:04:45.182000",
+          "tx_hash": "auto_reserve_3_690763e875e44076ffdbb182_1762070685"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L2_First",
+        "refer_code": "RC1762092152819716",
+        "user_id": "6907647975e44076ffdbb1e4",
+        "uid": "user17620921525194890",
+        "level": 2
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:06:17.611000",
+          "tx_hash": "auto_reserve_3_6907647975e44076ffdbb1e4_1762070777"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L3_First",
+        "refer_code": "RC1762092210666602",
+        "user_id": "690764b375e44076ffdbb1fe",
+        "uid": "user17620922103653438",
+        "level": 3
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:07:07.329000",
+          "tx_hash": "auto_reserve_3_690764b375e44076ffdbb1fe_1762070827"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L4_First",
+        "refer_code": "RC1762092298010218",
+        "user_id": "6907650a75e44076ffdbb23f",
+        "uid": "user17620922977098039",
+        "level": 4
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:07:57.019000",
+          "tx_hash": "auto_reserve_3_6907650a75e44076ffdbb23f_1762070877"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L5_First",
+        "refer_code": "RC1762092390428280",
+        "user_id": "6907656675e44076ffdbb280",
+        "uid": "user17620923901275299",
+        "level": 5
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:08:46",
+          "tx_hash": "auto_reserve_3_6907656675e44076ffdbb280_1762070926"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L6_First",
+        "refer_code": "RC1762092440113127",
+        "user_id": "6907659875e44076ffdbb29a",
+        "uid": "user17620924398119021",
+        "level": 6
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:09:35.552000",
+          "tx_hash": "auto_reserve_3_6907659875e44076ffdbb29a_1762070975"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L7_First",
+        "refer_code": "RC1762092490116773",
+        "user_id": "690765ca75e44076ffdbb2b4",
+        "uid": "user17620924898141327",
+        "level": 7
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:10:24.727000",
+          "tx_hash": "auto_reserve_3_690765ca75e44076ffdbb2b4_1762071024"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L8_First",
+        "refer_code": "RC1762092538804424",
+        "user_id": "690765fb75e44076ffdbb2ce",
+        "uid": "user17620925385022067",
+        "level": 8
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:11:14.738000",
+          "tx_hash": "auto_reserve_3_690765fb75e44076ffdbb2ce_1762071074"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L9_First",
+        "refer_code": "RC1762092588351827",
+        "user_id": "6907662c75e44076ffdbb2e8",
+        "uid": "user17620925880518446",
+        "level": 9
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:12:04.428000",
+          "tx_hash": "auto_reserve_3_6907662c75e44076ffdbb2e8_1762071124"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L10_First",
+        "refer_code": "RC1762092637535321",
+        "user_id": "6907665e75e44076ffdbb302",
+        "uid": "user17620926372347534",
+        "level": 10
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:12:54.051000",
+          "tx_hash": "auto_reserve_3_6907665e75e44076ffdbb302_1762071174"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L11_First",
+        "refer_code": "RC1762092687609866",
+        "user_id": "6907669075e44076ffdbb31c",
+        "uid": "user17620926873046178",
+        "level": 11
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:13:44.721000",
+          "tx_hash": "auto_reserve_3_6907669075e44076ffdbb31c_1762071224"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L12_First",
+        "refer_code": "RC1762092738079310",
+        "user_id": "690766c275e44076ffdbb336",
+        "uid": "user17620927377749295",
+        "level": 12
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:14:34.606000",
+          "tx_hash": "auto_reserve_3_690766c275e44076ffdbb336_1762071274"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L13_First",
+        "refer_code": "RC1762092787063763",
+        "user_id": "690766f375e44076ffdbb350",
+        "uid": "user17620927867627232",
+        "level": 13
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:15:23.389000",
+          "tx_hash": "auto_reserve_3_690766f375e44076ffdbb350_1762071323"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L14_First",
+        "refer_code": "RC1762092837540146",
+        "user_id": "6907672675e44076ffdbb36a",
+        "uid": "user17620928372372670",
+        "level": 14
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:16:13.368000",
+          "tx_hash": "auto_reserve_3_6907672675e44076ffdbb36a_1762071373"
+        }
+      ]
+    },
+    {
+      "user": {
+        "name": "L15_First",
+        "refer_code": "RC1762092887432738",
+        "user_id": "6907675775e44076ffdbb384",
+        "uid": "user17620928871315333",
+        "level": 15
+      },
+      "auto_upgrades": [
+        {
+          "slot_no": 3,
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:17:02.725000",
+          "tx_hash": "auto_reserve_3_6907675775e44076ffdbb384_1762071422"
+        }
+      ]
+    }
+  ]
+}

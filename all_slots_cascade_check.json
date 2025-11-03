@@ -1,0 +1,1227 @@
+{
+  "summary": {
+    "total_auto_upgrades": 13,
+    "total_cascade_routed": 0,
+    "total_cascade_not_routed": 13,
+    "total_next_slot_ready": 0
+  },
+  "slot_summary": {
+    "2": {
+      "auto_upgraded_users": [],
+      "cascade_routed": [],
+      "cascade_not_routed": [],
+      "next_slot_ready": []
+    },
+    "3": {
+      "auto_upgraded_users": [
+        {
+          "user": "L3_First",
+          "level": 3
+        },
+        {
+          "user": "L4_First",
+          "level": 4
+        },
+        {
+          "user": "L5_First",
+          "level": 5
+        },
+        {
+          "user": "L6_First",
+          "level": 6
+        },
+        {
+          "user": "L7_First",
+          "level": 7
+        },
+        {
+          "user": "L8_First",
+          "level": 8
+        },
+        {
+          "user": "L9_First",
+          "level": 9
+        },
+        {
+          "user": "L10_First",
+          "level": 10
+        },
+        {
+          "user": "L11_First",
+          "level": 11
+        },
+        {
+          "user": "L12_First",
+          "level": 12
+        },
+        {
+          "user": "L13_First",
+          "level": 13
+        },
+        {
+          "user": "L14_First",
+          "level": 14
+        },
+        {
+          "user": "L15_First",
+          "level": 15
+        }
+      ],
+      "cascade_routed": [],
+      "cascade_not_routed": [
+        {
+          "user": "L3_First",
+          "upline": "A (ROOT)"
+        },
+        {
+          "user": "L4_First",
+          "upline": "L1_First"
+        },
+        {
+          "user": "L5_First",
+          "upline": "L2_First"
+        },
+        {
+          "user": "L6_First",
+          "upline": "L3_First"
+        },
+        {
+          "user": "L7_First",
+          "upline": "L4_First"
+        },
+        {
+          "user": "L8_First",
+          "upline": "L5_First"
+        },
+        {
+          "user": "L9_First",
+          "upline": "L6_First"
+        },
+        {
+          "user": "L10_First",
+          "upline": "L7_First"
+        },
+        {
+          "user": "L11_First",
+          "upline": "L8_First"
+        },
+        {
+          "user": "L12_First",
+          "upline": "L9_First"
+        },
+        {
+          "user": "L13_First",
+          "upline": "L10_First"
+        },
+        {
+          "user": "L14_First",
+          "upline": "L11_First"
+        },
+        {
+          "user": "L15_First",
+          "upline": "L12_First"
+        }
+      ],
+      "next_slot_ready": []
+    }
+  },
+  "user_results": {
+    "690763e875e44076ffdbb182": {
+      "user_name": "L1_First",
+      "user_level": 1,
+      "refer_code": "RC1762092007814483",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:01:11.585000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:04:45.182000"
+        }
+      },
+      "cascade_status": {}
+    },
+    "6907643a75e44076ffdbb1b3": {
+      "user_name": "L1_Second",
+      "user_level": 1,
+      "refer_code": "RC1762092090041577",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:02:21.123000"
+        }
+      },
+      "cascade_status": {}
+    },
+    "6907647975e44076ffdbb1e4": {
+      "user_name": "L2_First",
+      "user_level": 2,
+      "refer_code": "RC1762092152819716",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:02:43.762000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:06:17.611000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "A (ROOT)",
+          "nth_upline_level": 0,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907649075e44076ffdbb1ef": {
+      "user_name": "L2_Second",
+      "user_level": 2,
+      "refer_code": "RC1762092175686620",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:03:05.432000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "A (ROOT)",
+          "nth_upline_level": 0,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "690764b375e44076ffdbb1fe": {
+      "user_name": "L3_First",
+      "user_level": 3,
+      "refer_code": "RC1762092210666602",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:03:40.292000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:07:07.329000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L1_First",
+          "nth_upline_level": 1,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "A (ROOT)",
+          "nth_upline_level": 0,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "690764c875e44076ffdbb209": {
+      "user_name": "L3_Second",
+      "user_level": 3,
+      "refer_code": "RC1762092232217795",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:04:01.941000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L1_First",
+          "nth_upline_level": 1,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907650a75e44076ffdbb23f": {
+      "user_name": "L4_First",
+      "user_level": 4,
+      "refer_code": "RC1762092298010218",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:05:06.996000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:07:57.019000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L2_First",
+          "nth_upline_level": 2,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L1_First",
+          "nth_upline_level": 1,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907651f75e44076ffdbb24a": {
+      "user_name": "L4_Second",
+      "user_level": 4,
+      "refer_code": "RC1762092319389101",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:05:29.158000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L2_First",
+          "nth_upline_level": 2,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907656675e44076ffdbb280": {
+      "user_name": "L5_First",
+      "user_level": 5,
+      "refer_code": "RC1762092390428280",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:06:40.225000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:08:46"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L3_First",
+          "nth_upline_level": 3,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L2_First",
+          "nth_upline_level": 2,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907657c75e44076ffdbb28b": {
+      "user_name": "L5_Second",
+      "user_level": 5,
+      "refer_code": "RC1762092412427787",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:07:02.129000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L3_First",
+          "nth_upline_level": 3,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907659875e44076ffdbb29a": {
+      "user_name": "L6_First",
+      "user_level": 6,
+      "refer_code": "RC1762092440113127",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:07:29.654000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:09:35.552000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L4_First",
+          "nth_upline_level": 4,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L3_First",
+          "nth_upline_level": 3,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "690765ae75e44076ffdbb2a5": {
+      "user_name": "L6_Second",
+      "user_level": 6,
+      "refer_code": "RC1762092462093910",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:07:51.797000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L4_First",
+          "nth_upline_level": 4,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "690765ca75e44076ffdbb2b4": {
+      "user_name": "L7_First",
+      "user_level": 7,
+      "refer_code": "RC1762092490116773",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:08:19.104000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:10:24.727000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L5_First",
+          "nth_upline_level": 5,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L4_First",
+          "nth_upline_level": 4,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "690765df75e44076ffdbb2bf": {
+      "user_name": "L7_Second",
+      "user_level": 7,
+      "refer_code": "RC1762092511026217",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:08:40.798000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L5_First",
+          "nth_upline_level": 5,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "690765fb75e44076ffdbb2ce": {
+      "user_name": "L8_First",
+      "user_level": 8,
+      "refer_code": "RC1762092538804424",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:09:08.371000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:11:14.738000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L6_First",
+          "nth_upline_level": 6,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L5_First",
+          "nth_upline_level": 5,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907661175e44076ffdbb2d9": {
+      "user_name": "L8_Second",
+      "user_level": 8,
+      "refer_code": "RC1762092560589675",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:09:30.351000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L6_First",
+          "nth_upline_level": 6,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907662c75e44076ffdbb2e8": {
+      "user_name": "L9_First",
+      "user_level": 9,
+      "refer_code": "RC1762092588351827",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:09:57.849000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:12:04.428000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L7_First",
+          "nth_upline_level": 7,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L6_First",
+          "nth_upline_level": 6,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907664275e44076ffdbb2f3": {
+      "user_name": "L9_Second",
+      "user_level": 9,
+      "refer_code": "RC1762092609784952",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:10:19.512000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L7_First",
+          "nth_upline_level": 7,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907665e75e44076ffdbb302": {
+      "user_name": "L10_First",
+      "user_level": 10,
+      "refer_code": "RC1762092637535321",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:10:47.514000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:12:54.051000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L8_First",
+          "nth_upline_level": 8,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L7_First",
+          "nth_upline_level": 7,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907667475e44076ffdbb30d": {
+      "user_name": "L10_Second",
+      "user_level": 10,
+      "refer_code": "RC1762092659779266",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:11:09.538000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L8_First",
+          "nth_upline_level": 8,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907669075e44076ffdbb31c": {
+      "user_name": "L11_First",
+      "user_level": 11,
+      "refer_code": "RC1762092687609866",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:11:36.778000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:13:44.721000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L9_First",
+          "nth_upline_level": 9,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L8_First",
+          "nth_upline_level": 8,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "690766a675e44076ffdbb327": {
+      "user_name": "L11_Second",
+      "user_level": 11,
+      "refer_code": "RC1762092709641354",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:11:59.273000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L9_First",
+          "nth_upline_level": 9,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "690766c275e44076ffdbb336": {
+      "user_name": "L12_First",
+      "user_level": 12,
+      "refer_code": "RC1762092738079310",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:12:27.193000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:14:34.606000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L10_First",
+          "nth_upline_level": 10,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L9_First",
+          "nth_upline_level": 9,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "690766d775e44076ffdbb341": {
+      "user_name": "L12_Second",
+      "user_level": 12,
+      "refer_code": "RC1762092759231152",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:12:48.877000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L10_First",
+          "nth_upline_level": 10,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "690766f375e44076ffdbb350": {
+      "user_name": "L13_First",
+      "user_level": 13,
+      "refer_code": "RC1762092787063763",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:13:17.481000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:15:23.389000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L11_First",
+          "nth_upline_level": 11,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L10_First",
+          "nth_upline_level": 10,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907670a75e44076ffdbb35b": {
+      "user_name": "L13_Second",
+      "user_level": 13,
+      "refer_code": "RC1762092809713854",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:13:39.502000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L11_First",
+          "nth_upline_level": 11,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907672675e44076ffdbb36a": {
+      "user_name": "L14_First",
+      "user_level": 14,
+      "refer_code": "RC1762092837540146",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:14:06.908000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:16:13.368000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L12_First",
+          "nth_upline_level": 12,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L11_First",
+          "nth_upline_level": 11,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907673c75e44076ffdbb375": {
+      "user_name": "L14_Second",
+      "user_level": 14,
+      "refer_code": "RC1762092859654874",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:14:29.398000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L12_First",
+          "nth_upline_level": 12,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907675775e44076ffdbb384": {
+      "user_name": "L15_First",
+      "user_level": 15,
+      "refer_code": "RC1762092887432738",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:14:56.447000"
+        },
+        "3": {
+          "slot_name": "Supporter",
+          "amount_paid": 0.0088,
+          "is_auto_upgrade": true,
+          "upgrade_source": "reserve",
+          "activated_at": "2025-11-02T14:17:02.725000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L13_First",
+          "nth_upline_level": 13,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        },
+        "3": {
+          "nth_upline": "L12_First",
+          "nth_upline_level": 12,
+          "next_slot": 4,
+          "reserve_balance": 0,
+          "reserve_credits": 0,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": true
+        }
+      }
+    },
+    "6907676d75e44076ffdbb38f": {
+      "user_name": "L15_Second",
+      "user_level": 15,
+      "refer_code": "RC1762092908441906",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:15:18.181000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L13_First",
+          "nth_upline_level": 13,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907678975e44076ffdbb39e": {
+      "user_name": "L16_First",
+      "user_level": 16,
+      "refer_code": "RC1762092936218687",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:15:46.435000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L14_First",
+          "nth_upline_level": 14,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "6907679e75e44076ffdbb3a9": {
+      "user_name": "L16_Second",
+      "user_level": 16,
+      "refer_code": "RC1762092958393642",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:16:08.151000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L14_First",
+          "nth_upline_level": 14,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "690767ba75e44076ffdbb3b8": {
+      "user_name": "L17_First",
+      "user_level": 17,
+      "refer_code": "RC1762092986221914",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:16:35.328000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L15_First",
+          "nth_upline_level": 15,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    },
+    "690767cf75e44076ffdbb3c3": {
+      "user_name": "L17_Second",
+      "user_level": 17,
+      "refer_code": "RC1762093007380534",
+      "slots": {
+        "2": {
+          "slot_name": "Contributor",
+          "amount_paid": 0.0044,
+          "is_auto_upgrade": false,
+          "upgrade_source": "auto",
+          "activated_at": "2025-11-02T14:16:57.529000"
+        }
+      },
+      "cascade_status": {
+        "2": {
+          "nth_upline": "L15_First",
+          "nth_upline_level": 15,
+          "next_slot": 3,
+          "reserve_balance": 0.0,
+          "reserve_credits": 0.0088,
+          "slot_cost": null,
+          "can_upgrade": false,
+          "is_auto_upgrade": false
+        }
+      }
+    }
+  }
+}
