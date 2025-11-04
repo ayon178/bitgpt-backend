@@ -262,9 +262,14 @@ class UserService:
         Get ALL community members (all downline users, all levels) for a user
         Slot-wise filtering: Only users from specified slot tree
         Uses BFS traversal to get all descendants
+        
+        Slot validation logic:
+        - If slot_number is provided: only return data if slot_number <= user's max active slot
+        - If slot_number is None: use user's max active slot from slot_activation collection
         """
         try:
             from modules.tree.model import TreePlacement
+            from modules.slot.model import SlotActivation
             
             # Validate program type
             if program_type not in ["binary", "matrix"]:
@@ -277,9 +282,64 @@ class UserService:
             
             user_oid = ObjectId(user_id)
             
-            # Default to Slot 1 if not specified
+            # Get user's max active slot from slot_activation collection
+            max_active_slot = 0
+            
+            # Check SlotActivation collection
+            slot_activations = SlotActivation.objects(
+                user_id=user_oid,
+                program=program_type,
+                status='completed'
+            ).order_by('-slot_no')
+            
+            if slot_activations.count() > 0:
+                max_active_slot = slot_activations.first().slot_no
+            
+            # For matrix program, also check MatrixActivation collection
+            if program_type == "matrix":
+                from modules.matrix.model import MatrixActivation
+                matrix_activations = MatrixActivation.objects(
+                    user_id=user_oid,
+                    status='completed'
+                ).order_by('-slot_no')
+                
+                if matrix_activations.count() > 0:
+                    matrix_max_slot = matrix_activations.first().slot_no
+                    max_active_slot = max(max_active_slot, matrix_max_slot)
+            
+            # If slot_number is not provided, use max active slot
             if slot_number is None:
-                slot_number = 1
+                if max_active_slot == 0:
+                    # User has no active slots, return empty data
+                    return {
+                        "success": True,
+                        "data": {
+                            "community_members": [],
+                            "pagination": {
+                                "page": page,
+                                "limit": limit,
+                                "total_count": 0,
+                                "total_pages": 0
+                            }
+                        }
+                    }
+                slot_number = max_active_slot
+            else:
+                # If slot_number is provided, validate it against max active slot
+                if slot_number > max_active_slot:
+                    # Requested slot is higher than user's max active slot, return empty data
+                    return {
+                        "success": True,
+                        "data": {
+                            "community_members": [],
+                            "pagination": {
+                                "page": page,
+                                "limit": limit,
+                                "total_count": 0,
+                                "total_pages": 0
+                            }
+                        }
+                    }
             
             # Use BFS traversal to get ALL downline users (all levels) in this slot tree
             unique_user_ids = []
