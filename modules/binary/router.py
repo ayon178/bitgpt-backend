@@ -121,8 +121,9 @@ async def manual_upgrade_binary_slot(
         if request.slot_no < 1 or request.slot_no > 17:
             raise HTTPException(status_code=400, detail="Invalid slot number. Must be between 1-17")
         
-        # Check authorization
-        if str(current_user.get("user_id")) != request.user_id:
+        # Check authorization - verify_authentication returns _id, not user_id
+        authenticated_user_id = current_user.get("_id") or current_user.get("user_id")
+        if not authenticated_user_id or str(authenticated_user_id) != request.user_id:
             raise HTTPException(status_code=403, detail="Unauthorized to upgrade this user's slot")
         
         # Initialize service
