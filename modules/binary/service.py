@@ -507,12 +507,13 @@ class BinaryService:
             except Exception as e:
                 print(f"Error calculating missing profit: {e}")
             
-            # 5. Get team statistics (total team, today team, today direct)
+            # 5. Get team statistics (total team, today team, today direct, total direct)
             # IMPORTANT: Count unique users only (ignore multiple slots)
             team_stats = {
                 "total_team": 0,
                 "today_team": 0,
-                "today_direct": 0
+                "today_direct": 0,
+                "total_direct": 0
             }
             try:
                 # Total team count (unique users across all levels)
@@ -581,6 +582,20 @@ class BinaryService:
                     unique_direct_users.add(str(placement.user_id))
                 
                 team_stats["today_direct"] = len(unique_direct_users)
+                
+                # Total direct count (unique direct referrals - all time)
+                # Get all direct referrals using parent_id (no date filter)
+                total_direct_placements = TreePlacement.objects(
+                    program='binary',
+                    parent_id=user_oid
+                )
+                
+                # Count unique user_ids only
+                unique_total_direct_users = set()
+                for placement in total_direct_placements:
+                    unique_total_direct_users.add(str(placement.user_id))
+                
+                team_stats["total_direct"] = len(unique_total_direct_users)
                 
                 print(f"Team stats for user {user_id} (unique users): {team_stats}")
                 
