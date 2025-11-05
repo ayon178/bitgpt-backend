@@ -142,12 +142,22 @@ class BinaryService:
             # 4. Update user rank
             rank_result = self.rank_service.update_user_rank(user_id=user_id)
             
-            # 5. Award jackpot free coupons (slots 5-16)
-            if slot_no >= 5:
-                jackpot_result = self.jackpot_service.award_free_coupon_for_binary_slot(
-                    user_id=user_id, 
-                    slot_no=slot_no
-                )
+            # 5. Award jackpot free entry for slot 5 only
+            if slot_no == 5:
+                try:
+                    from modules.jackpot.service import JackpotService
+                    jackpot_service = JackpotService()
+                    jackpot_result = jackpot_service.process_free_coupon_entry(
+                        user_id=user_id, 
+                        slot_number=5,
+                        tx_hash=tx_hash
+                    )
+                    print(f"✅ Jackpot free entry awarded for slot 5: {jackpot_result}")
+                except Exception as e:
+                    print(f"⚠️ Failed to award jackpot entry for slot 5: {e}")
+                    jackpot_result = {"success": False, "error": str(e)}
+            else:
+                jackpot_result = None
             
             # 6. Auto-join Leadership Stipend and check eligibility (slots 10-17)
             if slot_no >= 10:
@@ -225,7 +235,7 @@ class BinaryService:
                 "currency": currency,
                 "commission_result": commission_result,
                 "rank_result": rank_result,
-                "jackpot_result": jackpot_result if slot_no >= 5 else None,
+                "jackpot_result": jackpot_result if slot_no == 5 else None,
                 "stipend_result": stipend_result if slot_no >= 10 else None,
                 "spark_result": spark_result,
                 "message": f"Successfully upgraded to {catalog.name} (Slot {slot_no})"
