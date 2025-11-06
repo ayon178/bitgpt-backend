@@ -272,21 +272,18 @@ async def get_missed_profits(user_id: str):
             data={
                 "missed_profits": [
                     {
-                        "id": str(mp.id),
-                        "program": mp.program,
-                        "missed_amount": float(mp.missed_amount),
-                        "currency": mp.currency,
-                        "slot_no": mp.slot_no,
-                        "slot_name": mp.slot_name,
-                        "missed_reason": mp.missed_reason,
-                        "user_level": mp.user_level,
-                        "required_level": mp.required_level,
-                        "handling_status": mp.handling_status,
-                        "accumulated_in_stipend": mp.accumulated_in_stipend,
-                        "created_at": mp.created_at,
-                        "handled_at": mp.handled_at
-                    } for mp in missed_profits
-                ]
+                        "id": str(missed_profit.id),
+                        "user_id": str(missed_profit.user_id),
+                        "upline_user_id": str(missed_profit.upline_user_id),
+                        "missed_profit_type": missed_profit.missed_profit_type,
+                        "missed_profit_amount": missed_profit.missed_profit_amount,
+                        "currency": missed_profit.currency,
+                        "primary_reason": missed_profit.primary_reason,
+                        "recovery_reference": missed_profit.recovery_reference,
+                        "created_at": missed_profit.created_at
+                    } for missed_profit in missed_profits
+                ],
+                "total_missed_profits": len(missed_profits)
             },
             message="Missed profits retrieved successfully"
         )
@@ -306,21 +303,21 @@ async def handle_missed_profit(request: MissedProfitHandleRequest):
             # Move to Leadership Stipend
             stipend = LeadershipStipend.objects(
                 fund_type='missed_profits',
-                program=missed_profit.program,
+                program=missed_profit.program_type,
                 status='active'
             ).first()
             
             if not stipend:
                 stipend = LeadershipStipend(
                     fund_type='missed_profits',
-                    program=missed_profit.program,
-                    total_amount=missed_profit.missed_amount,
+                    program=missed_profit.program_type,
+                    total_amount=missed_profit.missed_profit_amount,
                     currency=missed_profit.currency,
-                    available_amount=missed_profit.missed_amount
+                    available_amount=missed_profit.missed_profit_amount
                 )
             else:
-                stipend.total_amount += missed_profit.missed_amount
-                stipend.available_amount += missed_profit.missed_amount
+                stipend.total_amount += missed_profit.missed_profit_amount
+                stipend.available_amount += missed_profit.missed_profit_amount
             
             stipend.save()
             
@@ -334,11 +331,10 @@ async def handle_missed_profit(request: MissedProfitHandleRequest):
             return success_response(
                 data={
                     "missed_profit_id": str(missed_profit.id),
-                    "stipend_id": str(stipend.id),
-                    "accumulated_amount": float(missed_profit.missed_amount),
-                    "message": "Missed profit accumulated in Leadership Stipend"
+                    "accumulated_amount": float(missed_profit.missed_profit_amount),
+                    "stipend_id": str(stipend.id)
                 },
-                message="Missed profit handling successful"
+                message="Missed profit accumulated in leadership stipend"
             )
         
         elif request.handling_action == 'distribute':
@@ -351,10 +347,10 @@ async def handle_missed_profit(request: MissedProfitHandleRequest):
             return success_response(
                 data={
                     "missed_profit_id": str(missed_profit.id),
-                    "distributed_amount": float(missed_profit.missed_amount),
-                    "message": "Missed profit distributed directly"
+                    "distributed_amount": float(missed_profit.missed_profit_amount),
+                    "stipend_id": str(stipend.id)
                 },
-                message="Missed profit distribution successful"
+                message="Missed profit distributed"
             )
         
         else:
@@ -481,7 +477,7 @@ async def get_commission_stats(user_id: str):
         ).sum('commission_amount')
         
         # Get missed profits
-        missed_profits = MissedProfit.objects(user_id=ObjectId(user_id)).sum('missed_amount')
+        missed_profits = MissedProfit.objects(user_id=ObjectId(user_id)).sum('missed_profit_amount')
         
         # Get commission by program
         program_stats = {}

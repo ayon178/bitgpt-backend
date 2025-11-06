@@ -15,6 +15,7 @@ from ..leadership_stipend.model import LeadershipStipend
 from ..leadership_stipend.service import LeadershipStipendService
 from ..blockchain.model import BlockchainEvent
 from ..wallet.service import WalletService
+from ..missed_profit.model import MissedProfitReason
 
 class CommissionService:
     """Commission Management Business Logic Service"""
@@ -373,6 +374,14 @@ class CommissionService:
                 upgrade_slot_level=downline_upgrade_level,
                 program_type=program
             )
+            missed_profit.reasons.append(MissedProfitReason(
+                reason_type="level_advancement",
+                reason_description=reason,
+                user_level=upline_current_level,
+                upgrade_slot_level=downline_upgrade_level,
+                commission_amount=float(amount),
+                currency=currency
+            ))
             missed_profit.save()
             
             # Automatically accumulate in Leadership Stipend
@@ -446,7 +455,7 @@ class CommissionService:
             
             # Get missed profits
             missed_profits = MissedProfit.objects(user_id=ObjectId(user_id)).all()
-            total_missed_profits = sum(mp.missed_amount for mp in missed_profits)
+            total_missed_profits = sum(mp.missed_profit_amount for mp in missed_profits)
             
             # Get program breakdown
             program_stats = {}
@@ -645,7 +654,7 @@ class CommissionService:
         try:
             stipend = LeadershipStipend.objects(
                 fund_type='missed_profits',
-                program=missed_profit.program,
+                program=missed_profit.program_type,
                 currency=missed_profit.currency,
                 status='active'
             ).first()
@@ -653,14 +662,14 @@ class CommissionService:
             if not stipend:
                 stipend = LeadershipStipend(
                     fund_type='missed_profits',
-                    program=missed_profit.program,
+                    program=missed_profit.program_type,
                     currency=missed_profit.currency,
-                    total_amount=missed_profit.missed_amount,
-                    available_amount=missed_profit.missed_amount
+                    total_amount=missed_profit.missed_profit_amount,
+                    available_amount=missed_profit.missed_profit_amount
                 )
             else:
-                stipend.total_amount += missed_profit.missed_amount
-                stipend.available_amount += missed_profit.missed_amount
+                stipend.total_amount += missed_profit.missed_profit_amount
+                stipend.available_amount += missed_profit.missed_profit_amount
             
             stipend.save()
             
@@ -674,7 +683,7 @@ class CommissionService:
             return {
                 "success": True,
                 "stipend_id": str(stipend.id),
-                "accumulated_amount": float(missed_profit.missed_amount)
+                "accumulated_amount": float(missed_profit.missed_profit_amount)
             }
             
         except Exception as e:

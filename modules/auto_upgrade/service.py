@@ -472,7 +472,13 @@ class AutoUpgradeService:
             if not nth_upline:
                 print(f"[BINARY_ROUTING] No Nth upline found, sending to mother account")
                 # No upline found at required depth → mother fallback
-                mother_result = self._send_to_mother_account(slot_value, slot_no)
+                mother_result = self._send_to_mother_account(
+                    slot_value,
+                    slot_no,
+                    missed_user_id=user_placement.parent_id,
+                    from_user_id=user_id,
+                    reason=f"Slot {slot_no} level payout missed by direct upline"
+                )
                 # Ensure SlotActivation is still recorded for the user's Slot 2+ activation
                 try:
                     from ..slot.model import SlotActivation
@@ -1545,7 +1551,14 @@ class AutoUpgradeService:
             import traceback
             traceback.print_exc()
     
-    def _send_to_mother_account(self, amount: Decimal, slot_no: int) -> Dict[str, Any]:
+    def _send_to_mother_account(
+        self,
+        amount: Decimal,
+        slot_no: int,
+        missed_user_id: ObjectId | str | None = None,
+        from_user_id: ObjectId | str | None = None,
+        reason: str | None = None
+    ) -> Dict[str, Any]:
         """Send fund to mother account when tree upline hasn't activated slot"""
         try:
             # Get mother account ID (configured in settings)
@@ -1564,6 +1577,45 @@ class AutoUpgradeService:
                 tx_hash=f"mother_slot_{slot_no}_{int(datetime.utcnow().timestamp())}",
                 created_at=datetime.utcnow()
             ).save()
+            
+            # Record missed profit entry for audit if we know who missed the payout
+            if missed_user_id and from_user_id:
+                try:
+                    from ..slot.model import SlotActivation
+                    from ..missed_profit.model import MissedProfit, MissedProfitReason
+                    missed_user_oid = ObjectId(missed_user_id) if not isinstance(missed_user_id, ObjectId) else missed_user_id
+                    from_user_oid = ObjectId(from_user_id) if not isinstance(from_user_id, ObjectId) else from_user_id
+                    # Determine current active slot level for the missed user
+                    latest_slot = SlotActivation.objects(
+                        user_id=missed_user_oid,
+                        program='binary',
+                        status='completed'
+                    ).order_by('-slot_no').first()
+                    user_level = latest_slot.slot_no if latest_slot else 0
+                    description = reason or f"Slot {slot_no} commission routed to mother account"
+                    missed_profit = MissedProfit(
+                        user_id=missed_user_oid,
+                        upline_user_id=from_user_oid,
+                        missed_profit_type='commission',
+                        missed_profit_amount=float(amount),
+                        currency='BNB',
+                        primary_reason='level_advancement',
+                        reason_description=description,
+                        user_level=user_level,
+                        upgrade_slot_level=slot_no,
+                        program_type='binary'
+                    )
+                    missed_profit.reasons.append(MissedProfitReason(
+                        reason_type='level_advancement',
+                        reason_description=description,
+                        user_level=user_level,
+                        upgrade_slot_level=slot_no,
+                        commission_amount=float(amount),
+                        currency='BNB'
+                    ))
+                    missed_profit.save()
+                except Exception as e:
+                    print(f"[MISS_PROFIT] ⚠️ Failed to record missed profit for slot {slot_no}: {e}")
             
             return {
                 "success": True,

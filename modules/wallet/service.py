@@ -78,14 +78,12 @@ class WalletService:
         try:
             from ..missed_profit.model import MissedProfit
             
-            # Get all missed profits for this user
-            missed_profits = MissedProfit.objects(
-                user_id=ObjectId(user_id),
-                is_active=True,
-                is_distributed=False  # Only count undistributed missed profits
+            # Get all missed profits for this user (total amounts by currency)
+            missed_queryset = MissedProfit.objects(
+                user_id=ObjectId(user_id)
             ).only('missed_profit_amount', 'currency')
-            
-            for missed in missed_profits:
+
+            for missed in missed_queryset:
                 currency = (str(getattr(missed, 'currency', '')).upper() or 'USDT')
                 if currency in missing_profit:
                     amount = float(getattr(missed, 'missed_profit_amount', 0) or 0)
@@ -1449,14 +1447,26 @@ class WalletService:
             if currency not in ['USDT', 'BNB']:
                 return {"success": False, "error": "Invalid currency. Must be USDT or BNB"}
             
+            user_oid = ObjectId(user_id)
+            
             # Get missed profit entries for the user with currency filter
-            missed_profits = MissedProfit.objects(
-                user_id=ObjectId(user_id),
+            currency_queryset = MissedProfit.objects(
+                user_id=user_oid,
                 currency=currency,
                 is_active=True
-            ).order_by('-created_at')
+            )
+            missed_profits = currency_queryset.order_by('-created_at')
             
             total_entries = missed_profits.count()
+            currency_total_amount = float(currency_queryset.sum('missed_profit_amount') or 0.0)
+            currency_undistributed_count = currency_queryset.filter(is_distributed=False).count()
+            currency_recovery_pending = currency_queryset.filter(recovery_status="pending").count()
+            
+            # Pre-calc totals across both currencies for convenience
+            totals_by_currency = {
+                "BNB": float(MissedProfit.objects(user_id=user_oid, currency='BNB', is_active=True).sum('missed_profit_amount') or 0.0),
+                "USDT": float(MissedProfit.objects(user_id=user_oid, currency='USDT', is_active=True).sum('missed_profit_amount') or 0.0)
+            }
             
             # Pagination
             page = max(1, int(page or 1))
@@ -1512,6 +1522,10 @@ class WalletService:
                     "is_distributed": entry.is_distributed
                 })
             
+            page_total_amount = sum(float(item[currency_field]) for item in items)
+            page_undistributed = len([item for item in items if not item["is_distributed"]])
+            page_recovery_pending = len([item for item in items if item["recovery_status"] == "pending"])
+            
             return {
                 "success": True,
                 "data": {
@@ -1521,14 +1535,52 @@ class WalletService:
                     "currency": currency,
                     "items": items,
                     "summary": {
-                        "total_missed_amount": sum(float(item[currency_field]) for item in items),
-                        "total_entries": len(items),
-                        "undistributed_count": len([item for item in items if not item["is_distributed"]]),
-                        "recovery_pending_count": len([item for item in items if item["recovery_status"] == "pending"])
+                        "page_missed_amount": page_total_amount,
+                        "page_entries": len(items),
+                        "page_undistributed_count": page_undistributed,
+                        "page_recovery_pending_count": page_recovery_pending,
+                        "currency_totals": {
+                            "currency": currency,
+                            "amount": currency_total_amount,
+                            "total_entries": total_entries,
+                            "undistributed_count": currency_undistributed_count,
+                            "recovery_pending_count": currency_recovery_pending
+                        },
+                        "overall_totals": totals_by_currency
                     }
                 }
             }
             
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_global_miss_profit_summary(self) -> Dict[str, Any]:
+        """Aggregate missed profit totals across all users by currency."""
+        try:
+            from ..missed_profit.model import MissedProfit
+            base_queryset = MissedProfit.objects(is_active=True)
+            totals: Dict[str, Dict[str, float | int]] = {}
+            for currency in ['BNB', 'USDT']:
+                qs = base_queryset.filter(currency=currency)
+                totals[currency] = {
+                    "amount": float(qs.sum('missed_profit_amount') or 0.0),
+                    "count": qs.count(),
+                    "undistributed_count": qs.filter(is_distributed=False).count(),
+                    "recovery_pending_count": qs.filter(recovery_status='pending').count()
+                }
+            overall = {
+                "amount": float(base_queryset.sum('missed_profit_amount') or 0.0),
+                "count": base_queryset.count(),
+                "undistributed_count": base_queryset.filter(is_distributed=False).count(),
+                "recovery_pending_count": base_queryset.filter(recovery_status='pending').count()
+            }
+            return {
+                "success": True,
+                "data": {
+                    "totals": totals,
+                    "overall": overall
+                }
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
 
