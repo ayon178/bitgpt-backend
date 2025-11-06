@@ -546,19 +546,19 @@ class AutoUpgradeService:
                     ).save()
                     print(f"[BINARY_ROUTING] ✅ SlotActivation created for user {user_id}, slot {slot_no}")
                     
-                    # Award jackpot free entry for slot 5 only
-                    if slot_no == 5:
+                    # Award jackpot free entry for eligible slots (5-17)
+                    if 5 <= slot_no <= 17:
                         try:
                             from modules.jackpot.service import JackpotService
                             jackpot_service = JackpotService()
                             jackpot_result = jackpot_service.process_free_coupon_entry(
                                 user_id=user_id,
-                                slot_number=5,
-                                tx_hash=f"auto_slot5_jackpot_{user_id}_{int(datetime.utcnow().timestamp())}"
+                                slot_number=slot_no,
+                                tx_hash=f"auto_slot{slot_no}_jackpot_{user_id}_{int(datetime.utcnow().timestamp())}"
                             )
-                            print(f"[BINARY_ROUTING] ✅ Jackpot free entry awarded for slot 5: {jackpot_result}")
+                            print(f"[BINARY_ROUTING] ✅ Jackpot free entry awarded for slot {slot_no}: {jackpot_result}")
                         except Exception as e:
-                            print(f"[BINARY_ROUTING] ⚠️ Failed to award jackpot entry for slot 5: {e}")
+                            print(f"[BINARY_ROUTING] ⚠️ Failed to award jackpot entry for slot {slot_no}: {e}")
                 except Exception as e:
                     print(f"[BINARY_ROUTING] ⚠️ Failed to create SlotActivation: {e}")
 
@@ -618,19 +618,19 @@ class AutoUpgradeService:
                         ).save()
                         print(f"[BINARY_ROUTING] ✅ SlotActivation created for user {user_id}, slot {slot_no} (pools path)")
                         
-                        # Award jackpot free entry for slot 5 only
-                        if slot_no == 5:
+                        # Award jackpot free entry for eligible slots (5-17)
+                        if 5 <= slot_no <= 17:
                             try:
                                 from modules.jackpot.service import JackpotService
                                 jackpot_service = JackpotService()
                                 jackpot_result = jackpot_service.process_free_coupon_entry(
                                     user_id=user_id,
-                                    slot_number=5,
-                                    tx_hash=f"auto_slot5_jackpot_pools_{user_id}_{int(datetime.utcnow().timestamp())}"
+                                    slot_number=slot_no,
+                                    tx_hash=f"auto_slot{slot_no}_jackpot_pools_{user_id}_{int(datetime.utcnow().timestamp())}"
                                 )
-                                print(f"[BINARY_ROUTING] ✅ Jackpot free entry awarded for slot 5 (pools path): {jackpot_result}")
+                                print(f"[BINARY_ROUTING] ✅ Jackpot free entry awarded for slot {slot_no} (pools path): {jackpot_result}")
                             except Exception as e:
-                                print(f"[BINARY_ROUTING] ⚠️ Failed to award jackpot entry for slot 5 (pools path): {e}")
+                                print(f"[BINARY_ROUTING] ⚠️ Failed to award jackpot entry for slot {slot_no} (pools path): {e}")
                     except Exception as e:
                         print(f"[BINARY_ROUTING] ⚠️ Failed to create SlotActivation (pools path): {e}")
 
@@ -1285,20 +1285,20 @@ class AutoUpgradeService:
             activation.save()
             print(f"[MANUAL_UPGRADE] ✅ SlotActivation created: user={user_id}, slot={slot_no}")
             
-            # Award jackpot free entry for slot 5 only
-            if slot_no == 5:
+            # Award jackpot free entry for eligible slots (5-17)
+            if 5 <= slot_no <= 17:
                 try:
                     from modules.jackpot.service import JackpotService
                     jackpot_service = JackpotService()
                     jackpot_result = jackpot_service.process_free_coupon_entry(
                         user_id=user_id,
-                        slot_number=5,
-                        tx_hash=tx_hash or f"manual_slot5_jackpot_{user_id}_{int(datetime.utcnow().timestamp())}"
+                        slot_number=slot_no,
+                        tx_hash=tx_hash or f"manual_slot{slot_no}_jackpot_{user_id}_{int(datetime.utcnow().timestamp())}"
                     )
-                    print(f"[MANUAL_UPGRADE] ✅ Jackpot free entry awarded for slot 5: {jackpot_result}")
+                    print(f"[MANUAL_UPGRADE] ✅ Jackpot free entry awarded for slot {slot_no}: {jackpot_result}")
                 except Exception as e:
-                    print(f"[MANUAL_UPGRADE] ⚠️ Failed to award jackpot entry for slot 5: {e}")
-            
+                    print(f"[MANUAL_UPGRADE] ⚠️ Failed to award jackpot entry for slot {slot_no}: {e}")
+
             # Route slot_cost following cascade rules (same as auto-upgrade)
             self._route_manual_upgrade_cost(user_id, slot_no, slot_cost)
             
