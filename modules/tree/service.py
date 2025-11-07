@@ -737,6 +737,72 @@ class TreeService:
             )
     
     @staticmethod
+    def ensure_binary_slot_placement(user_id: ObjectId | str, slot_no: int) -> Optional[TreePlacement]:
+        """Ensure a binary TreePlacement exists for the given user and slot."""
+        try:
+            user_oid = user_id if isinstance(user_id, ObjectId) else ObjectId(user_id)
+        except Exception:
+            return None
+
+        try:
+            placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+
+            if placement:
+                return placement
+
+            if slot_no < 1:
+                return None
+
+            # Try to reuse slot-1 placement's parent for higher slots
+            referrer_id: Optional[ObjectId] = None
+            slot1_placement = TreePlacement.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no=1,
+                is_active=True
+            ).first()
+
+            if slot1_placement and slot1_placement.parent_id:
+                referrer_id = slot1_placement.parent_id
+            else:
+                # Fall back to referral link if slot 1 placement not found
+                user = User.objects(id=user_oid).only('refered_by').first()
+                if user and getattr(user, 'refered_by', None):
+                    referrer_id = user.refered_by if isinstance(user.refered_by, ObjectId) else ObjectId(user.refered_by)
+
+            if not referrer_id:
+                return None
+
+            # Create placement using existing placement logic
+            try:
+                tree_service = TreeService()
+                created = tree_service.place_user_in_tree(
+                    user_id=user_oid,
+                    referrer_id=referrer_id,
+                    program='binary',
+                    slot_no=slot_no
+                )
+                if not created:
+                    return None
+            except Exception:
+                return None
+
+            return TreePlacement.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no=slot_no,
+                is_active=True
+            ).first()
+
+        except Exception:
+            return None
+
+    @staticmethod
     async def _get_user_info(placement: TreePlacement) -> Optional[Dict[str, Any]]:
         """
         Get user information for a tree position

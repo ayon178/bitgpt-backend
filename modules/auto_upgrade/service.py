@@ -929,50 +929,12 @@ class AutoUpgradeService:
                          'Specialist', 'Consultant', 'Advisor', 'Partner']
             slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
             
-            # Check if user has tree placement for this slot (create if needed)
-            placement = TreePlacement.objects(
-                user_id=user_id,
-                program='binary',
-                slot_no=slot_no,
-                is_active=True
-            ).first()
-            
-            if not placement:
-                # Get slot 1 placement to find referrer
-                slot1_placement = TreePlacement.objects(
-                    user_id=user_id,
-                    program='binary',
-                    slot_no=1,
-                    is_active=True
-                ).first()
-                
-                if slot1_placement and slot1_placement.parent_id:
-                    # Create placement for this slot under same parent
-                    from ..tree.service import TreeService
-                    tree_service = TreeService()
-                    try:
-                        placement_created = tree_service.place_user_in_tree(
-                            user_id=user_id,
-                            referrer_id=slot1_placement.parent_id,
-                            program='binary',
-                            slot_no=slot_no
-                        )
-                        if placement_created:
-                            # Fetch the newly created placement
-                            placement = TreePlacement.objects(
-                                user_id=user_id,
-                                program='binary',
-                                slot_no=slot_no,
-                                is_active=True
-                            ).first()
-                            print(f"[BINARY_ROUTING] ✅ Slot-{slot_no} placement created successfully")
-                        else:
-                            print(f"[BINARY_ROUTING] ⚠️ Failed to create Slot-{slot_no} placement, but continuing with auto-upgrade")
-                            placement = None
-                    except Exception as e:
-                        print(f"[BINARY_ROUTING] ⚠️ Error creating Slot-{slot_no} placement: {e}, but continuing with auto-upgrade")
-                        # Placement creation failed, but we can still activate the slot
-                        placement = None
+            from ..tree.service import TreeService
+            placement = TreeService.ensure_binary_slot_placement(user_id, slot_no)
+            if placement:
+                print(f"[BINARY_ROUTING] ✅ Slot-{slot_no} placement verified")
+            else:
+                print(f"[BINARY_ROUTING] ⚠️ Slot-{slot_no} placement missing; proceeding without placement")
             
             # IMPORTANT: When a slot is auto-upgraded, the upgrade amount (slot_cost) must follow
             # the same routing rules as a regular slot activation:
@@ -1267,6 +1229,9 @@ class AutoUpgradeService:
                          'Specialist', 'Consultant', 'Advisor', 'Partner']
             slot_name = slot_names[slot_no - 1] if slot_no <= len(slot_names) else f"Slot {slot_no}"
             
+            from ..tree.service import TreeService
+            TreeService.ensure_binary_slot_placement(user_oid, slot_no)
+
             activation = SlotActivation(
                 user_id=user_oid,
                 program='binary',

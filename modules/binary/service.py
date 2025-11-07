@@ -16,6 +16,7 @@ from ..leadership_stipend.service import LeadershipStipendService
 from ..spark.service import SparkService
 from ..blockchain.model import BlockchainEvent
 from ..tree.model import TreePlacement
+from ..tree.service import TreeService
 from utils import ensure_currency_for_program
 
 
@@ -50,8 +51,10 @@ class BinaryService:
         10. Blockchain event logging
         """
         try:
+            user_oid = ObjectId(user_id)
+
             # Validate user exists
-            user = User.objects(id=ObjectId(user_id)).first()
+            user = User.objects(id=user_oid).first()
             if not user:
                 raise ValueError("User not found")
             
@@ -60,7 +63,7 @@ class BinaryService:
                 raise ValueError("Invalid slot number. Must be between 3-16")
             
             # Get current binary status
-            binary_status = BinaryAutoUpgrade.objects(user_id=ObjectId(user_id)).first()
+            binary_status = BinaryAutoUpgrade.objects(user_id=user_oid).first()
             if not binary_status:
                 raise ValueError("User not in Binary program")
             
@@ -81,8 +84,11 @@ class BinaryService:
             currency = ensure_currency_for_program('binary', 'BNB')
             
             # 1. Create slot activation record
+            # Ensure tree placement exists before recording activation
+            TreeService.ensure_binary_slot_placement(user_oid, slot_no)
+
             activation = SlotActivation(
-                user_id=ObjectId(user_id),
+                user_id=user_oid,
                 program='binary',
                 slot_no=slot_no,
                 slot_name=catalog.name,
