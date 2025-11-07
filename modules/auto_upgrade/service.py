@@ -1049,6 +1049,24 @@ class AutoUpgradeService:
             )
             activation.save()
             print(f"[BINARY_ROUTING] ✅ SlotActivation created (reserve-driven): user={user_id}, slot={slot_no}")
+
+            # Leadership Stipend auto-join & eligibility check for higher slots (10+)
+            if slot_no >= 10:
+                try:
+                    from modules.leadership_stipend.model import LeadershipStipend
+                    from modules.leadership_stipend.service import LeadershipStipendService
+
+                    ls_service = LeadershipStipendService()
+                    ls_existing = LeadershipStipend.objects(user_id=user_id).first()
+
+                    if not ls_existing:
+                        join_result = ls_service.join_leadership_stipend_program(str(user_id))
+                        print(f"[BINARY_ROUTING] Leadership Stipend auto-join for user {user_id} slot {slot_no}: {join_result}")
+
+                    stipend_result = ls_service.check_eligibility(user_id=str(user_id), force_check=True)
+                    print(f"[BINARY_ROUTING] Leadership Stipend eligibility refresh for user {user_id} slot {slot_no}: {stipend_result}")
+                except Exception as e:
+                    print(f"[BINARY_ROUTING] ⚠️ Leadership Stipend sync failed for user {user_id} slot {slot_no}: {e}")
             
             # Update BinaryAutoUpgrade if it exists, otherwise create it
             binary_status = BinaryAutoUpgrade.objects(user_id=user_id).first()
@@ -1269,6 +1287,24 @@ class AutoUpgradeService:
                     print(f"[MANUAL_UPGRADE] ✅ Jackpot free entry awarded for slot {slot_no}: {jackpot_result}")
                 except Exception as e:
                     print(f"[MANUAL_UPGRADE] ⚠️ Failed to award jackpot entry for slot {slot_no}: {e}")
+
+            # Leadership Stipend auto-join & eligibility check for higher slots (10+)
+            if slot_no >= 10:
+                try:
+                    from modules.leadership_stipend.model import LeadershipStipend
+                    from modules.leadership_stipend.service import LeadershipStipendService
+
+                    ls_service = LeadershipStipendService()
+                    ls_existing = LeadershipStipend.objects(user_id=user_oid).first()
+
+                    if not ls_existing:
+                        join_result = ls_service.join_leadership_stipend_program(user_id)
+                        print(f"[MANUAL_UPGRADE] Leadership Stipend auto-join for user {user_id} slot {slot_no}: {join_result}")
+
+                    stipend_result = ls_service.check_eligibility(user_id=user_id, force_check=True)
+                    print(f"[MANUAL_UPGRADE] Leadership Stipend eligibility refresh for user {user_id} slot {slot_no}: {stipend_result}")
+                except Exception as e:
+                    print(f"[MANUAL_UPGRADE] ⚠️ Leadership Stipend sync failed for user {user_id} slot {slot_no}: {e}")
 
             # Route slot_cost following cascade rules (same as auto-upgrade)
             self._route_manual_upgrade_cost(user_id, slot_no, slot_cost)

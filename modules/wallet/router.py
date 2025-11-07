@@ -610,6 +610,14 @@ async def get_leadership_stipend_income(
                 "paid_at": p.paid_at,
             })
 
+        # Global totals per slot (all users, same currency)
+        global_slot_paid: dict[int, float] = {}
+        for gp in _LSP.objects(currency=currency.upper()):
+            amt = float(gp.daily_return_amount or 0.0)
+            if amt <= 0:
+                continue
+            global_slot_paid[gp.slot_number] = global_slot_paid.get(gp.slot_number, 0.0) + amt
+
         # Get total Leadership Stipend fund amounts from BonusFund (calculate before checking ls)
         from modules.income.bonus_fund import BonusFund
         total_global_bnb = 0.0
@@ -661,6 +669,18 @@ async def get_leadership_stipend_income(
                 print(f"✅ Tiers found after final DB fetch: {len(ls.tiers)}")
         
         # Iterate over tiers (will be empty if ls or ls.tiers is None/empty)
+        # Precompute eligible user counts per slot (active tiers only)
+        eligible_counts: dict[int, int] = {}
+        for rec in LeadershipStipend.objects(is_active=True).only('tiers'):
+            try:
+                for tier in rec.tiers:
+                    if tier.slot_number < 10 or tier.slot_number > 16:
+                        continue
+                    if tier.is_active:
+                        eligible_counts[tier.slot_number] = eligible_counts.get(tier.slot_number, 0) + 1
+            except Exception:
+                continue
+
         tiers_to_iterate = ls.tiers if ls and ls.tiers else []
         for t in tiers_to_iterate:
             if t.slot_number < 10 or t.slot_number > 16:
@@ -681,16 +701,8 @@ async def get_leadership_stipend_income(
                 ).first()
                 
                 if not already_claimed:
-                    # Count eligible users for this slot
-                    eligible_count = 0
-                    for rec in LeadershipStipend.objects(is_active=True).only('user_id', 'tiers'):
-                        try:
-                            if any(tier.slot_number == t.slot_number and tier.is_active for tier in rec.tiers):
-                                eligible_count += 1
-                        except Exception:
-                            continue
-                    
                     # Calculate per-user share
+                    eligible_count = eligible_counts.get(t.slot_number, 0)
                     if eligible_count > 0:
                         claimable_amount = float(t.daily_return) / eligible_count
             
@@ -698,12 +710,15 @@ async def get_leadership_stipend_income(
                 "slot_number": t.slot_number,
                 "tier_name": t.tier_name,
                 "slot_value": t.slot_value,
-                "daily_return": claimable_amount,  # Now shows user's claimable amount
+                "daily_return": float(t.daily_return or 0.0),
+                "claimable_amount": claimable_amount,
                 "funded_amount": slot_paid.get(t.slot_number, 0.0),
+                "slot_total_amount": global_slot_paid.get(t.slot_number, 0.0),
                 "pending_amount": t.pending_amount or 0.0,
                 "progress_percent": 0,
                 "is_active": bool(t.is_active),
                 "activated_at": t.activated_at,
+                "total_users": eligible_counts.get(t.slot_number, 0)
             })
 
         # Calculate current tier's claimable amount for summary
@@ -718,15 +733,8 @@ async def get_leadership_stipend_income(
             ).first()
             
             if not already_claimed:
-                # Count eligible users for current tier
-                eligible_count = 0
-                for rec in LeadershipStipend.objects(is_active=True).only('user_id', 'tiers'):
-                    try:
-                        if any(tier.slot_number == ls.current_tier and tier.is_active for tier in rec.tiers):
-                            eligible_count += 1
-                    except Exception:
-                        continue
-                
+                # Count eligible users for current tier (reuse precomputed map)
+                eligible_count = eligible_counts.get(ls.current_tier, 0)
                 # Calculate per-user share
                 if eligible_count > 0:
                     summary_claimable = float(ls.current_daily_return) / eligible_count
