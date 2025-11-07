@@ -1475,7 +1475,13 @@ class AutoUpgradeService:
             if not user_slot_n:
                 # User doesn't have slot N: send level distribution (60%) to mother wallet
                 print(f"[MANUAL_UPGRADE] User {user_id} doesn't have slot {slot_no}, sending level distribution ({level_distribution_amount} BNB) to mother wallet")
-                self._send_to_mother_account(level_distribution_amount, slot_no)
+                self._send_to_mother_account(
+                    level_distribution_amount,
+                    slot_no,
+                    missed_user_id=user_oid,
+                    from_user_id=user_id,
+                    reason=f"Level distribution fallback for slot {slot_no}"
+                )
                 
                 # Distribute remaining funds (40%: spark_bonus, royal_captain, etc.) normally
                 if other_distribution_amount > 0:

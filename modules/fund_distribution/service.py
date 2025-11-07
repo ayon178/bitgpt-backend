@@ -608,7 +608,11 @@ class FundDistributionService:
                         amount=level_dist_amount,
                         tx_hash=tx_hash,
                         description=f"Binary Level {level} Distribution (Slot {slot_no} not activated) - Mother Account",
-                        currency=currency
+                        currency=currency,
+                        missed_user_id=str(level_user_id),
+                        from_user_id=user_id,
+                        slot_name=f"Slot {slot_no}",
+                        missed_reason='level_slot_inactive'
                     )
                     distributions.append(distribution)
             else:
@@ -621,7 +625,11 @@ class FundDistributionService:
                     amount=level_dist_amount,
                     tx_hash=tx_hash,
                     description=f"Binary Level {level} Distribution (No upline) - Mother Account",
-                    currency=currency
+                    currency=currency,
+                    missed_user_id=None,
+                    from_user_id=user_id,
+                    slot_name=f"Slot {slot_no}",
+                    missed_reason='no_upline_found'
                 )
                 distributions.append(distribution)
         
@@ -729,23 +737,32 @@ class FundDistributionService:
             print(f"[BINARY_LEVEL_DIST] Error checking slot activation for user {user_id}, slot {slot_no}: {e}")
             return False
     
-    def _create_mother_account_income_event(self, source_id: str, program: str, slot_no: int,
-                                            amount: Decimal, tx_hash: str, description: str,
-                                            currency: str = 'BNB') -> Dict[str, Any]:
+    def _create_mother_account_income_event(
+        self,
+        source_id: str,
+        program: str,
+        slot_no: int,
+        amount: Decimal,
+        tx_hash: str,
+        description: str,
+        currency: str = 'BNB',
+        missed_user_id: Optional[str] = None,
+        from_user_id: Optional[str] = None,
+        slot_name: Optional[str] = None,
+        missed_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Create income event for Mother Account when upline not found or slot not activated.
-        Also credits Mother Account wallet.
+        Also credits Mother Account wallet and records missed profit if context is provided.
         """
         try:
             mother_account_id = ObjectId("000000000000000000000000")
-            
-            # Create IncomeEvent for tracking (using level_payout as income_type)
             income_event = IncomeEvent(
                 user_id=mother_account_id,
                 source_user_id=ObjectId(source_id),
                 program=program,
                 slot_no=slot_no,
-                income_type='level_payout',  # Using existing income_type for mother account
+                income_type='level_payout',
                 amount=amount,
                 percentage=Decimal('0'),
                 tx_hash=tx_hash,
@@ -754,8 +771,9 @@ class FundDistributionService:
                 created_at=datetime.utcnow()
             )
             income_event.save()
-            
-            # Credit Mother Account wallet
+
+            wallet_credited = False
+            wallet_error: Optional[str] = None
             try:
                 from modules.wallet.service import WalletService
                 wallet_service = WalletService()
@@ -767,29 +785,45 @@ class FundDistributionService:
                     reason=wallet_reason,
                     tx_hash=tx_hash
                 )
-                
-                return {
-                    "success": True,
-                    "type": "mother_account_level_distribution",
-                    "recipient_id": str(mother_account_id),
-                    "source_id": source_id,
-                    "amount": float(amount),
-                    "wallet_credited": credit_result.get("success", False),
-                    "description": description
-                }
+                wallet_credited = credit_result.get("success", False)
             except Exception as e:
-                print(f"[BINARY_LEVEL_DIST] Error crediting Mother Account wallet: {e}")
-                return {
-                    "success": True,
-                    "type": "mother_account_level_distribution",
-                    "recipient_id": str(mother_account_id),
-                    "source_id": source_id,
-                    "amount": float(amount),
-                    "wallet_credited": False,
-                    "description": description,
-                    "error": str(e)
-                }
-                
+                wallet_error = str(e)
+                print(f"[BINARY_LEVEL_DIST] Error crediting Mother Account wallet: {wallet_error}")
+
+            response: Dict[str, Any] = {
+                "success": True,
+                "type": "mother_account_level_distribution",
+                "recipient_id": str(mother_account_id),
+                "source_id": source_id,
+                "amount": float(amount),
+                "wallet_credited": wallet_credited,
+                "description": description
+            }
+            if wallet_error:
+                response["error"] = wallet_error
+
+            if missed_user_id and from_user_id:
+                try:
+                    from modules.commission.service import CommissionService
+                    commission_service = CommissionService()
+                    commission_service.handle_missed_profit(
+                        user_id=str(missed_user_id),
+                        from_user_id=str(from_user_id),
+                        program=program,
+                        slot_no=slot_no,
+                        slot_name=slot_name or f"Slot {slot_no}",
+                        amount=amount,
+                        currency=currency,
+                        reason=missed_reason or description
+                    )
+                    response["missed_profit_recorded"] = True
+                except Exception as e:
+                    print(f"[BINARY_LEVEL_DIST] Failed to record missed profit for user {missed_user_id}: {e}")
+                    response["missed_profit_recorded"] = False
+            else:
+                response["missed_profit_recorded"] = False
+
+            return response
         except Exception as e:
             print(f"[BINARY_LEVEL_DIST] Error creating Mother Account income event: {e}")
             import traceback
