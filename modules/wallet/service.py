@@ -797,17 +797,81 @@ class WalletService:
             # Current user's refer code
             user_refer_code = getattr(user, 'refer_code', None)
 
+            # Prepare source-user lookup via tx_hash (ObjectId embedded in hash)
+            hex24 = re.compile(r"([0-9a-fA-F]{24})")
+            entry_sources: Dict[str, str] = {}
+            source_ids: set[str] = set()
+            for entry in entries:
+                tx_hash = str(getattr(entry, 'tx_hash', '') or '')
+                match = hex24.search(tx_hash)
+                if match:
+                    candidate = match.group(1)
+                    try:
+                        oid = ObjectId(candidate)
+                        entry_sources[str(entry.id)] = str(oid)
+                        source_ids.add(str(oid))
+                    except Exception:
+                        continue
+
+            # Fetch source users (downlines who generated the income)
+            from ..slot.model import SlotActivation
+            source_users = {}
+            source_slot_map: Dict[str, Dict[str, Dict[str, Any]]] = {}
+            if source_ids:
+                source_user_objs = User.objects(id__in=[ObjectId(sid) for sid in source_ids]).only('uid', 'refer_code')
+                source_users = {str(u.id): u for u in source_user_objs}
+
+                # Fetch slot activations for rank calculation
+                slot_activations = SlotActivation.objects(
+                    user_id__in=[ObjectId(sid) for sid in source_ids],
+                    status='completed',
+                    program__in=['binary', 'matrix']
+                ).only('user_id', 'program', 'slot_no', 'slot_name')
+
+                for act in slot_activations:
+                    user_key = str(act.user_id)
+                    program_slots = source_slot_map.setdefault(user_key, {})
+                    current = program_slots.get(act.program)
+                    if not current or act.slot_no > current['slot_no']:
+                        program_slots[act.program] = {
+                            'slot_no': act.slot_no,
+                            'slot_name': getattr(act, 'slot_name', None)
+                        }
+
             # Build rows from ledger entries
             rows = []
             for entry in entries:
+                source_user_id = entry_sources.get(str(entry.id))
+                source_user = source_users.get(source_user_id) if source_user_id else None
+                source_uid = getattr(source_user, 'uid', None) if source_user else None
+                source_refer_code = getattr(source_user, 'refer_code', None) if source_user else None
+
+                # Determine rank based on active slots in both programs
+                rank = None
+                slot_info = source_slot_map.get(source_user_id) if source_user_id else None
+                if slot_info:
+                    binary_slot = slot_info.get('binary')
+                    matrix_slot = slot_info.get('matrix')
+                    if binary_slot and matrix_slot:
+                        if binary_slot['slot_no'] <= matrix_slot['slot_no']:
+                            chosen_program = 'Binary'
+                            chosen_slot = binary_slot
+                        else:
+                            chosen_program = 'Matrix'
+                            chosen_slot = matrix_slot
+                        slot_name = chosen_slot.get('slot_name') or f"Slot {chosen_slot.get('slot_no')}"
+                        rank = f"{chosen_program} - {slot_name}"
+
                 rows.append({
                     "uid": getattr(user, 'uid', None),
-                    "refer_code": user_refer_code,
+                    "receiver_refer_code": user_refer_code,
+                    "refer_code": source_refer_code,
+                    "source_uid": source_uid,
                     "referrer_refer_code": referrer_refer_code,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
                     "upline_uid": upline_uid,
                     "partner_count": partner_count,
-                    "rank": getattr(user, 'current_rank', None),
+                    "rank": rank,
                     "amount": float(entry.amount) if entry.amount else 0,
                     "reason": entry.reason,
                     "tx_hash": entry.tx_hash or ""
