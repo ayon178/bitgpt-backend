@@ -1,7 +1,7 @@
 from decimal import Decimal
 from datetime import datetime
 from bson import ObjectId
-from .model import UserWallet, WalletLedger
+from .model import UserWallet, WalletLedger, ReserveLedger
 from ..slot.model import SlotActivation
 import re
 from typing import Dict, Any
@@ -95,6 +95,77 @@ class WalletService:
             print(f"Error calculating missing profit for user {user_id}: {e}")
             # Keep missing_profit as zeros if calculation fails
 
+        # Calculate total deposits (reserve credits + initial join amounts across programs)
+        total_deposit = {"USDT": 0.0, "BNB": 0.0}
+        try:
+            # Reserve ledger credits routed to the user's reserve (auto upgrades / manual funding)
+            reserve_credits = ReserveLedger.objects(
+                user_id=ObjectId(user_id),
+                direction='credit'
+            ).only('amount', 'program')
+
+            for entry in reserve_credits:
+                amount = float(getattr(entry, 'amount', 0) or 0)
+                if amount <= 0:
+                    continue
+                program = getattr(entry, 'program', 'binary') or 'binary'
+                currency = 'BNB'
+                if program == 'matrix':
+                    currency = 'USDT'
+                elif program == 'global':
+                    # Global program currently operates in USDT per ensure_currency_for_program usage
+                    currency = 'USDT'
+                total_deposit[currency] += amount
+
+            # Initial join amounts from SlotActivation records
+            user_oid = ObjectId(user_id)
+
+            # Binary join (slots 1 & 2 auto-activated)
+            binary_initial = SlotActivation.objects(
+                user_id=user_oid,
+                program='binary',
+                slot_no__in=[1, 2],
+                activation_type='initial'
+            ).only('amount_paid', 'currency')
+            for act in binary_initial:
+                amt = float(getattr(act, 'amount_paid', 0) or 0)
+                curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
+                if curr not in total_deposit:
+                    total_deposit[curr] = 0.0
+                total_deposit[curr] += amt
+
+            # Matrix join (slot 1 initial activation)
+            matrix_initial = SlotActivation.objects(
+                user_id=user_oid,
+                program='matrix',
+                slot_no=1,
+                activation_type='initial'
+            ).only('amount_paid', 'currency')
+            for act in matrix_initial:
+                amt = float(getattr(act, 'amount_paid', 0) or 0)
+                curr = (str(getattr(act, 'currency', '')).upper() or 'USDT')
+                if curr not in total_deposit:
+                    total_deposit[curr] = 0.0
+                total_deposit[curr] += amt
+
+            # Global join (slot 1 initial activation)
+            global_initial = SlotActivation.objects(
+                user_id=user_oid,
+                program='global',
+                slot_no=1,
+                activation_type='initial'
+            ).only('amount_paid', 'currency')
+            for act in global_initial:
+                amt = float(getattr(act, 'amount_paid', 0) or 0)
+                curr = (str(getattr(act, 'currency', '')).upper() or 'USDT')
+                if curr not in total_deposit:
+                    total_deposit[curr] = 0.0
+                total_deposit[curr] += amt
+
+        except Exception as e:
+            print(f"Error calculating total deposits for user {user_id}: {e}")
+            # Keep totals as-is if calculation fails
+
         return {
             "success": True,
             "wallet_type": wallet_type,
@@ -103,6 +174,7 @@ class WalletService:
             # Single deduplicated count across currencies
             "today_sources": len(today_sources_set),
             "missing_profit": missing_profit,
+            "total_deposit": total_deposit,
         }
 
     def reconcile_main_from_ledger(self, user_id: str) -> dict:
