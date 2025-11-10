@@ -939,33 +939,89 @@ class WalletService:
             # Get paginated entries, sorted by created_at desc
             entries = WalletLedger.objects(query).order_by('-created_at').skip(skip).limit(limit)
 
-            # Get user info
-            user = User.objects(id=user_oid).first()
-            if not user:
-                return {"success": False, "error": "User not found"}
-            
-            # Get upline info
-            ref = getattr(user, 'refered_by', None)
-            upline_uid = None
-            upline_refer_code = None
-            if ref:
-                upline = User.objects(id=ref).only('uid', 'refer_code').first()
-                if upline:
-                    upline_uid = getattr(upline, 'uid', None)
-                    upline_refer_code = getattr(upline, 'refer_code', None)
-            if not upline_uid:
-                upline_uid = 'ROOT'
-            if not upline_refer_code:
-                upline_refer_code = 'ROOT'
+            # Build user lookup for all ledger entries
+            def _normalize_object_id(value):
+                if not value:
+                    return None
+                if isinstance(value, ObjectId):
+                    return str(value)
+                try:
+                    return str(ObjectId(value))
+                except Exception:
+                    return str(value)
+
+            primary_user_id = _normalize_object_id(user_oid)
+
+            user_ids = {
+                _normalize_object_id(entry.user_id)
+                for entry in entries
+                if getattr(entry, "user_id", None)
+            }
+            if primary_user_id:
+                user_ids.add(primary_user_id)
+
+            user_map: Dict[str, Any] = {}
+            if user_ids:
+                valid_user_object_ids = []
+                for uid in user_ids:
+                    if uid and ObjectId.is_valid(uid):
+                        valid_user_object_ids.append(ObjectId(uid))
+                if valid_user_object_ids:
+                    user_docs = User.objects(id__in=valid_user_object_ids).only('uid', 'refer_code', 'refered_by')
+                    for user_doc in user_docs:
+                        user_map[str(user_doc.id)] = user_doc
+
+            if not user_map:
+                fallback_user = None
+                try:
+                    fallback_user = User.objects(id=user_oid).only('uid', 'refer_code', 'refered_by').first()
+                except Exception:
+                    fallback_user = None
+                if not fallback_user and primary_user_id and ObjectId.is_valid(primary_user_id):
+                    fallback_user = User.objects(id=ObjectId(primary_user_id)).only('uid', 'refer_code', 'refered_by').first()
+                if fallback_user:
+                    user_map[str(fallback_user.id)] = fallback_user
+                else:
+                    return {"success": False, "error": "User not found"}
+
+            # Build referrer lookup
+            referrer_ids = {
+                _normalize_object_id(getattr(user_doc, 'refered_by', None))
+                for user_doc in user_map.values()
+                if getattr(user_doc, 'refered_by', None)
+            }
+            referrer_map: Dict[str, Dict[str, Any]] = {}
+            if referrer_ids:
+                referrer_docs = User.objects(id__in=[ObjectId(rid) for rid in referrer_ids if ObjectId.is_valid(rid)]).only('uid', 'refer_code')
+                for ref_doc in referrer_docs:
+                    referrer_map[str(ref_doc.id)] = {
+                        "uid": getattr(ref_doc, 'uid', None),
+                        "refer_code": getattr(ref_doc, 'refer_code', None),
+                    }
 
             # Build rows from ledger entries
             rows = []
             for entry in entries:
+                entry_user_key = _normalize_object_id(getattr(entry, 'user_id', None))
+                entry_user = user_map.get(entry_user_key)
+
+                entry_uid = getattr(entry_user, 'uid', None) if entry_user else None
+                entry_refer_code = getattr(entry_user, 'refer_code', None) if entry_user else None
+
+                referrer_uid = 'ROOT'
+                referrer_refer_code = 'ROOT'
+                if entry_user:
+                    ref_key = _normalize_object_id(getattr(entry_user, 'refered_by', None))
+                    if ref_key and ref_key in referrer_map:
+                        ref_info = referrer_map[ref_key]
+                        referrer_uid = ref_info.get("uid") or 'ROOT'
+                        referrer_refer_code = ref_info.get("refer_code") or 'ROOT'
+
                 rows.append({
-                    "uid": getattr(user, 'uid', None),
-                    "upline_uid": upline_uid,
-                    "refer_code": getattr(user, 'refer_code', None),
-                    "referrer_refer_code": upline_refer_code,
+                    "uid": entry_uid,
+                    "upline_uid": referrer_uid,
+                    "refer_code": entry_refer_code,
+                    "referrer_refer_code": referrer_refer_code,
                     "amount": float(entry.amount) if entry.amount else 0,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
                     "reason": entry.reason,
