@@ -95,26 +95,24 @@ class WalletService:
             print(f"Error calculating missing profit for user {user_id}: {e}")
             # Keep missing_profit as zeros if calculation fails
 
-        # Calculate total deposits (reserve credits + initial join amounts across programs)
+        # Calculate total deposits (user debits + program join/upgrade amounts)
         total_deposit = {"USDT": 0.0, "BNB": 0.0}
         try:
-            # Reserve ledger credits routed to the user's reserve (auto upgrades / manual funding)
-            reserve_credits = ReserveLedger.objects(
+            # Reserve ledger debits represent funds flowing out of the user's reserve
+            # (manual deposits, auto-upgrade deductions, wallet withdrawals to reserve, etc.)
+            reserve_debits = ReserveLedger.objects(
                 user_id=ObjectId(user_id),
-                direction='credit'
+                direction='debit'
             ).only('amount', 'program')
 
-            for entry in reserve_credits:
+            for entry in reserve_debits:
                 amount = float(getattr(entry, 'amount', 0) or 0)
                 if amount <= 0:
                     continue
                 program = getattr(entry, 'program', 'binary') or 'binary'
-                currency = 'BNB'
-                if program == 'matrix':
-                    currency = 'USDT'
-                elif program == 'global':
-                    # Global program currently operates in USDT per ensure_currency_for_program usage
-                    currency = 'USDT'
+                currency = 'BNB' if program == 'binary' else 'USDT'
+                if currency not in total_deposit:
+                    total_deposit[currency] = 0.0
                 total_deposit[currency] += amount
 
             # Initial join amounts from SlotActivation records
@@ -143,6 +141,21 @@ class WalletService:
             ).only('amount_paid', 'currency')
             for act in matrix_initial:
                 amt = float(getattr(act, 'amount_paid', 0) or 0)
+                curr = (str(getattr(act, 'currency', '')).upper() or 'USDT')
+                if curr not in total_deposit:
+                    total_deposit[curr] = 0.0
+                total_deposit[curr] += amt
+
+            # Matrix slot upgrades (any slot number)
+            matrix_upgrades = SlotActivation.objects(
+                user_id=user_oid,
+                program='matrix',
+                activation_type='upgrade'
+            ).only('amount_paid', 'currency')
+            for act in matrix_upgrades:
+                amt = float(getattr(act, 'amount_paid', 0) or 0)
+                if amt <= 0:
+                    continue
                 curr = (str(getattr(act, 'currency', '')).upper() or 'USDT')
                 if curr not in total_deposit:
                     total_deposit[curr] = 0.0
