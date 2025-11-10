@@ -419,14 +419,14 @@ class UserService:
                     current_max = user_max_slots_map.get(user_id_str, 0)
                     user_max_slots_map[user_id_str] = max(current_max, activation.slot_no)
             
-            # Filter: Include anyone who has reached at least the requested slot number
+            # Filter: Only include users whose highest active slot exactly matches the requested slot number
             users_with_slot_placement = []
             for user_id_obj in users_with_placement:
                 user_id_str = str(user_id_obj)
                 user_max_slot = user_max_slots_map.get(user_id_str, 0)
                 
-                # Include users whose max active slot is at least the requested slot_number
-                if user_max_slot >= slot_number:
+                # Include users only when their max active slot matches the requested slot
+                if user_max_slot == slot_number:
                     users_with_slot_placement.append(user_id_obj)
                 else:
                     print(f"[MY-COMMUNITY] Skipping user {user_id_obj}: max_slot={user_max_slot}, requested={slot_number}")
