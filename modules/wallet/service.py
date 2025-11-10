@@ -1680,15 +1680,18 @@ class WalletService:
             end = start + limit
             page_entries = missed_profits[start:end]
             
-            # Pre-fetch all users to optimize performance
+            # Pre-fetch all users (missed user + source partner) to optimize performance
             user_ids = set()
             for entry in page_entries:
-                user_ids.add(entry.user_id)
-                if hasattr(entry, 'upline_user_id') and entry.upline_user_id:
+                if getattr(entry, 'user_id', None):
+                    user_ids.add(entry.user_id)
+                if getattr(entry, 'upline_user_id', None):
                     user_ids.add(entry.upline_user_id)
             
-            # Batch fetch all users
-            users = {str(u.id): u for u in User.objects(id__in=list(user_ids)).only('id', 'uid')}
+            users = {
+                str(user_doc.id): user_doc
+                for user_doc in User.objects(id__in=list(user_ids)).only('id', 'uid', 'refer_code')
+            }
             
             # Format data for frontend (matching the screenshot structure)
             items = []
@@ -1699,23 +1702,36 @@ class WalletService:
                 time_date = f"{created_date} {created_time}"
                 
                 # Get user info from pre-fetched data
-                user = users.get(str(entry.user_id))
-                user_display_id = str(entry.user_id)  # Show ObjectId instead of uid
+                missed_user = users.get(str(entry.user_id))
+                missed_user_id = str(entry.user_id)
+                missed_user_uid = getattr(missed_user, 'uid', None) if missed_user else None
+                missed_user_refer_code = getattr(missed_user, 'refer_code', None) if missed_user else None
                 
-                # Get partner info (the user who caused the miss profit - from_user_id)
-                partner_id = None
-                if hasattr(entry, 'upline_user_id') and entry.upline_user_id:
-                    partner_id = str(entry.upline_user_id)  # Show ObjectId instead of uid
+                # Downline partner who triggered the miss profit
+                partner = None
+                partner_id = "--"
+                partner_uid = None
+                partner_refer_code = None
+                if getattr(entry, 'upline_user_id', None):
+                    partner_id = str(entry.upline_user_id)
+                    partner = users.get(partner_id)
+                    if partner:
+                        partner_uid = getattr(partner, 'uid', None)
+                        partner_refer_code = getattr(partner, 'refer_code', None)
                 
-                # Get user's current rank/level for display
+                # User level/rank info
                 user_level = entry.user_level
                 
                 # Dynamic currency field based on actual currency
                 currency_field = f"miss_{currency.lower()}"
                 
                 items.append({
-                    "user_id": user_display_id,
-                    "partner": partner_id or "--",
+                    "user_id": missed_user_id,
+                    "user_uid": missed_user_uid or "--",
+                    "user_refer_code": missed_user_refer_code or "--",
+                    "partner": partner_id,
+                    "partner_uid": partner_uid or "--",
+                    "partner_refer_code": partner_refer_code or "--",
                     "rank": user_level,
                     currency_field: float(entry.missed_profit_amount),
                     "time_date": time_date,
