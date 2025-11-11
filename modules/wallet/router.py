@@ -757,7 +757,10 @@ async def get_leadership_stipend_income(
                 claimable_amount = 0.0
             if eligible_user_count == 0:
                 claimable_amount = 0.0
-            
+
+            if ls.current_tier and ls.current_tier > 0 and t.slot_number < ls.current_tier:
+                progress_percent = 100.0
+
             tiers.append({
                 "slot_number": t.slot_number,
                 "tier_name": t.tier_name,
