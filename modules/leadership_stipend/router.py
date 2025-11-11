@@ -408,7 +408,7 @@ async def create_leadership_stipend_payment(request: LeadershipStipendPaymentReq
 @router.post("/claim")
 async def create_leadership_stipend_claim(
     user_id: str = Query(...),
-    slot_number: int = Query(..., ge=10, le=16),
+    slot_number: int = Query(..., ge=10, le=17),
     currency: str = Query("BNB")
 ):
     """Claim Leadership Stipend for a specific slot by a user.
@@ -452,16 +452,67 @@ async def create_leadership_stipend_claim(
         if not eligibles:
             raise HTTPException(status_code=400, detail="No eligible users for this slot")
 
-        # Slot allocation for the day = tier daily_return
+        # Slot allocation based on global pool
+        from modules.income.bonus_fund import BonusFund
+
+        distribution_percentages = {
+            10: 0.30,
+            11: 0.20,
+            12: 0.10,
+            13: 0.10,
+            14: 0.10,
+            15: 0.10,
+            16: 0.05,
+            17: 0.05,
+        }
+
         tier = _get_tier_info(slot_number)
-        per_slot_allocation = float(tier.get("daily_return", 0.0))
-        if per_slot_allocation <= 0:
-            raise HTTPException(status_code=400, detail="No allocation for this slot")
+        tier_percentage = distribution_percentages.get(slot_number, 0.0)
 
-        # Per-user share
-        per_user_amount = per_slot_allocation / max(1, len(eligibles))
+        bnb_fund = BonusFund.objects(fund_type='leadership_stipend', program='binary').first()
+        total_global_bnb = float(bnb_fund.current_balance or 0.0) if bnb_fund else 0.0
+        if total_global_bnb <= 0:
+            raise HTTPException(status_code=400, detail="Leadership Stipend pool empty")
 
-        # Check fund available; if not enough, scale down
+        tier_total_pool = total_global_bnb * tier_percentage
+        if tier_total_pool <= 0:
+            raise HTTPException(status_code=400, detail="No allocation available for this slot")
+
+        # Amount already paid from this pool
+        slot_payments = LeadershipStipendPayment.objects(
+            slot_number=slot_number,
+            currency=currency,
+            payment_status__in=["pending", "processing", "paid"]
+        )
+        slot_paid_total = sum(float(p.daily_return_amount or 0.0) for p in slot_payments)
+
+        pool_remaining = max(0.0, tier_total_pool - slot_paid_total)
+        if pool_remaining <= 0:
+            raise HTTPException(status_code=400, detail="Slot allocation exhausted")
+
+        eligible_count = len(eligibles)
+        if eligible_count <= 0:
+            raise HTTPException(status_code=400, detail="No eligible users for this slot")
+
+        per_user_pool_share = pool_remaining / eligible_count
+
+        # Per-user cap based on tier (double slot value)
+        tier_cap = float(tier.get("daily_return", 0.0))
+        tier_record = None
+        for t in ls.tiers:
+            if t.slot_number == slot_number:
+                tier_record = t
+                break
+        tier_paid = float(getattr(tier_record, "total_paid", 0.0) or 0.0) if tier_record else 0.0
+        tier_pending = float(getattr(tier_record, "pending_amount", 0.0) or 0.0) if tier_record else 0.0
+        tier_remaining_balance = max(0.0, tier_cap - tier_paid - tier_pending)
+
+        per_user_amount = min(per_user_pool_share, tier_remaining_balance)
+
+        if per_user_amount <= 0:
+            raise HTTPException(status_code=400, detail="No claimable amount available")
+
+        # Check direct stipend fund availability
         fund = LeadershipStipendFund.objects(is_active=True).first()
         if not fund or fund.available_amount <= 0:
             raise HTTPException(status_code=400, detail="Insufficient stipend fund")

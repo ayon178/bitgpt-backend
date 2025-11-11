@@ -152,9 +152,12 @@ class LeadershipStipendService:
                         tier_pending = float(getattr(tier_record, "pending_amount", 0.0) or 0.0)
                         remaining_cap = tier_cap - tier_paid - tier_pending
                 
-                if new_highest_slot >= 10 and remaining_cap > 0 and new_highest_slot != previous_tier:
-                    # Promote to the new slot and deactivate lower tiers
-                    self._activate_tier(leadership_stipend, new_highest_slot)
+                if new_highest_slot >= 10 and remaining_cap > 0:
+                    if not tier_record or not tier_record.is_active or new_highest_slot != previous_tier:
+                        # Promote to the new slot and deactivate lower tiers
+                        self._activate_tier(leadership_stipend, new_highest_slot)
+                    else:
+                        self._set_current_tier_info(leadership_stipend, new_highest_slot)
                 elif new_highest_slot >= 10 and remaining_cap <= 0:
                     # Highest slot exhausted; deactivate it
                     if tier_record and tier_record.is_active:
