@@ -708,10 +708,14 @@ async def get_leadership_stipend_income(
             if slot and t.slot_number != int(slot):
                 continue
             
-            # Calculate user's claimable amount for this slot
+            tier_cap = float(t.daily_return or 0.0)
+            tier_paid = float(t.total_paid or 0.0)
+            tier_pending = float(t.pending_amount or 0.0)
+            tier_remaining = max(0.0, tier_cap - tier_paid - tier_pending)
+            tier_is_active = bool(t.is_active and tier_remaining > 0)
+
             claimable_amount = 0.0
-            
-            if t.is_active:
+            if tier_is_active:
                 # Check if user has already claimed today
                 already_claimed = _LSP.objects(
                     user_id=ObjectId(user_id),
@@ -721,10 +725,8 @@ async def get_leadership_stipend_income(
                 ).first()
                 
                 if not already_claimed:
-                    # Calculate per-user share
-                    eligible_count = eligible_counts.get(t.slot_number, 0)
-                    if eligible_count > 0:
-                        claimable_amount = float(t.daily_return) / eligible_count
+                    eligible_count = max(1, eligible_counts.get(t.slot_number, 1))
+                    claimable_amount = tier_remaining / eligible_count
 
             tier_percentage = distribution_percentages.get(t.slot_number, 0.0)
             tier_total_bnb = total_global_bnb * tier_percentage
@@ -740,31 +742,22 @@ async def get_leadership_stipend_income(
                 "slot_total_amount": global_slot_paid.get(t.slot_number, 0.0),
                 "pending_amount": t.pending_amount or 0.0,
                 "progress_percent": 0,
-                "is_active": bool(t.is_active),
+                "is_active": tier_is_active,
                 "activated_at": t.activated_at,
-                "total_users": eligible_counts.get(t.slot_number, 0),
+                "total_users": eligible_counts.get(t.slot_number, 0) if tier_is_active else 0,
                 "total_bnb": tier_total_bnb,
                 "total_usdt": tier_total_usdt,
                 "distribution_percentage": tier_percentage * 100,
+                "remaining_amount": tier_remaining,
             })
 
         # Calculate current tier's claimable amount for summary
         summary_claimable = 0.0
         if ls.current_tier >= 10:
-            # Check if user has already claimed today for current tier
-            already_claimed = _LSP.objects(
-                user_id=ObjectId(user_id),
-                slot_number=ls.current_tier,
-                payment_date__gte=day_start,
-                payment_status__in=["pending", "paid"]
-            ).first()
-            
-            if not already_claimed:
-                # Count eligible users for current tier (reuse precomputed map)
-                eligible_count = eligible_counts.get(ls.current_tier, 0)
-                # Calculate per-user share
-                if eligible_count > 0:
-                    summary_claimable = float(ls.current_daily_return) / eligible_count
+            for tier_data in tiers:
+                if tier_data["slot_number"] == ls.current_tier:
+                    summary_claimable = tier_data["claimable_amount"]
+                    break
         
         data = {
             "user_id": user_id,

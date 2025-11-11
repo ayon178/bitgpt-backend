@@ -115,8 +115,23 @@ class LeadershipStipendService:
                 leadership_stipend.current_tier_name = current_tier_info["tier_name"]
                 leadership_stipend.current_daily_return = current_tier_info["daily_return"]
                 
-                # Activate tier
-                self._activate_tier(leadership_stipend, eligibility.highest_slot_activated)
+                # Determine whether tier still has remaining balance
+                tier_record = None
+                for t in leadership_stipend.tiers:
+                    if t.slot_number == eligibility.highest_slot_activated:
+                        tier_record = t
+                        break
+                tier_cap = float(getattr(tier_record, "daily_return", 0.0) or 0.0) if tier_record else 0.0
+                tier_paid = float(getattr(tier_record, "total_paid", 0.0) or 0.0) if tier_record else 0.0
+                tier_pending = float(getattr(tier_record, "pending_amount", 0.0) or 0.0) if tier_record else 0.0
+                remaining_cap = tier_cap - tier_paid - tier_pending
+                
+                if remaining_cap > 0:
+                    # Activate current tier and deactivate previous ones
+                    self._activate_tier(leadership_stipend, eligibility.highest_slot_activated)
+                else:
+                    # Tier already fulfilled – keep stipend eligible but without active tier
+                    self._set_current_tier_info(leadership_stipend, None)
                 
                 self._log_action(user_id, "became_eligible", f"User became eligible for Leadership Stipend - Slot {eligibility.highest_slot_activated}")
             
@@ -263,6 +278,11 @@ class LeadershipStipendService:
                         if t.slot_number == payment.slot_number:
                             t.total_paid = float((t.total_paid or 0.0) + float(payment.daily_return_amount))
                             t.pending_amount = float(max(0.0, (t.pending_amount or 0.0) - float(payment.daily_return_amount)))
+                            tier_cap = float(t.daily_return or 0.0)
+                            if tier_cap > 0 and t.total_paid >= tier_cap - 1e-9:
+                                t.is_active = False
+                                t.pending_amount = 0.0
+                                self._refresh_current_tier(leadership_stipend)
                             break
                     leadership_stipend.save()
                 except Exception:
@@ -496,13 +516,41 @@ class LeadershipStipendService:
         }
         return tier_mapping.get(slot_number, {"tier_name": "UNKNOWN", "daily_return": 0.0})
     
+    def _set_current_tier_info(self, leadership_stipend: LeadershipStipend, slot_number: Optional[int]):
+        """Update current tier fields on stipend record"""
+        if slot_number and slot_number >= 10:
+            tier_info = self._get_tier_info(slot_number)
+            leadership_stipend.current_tier = slot_number
+            leadership_stipend.current_tier_name = tier_info["tier_name"]
+            leadership_stipend.current_daily_return = tier_info["daily_return"]
+        else:
+            leadership_stipend.current_tier = 0
+            leadership_stipend.current_tier_name = ""
+            leadership_stipend.current_daily_return = 0.0
+
+    def _refresh_current_tier(self, leadership_stipend: LeadershipStipend):
+        """Ensure current tier points to highest active tier (if any)"""
+        active_slots = sorted([t.slot_number for t in leadership_stipend.tiers if t.is_active])
+        if active_slots:
+            self._set_current_tier_info(leadership_stipend, active_slots[-1])
+        else:
+            self._set_current_tier_info(leadership_stipend, None)
+
     def _activate_tier(self, leadership_stipend: LeadershipStipend, slot_number: int):
-        """Activate tier for user"""
+        """Activate requested tier and deactivate others"""
+        now = datetime.utcnow()
         for tier in leadership_stipend.tiers:
             if tier.slot_number == slot_number:
-                tier.is_active = True
-                tier.activated_at = datetime.utcnow()
-                break
+                if not tier.is_active:
+                    tier.is_active = True
+                tier.activated_at = now
+            else:
+                if tier.is_active:
+                    tier.is_active = False
+                tier.pending_amount = float(tier.pending_amount or 0.0)
+                if tier.slot_number < slot_number:
+                    tier.pending_amount = 0.0
+        self._set_current_tier_info(leadership_stipend, slot_number)
     
     def _calculate_user_daily_stipend(self, user_stipend: LeadershipStipend, calc_date: datetime) -> Dict[str, Any]:
         """Calculate daily stipend for a user"""
@@ -525,8 +573,23 @@ class LeadershipStipendService:
             tier_pending = float(tier_record.pending_amount or 0.0)
             remaining = cap_amount - tier_total_paid - tier_pending
             if remaining <= 0:
+                tier_record.is_active = False
+                self._refresh_current_tier(user_stipend)
+                user_stipend.save()
                 return {"success": False, "amount": 0.0, "payments_created": 0}
-            daily_amount = remaining
+            
+            # Determine per-user share by counting currently active users in this slot
+            eligible_count = LeadershipStipend.objects(
+                tiers__match={
+                    "slot_number": user_stipend.current_tier,
+                    "is_active": True
+                }
+            ).count()
+            if eligible_count <= 0:
+                eligible_count = 1
+            daily_amount = remaining / eligible_count
+            if daily_amount <= 0:
+                return {"success": False, "amount": 0.0, "payments_created": 0}
             
             # Create payment record
             payment = LeadershipStipendPayment(
