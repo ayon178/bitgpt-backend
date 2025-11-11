@@ -731,6 +731,18 @@ async def get_leadership_stipend_income(
             tier_percentage = distribution_percentages.get(t.slot_number, 0.0)
             tier_total_bnb = total_global_bnb * tier_percentage
             tier_total_usdt = total_global_usdt * tier_percentage
+            tier_pool_paid = slot_paid.get(t.slot_number, 0.0)
+            tier_pool_remaining = max(0.0, tier_total_bnb - tier_pool_paid)
+            eligible_user_count = eligible_counts.get(t.slot_number, 0)
+
+            per_user_pool_share = 0.0
+            if tier_is_active and eligible_user_count > 0:
+                per_user_pool_share = tier_pool_remaining / eligible_user_count if tier_pool_remaining > 0 else 0.0
+                claimable_amount = min(claimable_amount, per_user_pool_share)
+            elif not tier_is_active:
+                claimable_amount = 0.0
+            if eligible_user_count == 0:
+                claimable_amount = 0.0
             
             tiers.append({
                 "slot_number": t.slot_number,
@@ -744,11 +756,12 @@ async def get_leadership_stipend_income(
                 "progress_percent": 0,
                 "is_active": tier_is_active,
                 "activated_at": t.activated_at,
-                "total_users": eligible_counts.get(t.slot_number, 0) if tier_is_active else 0,
+                "total_users": eligible_user_count,
                 "total_bnb": tier_total_bnb,
                 "total_usdt": tier_total_usdt,
                 "distribution_percentage": tier_percentage * 100,
                 "remaining_amount": tier_remaining,
+                "pool_remaining": tier_pool_remaining,
             })
 
         # Calculate current tier's claimable amount for summary
