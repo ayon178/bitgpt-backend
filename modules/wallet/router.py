@@ -741,7 +741,7 @@ async def get_leadership_stipend_income(
 
             progress_percent = 0.0
             if tier_cap > 0:
-                progress_percent = min(100.0, (tier_paid_amount / tier_cap) * 100.0)
+                progress_percent = min(100.0, (float(t.funded_amount or 0.0) / tier_cap) * 100.0)
 
             per_user_pool_share = 0.0
             if tier_is_active and eligible_user_count > 0:
