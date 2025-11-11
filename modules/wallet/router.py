@@ -588,6 +588,8 @@ async def get_leadership_stipend_income(
             try:
                 service = LeadershipStipendService()
                 ls = service._ensure_all_tiers(ls)
+                service.check_eligibility(user_id, force_check=True)
+                ls = LeadershipStipend.objects(user_id=ObjectId(user_id)).first() or ls
             except Exception:
                 pass
         
