@@ -601,11 +601,17 @@ async def get_leadership_stipend_income(
         payments_cursor = _LSP.objects(__raw__=pay_q).order_by('-payment_date')
         payments = []
         slot_paid: dict[int, float] = {}
+        slot_last_claim: dict[int, datetime] = {}
         for p in payments_cursor:
             if currency.upper() != (p.currency or "BNB").upper():
                 continue
             amt = float(p.daily_return_amount or 0.0)
             slot_paid[p.slot_number] = slot_paid.get(p.slot_number, 0.0) + amt
+            claim_time = p.paid_at or p.processed_at or p.payment_date
+            if claim_time:
+                previous = slot_last_claim.get(p.slot_number)
+                if not previous or claim_time > previous:
+                    slot_last_claim[p.slot_number] = claim_time
             payments.append({
                 "id": str(p.id),
                 "slot_number": p.slot_number,
@@ -770,6 +776,7 @@ async def get_leadership_stipend_income(
                 "distribution_percentage": tier_percentage * 100,
                 "remaining_amount": tier_remaining,
                 "pool_remaining": tier_pool_remaining,
+                "last_claim": slot_last_claim.get(t.slot_number),
             })
 
         # Calculate current tier's claimable amount for summary
