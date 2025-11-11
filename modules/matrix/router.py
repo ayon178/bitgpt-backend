@@ -1487,7 +1487,7 @@ async def get_leadership_stipend_info_endpoint(
     """Get comprehensive Leadership Stipend information."""
     try:
         leadership_stipend_info = {
-            "eligibility": "Matrix slots 10-16 only",
+            "eligibility": "Matrix slots 10-17 only",
             "slot_values": {
                 "slot_10": "1.1264 BNB (LEADER)",
                 "slot_11": "2.2528 BNB (VANGURD)",
@@ -1495,22 +1495,24 @@ async def get_leadership_stipend_info_endpoint(
                 "slot_13": "9.0112 BNB (CLIMAX)",
                 "slot_14": "18.0224 BNB (ENTERNITY)",
                 "slot_15": "36.0448 BNB (KING)",
-                "slot_16": "72.0896 BNB (COMMENDER)"
+                "slot_16": "72.0896 BNB (COMMENDER)",
+                "slot_17": "144.1792 BNB (CEO)",
             },
             "daily_return_rate": "Double the slot value as daily return",
             "distribution_percentages": {
-                "level_10": "1.5%",
-                "level_11": "1.0%",
-                "level_12": "0.5%",
-                "level_13": "0.5%",
-                "level_14": "0.5%",
-                "level_15": "0.5%",
-                "level_16": "0.5%"
+                "level_10": "30%",
+                "level_11": "20%",
+                "level_12": "10%",
+                "level_13": "10%",
+                "level_14": "10%",
+                "level_15": "10%",
+                "level_16": "5%",
+                "level_17": "5%",
             },
             "integration_points": {
-                "matrix_upgrade": "Automatic Leadership Stipend integration on Matrix upgrade to slots 10-16"
+                "matrix_upgrade": "Automatic Leadership Stipend integration on Matrix upgrade to slots 10-17"
             },
-            "description": "Leadership Stipend provides daily returns for Matrix slots 10-16. Users receive double the slot value as daily return with specific distribution percentages."
+            "description": "Leadership Stipend provides daily returns for Matrix slots 10-17. Users receive double the slot value as daily return with specific distribution percentages."
         }
         
         return success_response(leadership_stipend_info, "Leadership Stipend information fetched successfully")

@@ -28,6 +28,7 @@ class LeadershipStipendService:
             # Check if already joined
             existing = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
             if existing:
+                existing = self._ensure_all_tiers(existing)
                 return {
                     "success": True,
                     "status": "already_joined",
@@ -78,6 +79,7 @@ class LeadershipStipendService:
             leadership_stipend = LeadershipStipend.objects(user_id=ObjectId(user_id)).first()
             if not leadership_stipend:
                 return {"success": False, "error": "User not in Leadership Stipend program"}
+            leadership_stipend = self._ensure_all_tiers(leadership_stipend)
             
             # Get eligibility record
             eligibility = LeadershipStipendEligibility.objects(user_id=ObjectId(user_id)).first()
@@ -348,7 +350,8 @@ class LeadershipStipendService:
                 "tier_13": stipend_payments.filter(slot_number=13).count(),
                 "tier_14": stipend_payments.filter(slot_number=14).count(),
                 "tier_15": stipend_payments.filter(slot_number=15).count(),
-                "tier_16": stipend_payments.filter(slot_number=16).count()
+                "tier_16": stipend_payments.filter(slot_number=16).count(),
+                "tier_17": stipend_payments.filter(slot_number=17).count(),
             }
             
             # Create or update statistics record
@@ -369,6 +372,7 @@ class LeadershipStipendService:
             statistics.tier_14_users = tier_stats["tier_14"]
             statistics.tier_15_users = tier_stats["tier_15"]
             statistics.tier_16_users = tier_stats["tier_16"]
+            statistics.tier_17_users = tier_stats["tier_17"]
             statistics.last_updated = datetime.utcnow()
             statistics.save()
             
@@ -404,8 +408,43 @@ class LeadershipStipendService:
             LeadershipStipendTier(slot_number=13, tier_name="CLIMAX", slot_value=9.0112, daily_return=18.0224),
             LeadershipStipendTier(slot_number=14, tier_name="ENTERNITY", slot_value=18.0224, daily_return=36.0448),
             LeadershipStipendTier(slot_number=15, tier_name="KING", slot_value=36.0448, daily_return=72.0896),
-            LeadershipStipendTier(slot_number=16, tier_name="COMMENDER", slot_value=72.0896, daily_return=144.1792)
+            LeadershipStipendTier(slot_number=16, tier_name="COMMENDER", slot_value=72.0896, daily_return=144.1792),
+            LeadershipStipendTier(slot_number=17, tier_name="CEO", slot_value=144.1792, daily_return=288.3584),
         ]
+    
+    def _ensure_all_tiers(self, leadership_stipend: LeadershipStipend) -> LeadershipStipend:
+        """Ensure stipend record contains all tiers with up-to-date metadata."""
+        required_tiers = {tier.slot_number: tier for tier in self._initialize_leadership_stipend_tiers()}
+        existing_tiers = {tier.slot_number: tier for tier in (leadership_stipend.tiers or [])}
+        updated = False
+        
+        for slot_number, required in required_tiers.items():
+            current = existing_tiers.get(slot_number)
+            if current:
+                if (
+                    current.tier_name != required.tier_name
+                    or float(current.slot_value or 0) != required.slot_value
+                    or float(current.daily_return or 0) != required.daily_return
+                ):
+                    current.tier_name = required.tier_name
+                    current.slot_value = required.slot_value
+                    current.daily_return = required.daily_return
+                    updated = True
+            else:
+                leadership_stipend.tiers.append(
+                    LeadershipStipendTier(
+                        slot_number=slot_number,
+                        tier_name=required.tier_name,
+                        slot_value=required.slot_value,
+                        daily_return=required.daily_return,
+                    )
+                )
+                updated = True
+        
+        if updated:
+            leadership_stipend.save()
+            leadership_stipend.reload()
+        return leadership_stipend
     
     def _check_slot_requirements(self, user_id: str) -> Dict[str, Any]:
         """Check slot requirements for user"""
@@ -417,7 +456,7 @@ class LeadershipStipendService:
             ).all()
             
             highest_slot = 0
-            slots_10_16 = []
+            slots_10_17 = []
             all_slots = []
             
             for activation in slot_activations:
@@ -427,12 +466,12 @@ class LeadershipStipendService:
                 if slot_no > highest_slot:
                     highest_slot = slot_no
                 
-                if 10 <= slot_no <= 16:
-                    slots_10_16.append(slot_no)
+                if 10 <= slot_no <= 17:
+                    slots_10_17.append(slot_no)
             
             return {
                 "highest_slot": highest_slot,
-                "slots_10_16": slots_10_16,
+                "slots_10_16": slots_10_17,
                 "all_slots": all_slots
             }
             
@@ -452,7 +491,8 @@ class LeadershipStipendService:
             13: {"tier_name": "CLIMAX", "daily_return": 18.0224},
             14: {"tier_name": "ENTERNITY", "daily_return": 36.0448},
             15: {"tier_name": "KING", "daily_return": 72.0896},
-            16: {"tier_name": "COMMENDER", "daily_return": 144.1792}
+            16: {"tier_name": "COMMENDER", "daily_return": 144.1792},
+            17: {"tier_name": "CEO", "daily_return": 288.3584},
         }
         return tier_mapping.get(slot_number, {"tier_name": "UNKNOWN", "daily_return": 0.0})
     

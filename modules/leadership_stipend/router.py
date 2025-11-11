@@ -54,7 +54,7 @@ class LeadershipStipendCalculationRequest(BaseModel):
 class ClaimHistoryQuery(BaseModel):
     user_id: str
     status: Optional[str] = None  # pending, processing, paid, failed
-    slot_number: Optional[int] = None  # 10-16
+    slot_number: Optional[int] = None  # 10-17
     start_date: Optional[str] = None  # ISO date YYYY-MM-DD
     end_date: Optional[str] = None    # ISO date YYYY-MM-DD
     page: int = 1
@@ -366,8 +366,8 @@ async def create_leadership_stipend_payment(request: LeadershipStipendPaymentReq
             raise HTTPException(status_code=404, detail="User not in Leadership Stipend program")
         
         # Validate slot number
-        if request.slot_number < 10 or request.slot_number > 16:
-            raise HTTPException(status_code=400, detail="Invalid slot number (must be 10-16)")
+        if request.slot_number < 10 or request.slot_number > 17:
+            raise HTTPException(status_code=400, detail="Invalid slot number (must be 10-17)")
         
         # Get tier info
         tier_info = _get_tier_info(request.slot_number)
@@ -559,8 +559,8 @@ async def distribute_slot_claim(request: LeadershipStipendSlotClaimRequest):
     amount_per_user: if not provided, defaults to tier daily_return; if fund has less than needed, it will split available equally.
     """
     try:
-        if request.slot_number < 10 or request.slot_number > 16:
-            raise HTTPException(status_code=400, detail="Invalid slot (10-16)")
+        if request.slot_number < 10 or request.slot_number > 17:
+            raise HTTPException(status_code=400, detail="Invalid slot (10-17)")
 
         # Fetch eligible users: LeadershipStipend with tier is_active for this slot
         eligibles = []
@@ -810,7 +810,8 @@ async def get_leadership_stipend_statistics(period: str = Query("all_time", rege
                             "tier_13": 0,  # CLIMAX
                             "tier_14": 0,  # ENTERNITY
                             "tier_15": 0,  # KING
-                            "tier_16": 0   # COMMENDER
+                            "tier_16": 0,  # COMMENDER
+                            "tier_17": 0,  # CEO
                         },
                         "growth_statistics": {
                             "new_eligible_users": 0,
@@ -840,7 +841,8 @@ async def get_leadership_stipend_statistics(period: str = Query("all_time", rege
                         "tier_13": statistics.tier_13_users,
                         "tier_14": statistics.tier_14_users,
                         "tier_15": statistics.tier_15_users,
-                        "tier_16": statistics.tier_16_users
+                        "tier_16": statistics.tier_16_users,
+                        "tier_17": statistics.tier_17_users,
                     },
                     "growth_statistics": {
                         "new_eligible_users": statistics.new_eligible_users,
@@ -919,7 +921,8 @@ def _initialize_leadership_stipend_tiers() -> List[LeadershipStipendTier]:
         LeadershipStipendTier(slot_number=13, tier_name="CLIMAX", slot_value=9.0112, daily_return=18.0224),
         LeadershipStipendTier(slot_number=14, tier_name="ENTERNITY", slot_value=18.0224, daily_return=36.0448),
         LeadershipStipendTier(slot_number=15, tier_name="KING", slot_value=36.0448, daily_return=72.0896),
-        LeadershipStipendTier(slot_number=16, tier_name="COMMENDER", slot_value=72.0896, daily_return=144.1792)
+        LeadershipStipendTier(slot_number=16, tier_name="COMMENDER", slot_value=72.0896, daily_return=144.1792),
+        LeadershipStipendTier(slot_number=17, tier_name="CEO", slot_value=144.1792, daily_return=288.3584),
     ]
 
 def _check_slot_requirements(user_id: str) -> Dict[str, Any]:
@@ -946,7 +949,8 @@ def _get_tier_info(slot_number: int) -> Dict[str, Any]:
         13: {"tier_name": "CLIMAX", "daily_return": 18.0224},
         14: {"tier_name": "ENTERNITY", "daily_return": 36.0448},
         15: {"tier_name": "KING", "daily_return": 72.0896},
-        16: {"tier_name": "COMMENDER", "daily_return": 144.1792}
+        16: {"tier_name": "COMMENDER", "daily_return": 144.1792},
+        17: {"tier_name": "CEO", "daily_return": 288.3584},
     }
     return tier_mapping.get(slot_number, {"tier_name": "UNKNOWN", "daily_return": 0.0})
 

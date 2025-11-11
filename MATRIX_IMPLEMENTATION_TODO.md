@@ -223,7 +223,7 @@ This TODO list follows MATRIX_TODO.md step by step. Mark each item as completed 
 ### 7.3 Special Programs Integration ✅ COMPLETED
 - [x] **Leadership Stipend**: Matrix slots 10-16 contribute to Leadership Stipend with daily returns
 - [x] **Daily Return Calculation**: Double slot value as daily return
-- [x] **Distribution Percentages**: Level 10 (1.5%), Level 11 (1%), Level 12-16 (0.5% each)
+- [x] **Distribution Percentages**: Level 10 (30%), Level 11 (20%), Level 12-17 (10%,10%,10%,10%,5%,5%)
 - [x] **Automatic Integration**: Triggers on Matrix upgrade to slots 10-16
 - [x] **Jackpot Program**: Matrix contributes 2% to Jackpot fund with free coupons for Binary upgrades
 - [x] **Fund Distribution**: Open Pool (50%), Top Direct Promoters (30%), Top Buyers (10%), Binary Contribution (5%)

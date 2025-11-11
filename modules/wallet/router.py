@@ -519,6 +519,7 @@ async def get_leadership_stipend_income(
     """
     try:
         from modules.leadership_stipend.model import LeadershipStipend, LeadershipStipendPayment
+        from modules.leadership_stipend.service import LeadershipStipendService
         from bson import ObjectId
         from datetime import datetime
         from decimal import Decimal
@@ -583,6 +584,12 @@ async def get_leadership_stipend_income(
                     traceback.print_exc()
             else:
                 print(f"✅ User {user_id} already has {len(ls.tiers) if ls.tiers else 0} tiers")
+            
+            try:
+                service = LeadershipStipendService()
+                ls = service._ensure_all_tiers(ls)
+            except Exception:
+                pass
         
         # Preload payments first and compute per-slot totals
         from modules.leadership_stipend.model import LeadershipStipendPayment as _LSP
@@ -674,7 +681,7 @@ async def get_leadership_stipend_income(
         for rec in LeadershipStipend.objects(is_active=True).only('tiers'):
             try:
                 for tier in rec.tiers:
-                    if tier.slot_number < 10 or tier.slot_number > 16:
+                    if tier.slot_number < 10 or tier.slot_number > 17:
                         continue
                     if tier.is_active:
                         eligible_counts[tier.slot_number] = eligible_counts.get(tier.slot_number, 0) + 1
@@ -683,7 +690,7 @@ async def get_leadership_stipend_income(
 
         tiers_to_iterate = ls.tiers if ls and ls.tiers else []
         for t in tiers_to_iterate:
-            if t.slot_number < 10 or t.slot_number > 16:
+            if t.slot_number < 10 or t.slot_number > 17:
                 continue
             if slot and t.slot_number != int(slot):
                 continue

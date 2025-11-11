@@ -121,7 +121,7 @@ This document provides a comprehensive overview of all automatic actions, calcul
 ### 3. Leadership Stipend
 - **Eligibility**: Slots 10-16 only
 - **Daily Return**: Double slot value as daily return
-- **Distribution**: Level 10 (1.5%), Level 11 (1%), Level 12-16 (0.5% each)
+- **Distribution**: Level 10 (30%), Level 11 (20%), Level 12 (10%), Level 13 (10%), Level 14 (10%), Level 15 (10%), Level 16 (5%), Level 17 (5%)
 - **Total Distribution**: 5% of Leadership Stipend fund
 
 ### 4. Jackpot Program

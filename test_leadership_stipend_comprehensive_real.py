@@ -157,6 +157,7 @@ async def main():
     print("    Slot 14 - ENTERNITY: 18.0224 BNB → 36.0448 BNB daily return")
     print("    Slot 15 - KING: 36.0448 BNB → 72.0896 BNB daily return")
     print("    Slot 16 - COMMENDER: 72.0896 BNB → 144.1792 BNB daily return")
+    print("    Slot 17 - CEO: 144.1792 BNB → 288.3584 BNB daily return")
     
     # Test 6: Fund Distribution Percentages
     print("\n🎯 Test 6: Fund Distribution Percentages")
@@ -187,18 +188,18 @@ async def main():
         
         print(f"    📦 Total Slots Activated: {slot_activations.count()}")
         
-        slots_10_16 = []
+    slots_10_16 = []
         highest_slot = 0
         
         for activation in slot_activations:
             slot_no = activation.slot_no
             if slot_no > highest_slot:
                 highest_slot = slot_no
-            if 10 <= slot_no <= 16:
+            if 10 <= slot_no <= 17:
                 slots_10_16.append(slot_no)
         
         print(f"    🎯 Highest Slot: {highest_slot}")
-        print(f"    📊 Slots 10-16: {slots_10_16}")
+        print(f"    📊 Slots 10-17: {slots_10_16}")
         
         if highest_slot >= 10:
             print(f"    ✅ Eligible for Leadership Stipend")
@@ -218,6 +219,7 @@ async def main():
     print("    Slot 14 (ENTERNITY): 18.0224 BNB → 36.0448 BNB daily return")
     print("    Slot 15 (KING): 36.0448 BNB → 72.0896 BNB daily return")
     print("    Slot 16 (COMMENDER): 72.0896 BNB → 144.1792 BNB daily return")
+    print("    Slot 17 (CEO): 144.1792 BNB → 288.3584 BNB daily return")
     
     # Test 9: Payment Distribution
     print("\n🎯 Test 9: Payment Distribution")

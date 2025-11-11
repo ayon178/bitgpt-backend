@@ -3,7 +3,7 @@ from datetime import datetime
 
 class LeadershipStipendTier(EmbeddedDocument):
     """Embedded document for Leadership Stipend tiers"""
-    slot_number = IntField(required=True)  # 10-16
+    slot_number = IntField(required=True)  # 10-17
     tier_name = StringField(required=True)  # LEADER, VANGURD, etc.
     slot_value = FloatField(required=True)  # Slot value in BNB
     daily_return = FloatField(required=True)  # Double the slot value
@@ -25,7 +25,7 @@ class LeadershipStipend(Document):
     qualified_at = DateTimeField()
     
     # Current stipend status
-    current_tier = IntField(default=0)  # 0 = not eligible, 10-16 = slot number
+    current_tier = IntField(default=0)  # 0 = not eligible, 10-17 = slot number
     current_tier_name = StringField(default="")
     current_daily_return = FloatField(default=0.0)
     
@@ -69,7 +69,7 @@ class LeadershipStipendEligibility(Document):
     # Slot requirements
     highest_slot_activated = IntField(default=0)
     min_slot_required = IntField(default=10)  # Minimum slot 10 for eligibility
-    slots_10_16_activated = ListField(IntField(), default=[])
+    slots_10_16_activated = ListField(IntField(), default=[])  # Tracks slots 10-17
     
     # Eligibility status
     is_eligible_for_stipend = BooleanField(default=False)
@@ -97,7 +97,7 @@ class LeadershipStipendPayment(Document):
     leadership_stipend_id = ObjectIdField(required=True)
     
     # Payment details
-    slot_number = IntField(required=True)  # 10-16
+    slot_number = IntField(required=True)  # 10-17
     tier_name = StringField(required=True)
     daily_return_amount = FloatField(required=True)
     currency = StringField(choices=['BNB'], default='BNB')
@@ -183,7 +183,7 @@ class LeadershipStipendSettings(Document):
     
     # Eligibility requirements
     min_slot_for_eligibility = IntField(default=10)
-    max_slot_for_eligibility = IntField(default=16)
+    max_slot_for_eligibility = IntField(default=17)
     
     # Calculation settings
     calculation_frequency = StringField(choices=['daily', 'weekly', 'monthly'], default='daily')
@@ -261,6 +261,7 @@ class LeadershipStipendStatistics(Document):
     tier_14_users = IntField(default=0)  # ENTERNITY
     tier_15_users = IntField(default=0)  # KING
     tier_16_users = IntField(default=0)  # COMMENDER
+    tier_17_users = IntField(default=0)  # CEO
     
     # Growth statistics
     new_eligible_users = IntField(default=0)

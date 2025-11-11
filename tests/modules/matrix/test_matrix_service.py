@@ -605,8 +605,8 @@ class TestMatrixService(unittest.TestCase):
     
     def test_check_leadership_stipend_eligibility(self):
         """Test Leadership Stipend eligibility check."""
-        # Test eligible slots (10-16)
-        for slot in range(10, 17):
+        # Test eligible slots (10-17)
+        for slot in range(10, 18):
             result = self.service._check_leadership_stipend_eligibility(slot)
             self.assertTrue(result["is_eligible"])
         
@@ -614,6 +614,10 @@ class TestMatrixService(unittest.TestCase):
         for slot in range(1, 10):
             result = self.service._check_leadership_stipend_eligibility(slot)
             self.assertFalse(result["is_eligible"])
+        
+        # Test ineligible slot above range
+        result = self.service._check_leadership_stipend_eligibility(18)
+        self.assertFalse(result["is_eligible"])
     
     def test_calculate_leadership_stipend_contribution(self):
         """Test Leadership Stipend contribution calculation."""
@@ -622,9 +626,14 @@ class TestMatrixService(unittest.TestCase):
         expected = 2.2528
         self.assertEqual(contribution, expected)
         
-        # Test slot 15 (STAR)
+        # Test slot 15 (KING)
         contribution = self.service._calculate_leadership_stipend_contribution(15)
         expected = 72.0896
+        self.assertEqual(contribution, expected)
+        
+        # Test slot 17 (CEO)
+        contribution = self.service._calculate_leadership_stipend_contribution(17)
+        expected = 288.3584
         self.assertEqual(contribution, expected)
 
 

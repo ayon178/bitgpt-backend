@@ -23,6 +23,7 @@ def ensure_leadership_stipend_record(user_id: ObjectId) -> LeadershipStipend:
         LeadershipStipendTier(slot_number=14, tier_name="ENTERNITY", slot_value=18.0224, daily_return=36.0448),
         LeadershipStipendTier(slot_number=15, tier_name="KING", slot_value=36.0448, daily_return=72.0896),
         LeadershipStipendTier(slot_number=16, tier_name="COMMENDER", slot_value=72.0896, daily_return=144.1792),
+        LeadershipStipendTier(slot_number=17, tier_name="CEO", slot_value=144.1792, daily_return=288.3584),
     ]
     ls = LeadershipStipend(user_id=user_id, is_active=True, tiers=tiers)
     ls.save()

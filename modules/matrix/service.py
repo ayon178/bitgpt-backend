@@ -3375,11 +3375,11 @@ class MatrixService:
     def _check_leadership_stipend_eligibility(self, matrix_slot: int):
         """Check if user is eligible for Leadership Stipend."""
         try:
-            # Leadership Stipend applies to slots 10-16 only
+            # Leadership Stipend applies to slots 10-17 only
             if matrix_slot < 10:
                 return {"is_eligible": False, "reason": f"User must have slot 10 or higher (current: {matrix_slot})"}
             
-            if matrix_slot > 16:
+            if matrix_slot > 17:
                 return {"is_eligible": False, "reason": f"User slot exceeds maximum Leadership Stipend slot (current: {matrix_slot})"}
             
             return {"is_eligible": True, "reason": f"User eligible for Leadership Stipend with slot {matrix_slot}"}
@@ -3398,7 +3398,8 @@ class MatrixService:
                 13: 9.0112,    # CLIMAX (BNB)
                 14: 18.0224,   # ENTERNITY (BNB)
                 15: 36.0448,   # KING (BNB)
-                16: 72.0896    # COMMENDER (BNB)
+                16: 72.0896,   # COMMENDER (BNB)
+                17: 144.1792,  # CEO (BNB)
             }
             
             slot_value = stipend_slot_values.get(matrix_slot, 0)
@@ -3415,23 +3416,16 @@ class MatrixService:
     def _process_leadership_stipend_distribution(self, user_id: str, contribution: float, matrix_slot: int):
         """Process Leadership Stipend distribution according to PROJECT_DOCUMENTATION.md percentages."""
         try:
-            # Leadership Stipend Distribution percentages from PROJECT_DOCUMENTATION.md:
-            # - Level 10: 1.5%
-            # - Level 11: 1%
-            # - Level 12: 0.5%
-            # - Level 13: 0.5%
-            # - Level 14: 0.5%
-            # - Level 15: 0.5%
-            # - Level 16: 0.5%
-            
+            # Leadership Stipend Distribution percentages (slots 10-17)
             distribution_percentages = {
-                10: 0.015,  # 1.5%
-                11: 0.01,   # 1%
-                12: 0.005,  # 0.5%
-                13: 0.005,  # 0.5%
-                14: 0.005,  # 0.5%
-                15: 0.005,  # 0.5%
-                16: 0.005   # 0.5%
+                10: 0.30,
+                11: 0.20,
+                12: 0.10,
+                13: 0.10,
+                14: 0.10,
+                15: 0.10,
+                16: 0.05,
+                17: 0.05,
             }
             
             user_percentage = distribution_percentages.get(matrix_slot, 0)
@@ -3467,8 +3461,8 @@ class MatrixService:
     def _update_leadership_stipend_status(self, user_id: str, contribution: float, matrix_slot: int):
         """Update Leadership Stipend status for user."""
         try:
-            # Calculate daily return amount
-            daily_return = contribution * 0.5  # Double slot value, so daily return is half
+            # Calculate daily return amount (double the slot value)
+            daily_return = contribution
             
             stipend_status = {
                 "user_id": user_id,
@@ -3479,13 +3473,14 @@ class MatrixService:
                 "status": "active",
                 "last_distribution": datetime.utcnow().isoformat(),
                 "distribution_percentage": {
-                    10: 1.5,
-                    11: 1.0,
-                    12: 0.5,
-                    13: 0.5,
-                    14: 0.5,
-                    15: 0.5,
-                    16: 0.5
+                    10: 30.0,
+                    11: 20.0,
+                    12: 10.0,
+                    13: 10.0,
+                    14: 10.0,
+                    15: 10.0,
+                    16: 5.0,
+                    17: 5.0,
                 }.get(matrix_slot, 0)
             }
             
@@ -3520,27 +3515,29 @@ class MatrixService:
                     "daily_return": daily_return,
                     "contribution": stipend_contribution,
                     "distribution_percentage": {
-                        10: 1.5,
-                        11: 1.0,
-                        12: 0.5,
-                        13: 0.5,
-                        14: 0.5,
-                        15: 0.5,
-                        16: 0.5
+                        10: 30.0,
+                        11: 20.0,
+                        12: 10.0,
+                        13: 10.0,
+                        14: 10.0,
+                        15: 10.0,
+                        16: 5.0,
+                        17: 5.0,
                     }.get(matrix_slot, 0)
                 },
                 "leadership_stipend_info": {
-                    "description": "Leadership Stipend provides daily returns for Matrix slots 10-16",
-                    "eligibility": "Slots 10-16 only",
+                    "description": "Leadership Stipend provides daily returns for Matrix slots 10-17",
+                    "eligibility": "Slots 10-17 only",
                     "daily_return_rate": "Double the slot value as daily return",
                     "distribution_percentages": {
-                        "level_10": "1.5%",
-                        "level_11": "1.0%",
-                        "level_12": "0.5%",
-                        "level_13": "0.5%",
-                        "level_14": "0.5%",
-                        "level_15": "0.5%",
-                        "level_16": "0.5%"
+                        "level_10": "30%",
+                        "level_11": "20%",
+                        "level_12": "10%",
+                        "level_13": "10%",
+                        "level_14": "10%",
+                        "level_15": "10%",
+                        "level_16": "5%",
+                        "level_17": "5%",
                     }
                 }
             }

@@ -55,7 +55,7 @@ class SparkService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def contribute_to_spark_fund(self, amount: Decimal, program: str, slot_number: int = None, user_id: str = None) -> Dict[str, Any]:
+    def contribute_to_spark_fund(self, amount: Decimal, program: str, slot_number: int = None, user_id: str = None, currency: str | None = None) -> Dict[str, Any]:
         """
         Contribute 8% of activation amount to Spark Bonus fund
         Called when Binary or Matrix slot is activated
@@ -72,7 +72,9 @@ class SparkService:
                 return {"success": False, "error": "Invalid program. Must be 'binary' or 'matrix'"}
             
             # Calculate 8% contribution
-            spark_contribution = amount * Decimal('0.08')
+            spark_contribution = (amount * Decimal('0.08')).quantize(Decimal('0.00000001'))
+            top_leader_share = (spark_contribution * Decimal('0.02')).quantize(Decimal('0.00000001'))
+            net_spark_contribution = spark_contribution - top_leader_share
             
             # Get or create BonusFund for this program
             spark_fund = BonusFund.objects(
@@ -94,9 +96,33 @@ class SparkService:
             
             # Update fund balances
             spark_fund.total_collected += spark_contribution
-            spark_fund.current_balance += spark_contribution
+            spark_fund.current_balance += net_spark_contribution
+            if top_leader_share > 0:
+                spark_fund.total_distributed = (spark_fund.total_distributed or Decimal('0')) + top_leader_share
             spark_fund.updated_at = datetime.utcnow()
             spark_fund.save()
+
+            # Allocate 2% to Top Leaders Gift fund
+            try:
+                from modules.top_leader_gift.payment_model import TopLeadersGiftFund
+                tl_fund = TopLeadersGiftFund.objects(is_active=True).first()
+                if not tl_fund:
+                    tl_fund = TopLeadersGiftFund()
+
+                # Determine currency bucket
+                currency_value = (currency or ('BNB' if program == 'binary' else 'USDT')).upper()
+                share_float = float(top_leader_share)
+                if currency_value == 'BNB':
+                    tl_fund.total_fund_bnb += share_float
+                    tl_fund.available_bnb += share_float
+                else:
+                    tl_fund.total_fund_usdt += share_float
+                    tl_fund.available_usdt += share_float
+
+                tl_fund.last_updated = datetime.utcnow()
+                tl_fund.save()
+            except Exception as e:
+                print(f"[SPARK] Failed to allocate Top Leaders Gift share: {e}")
             
             return {
                 "success": True,
@@ -104,6 +130,8 @@ class SparkService:
                 "slot_number": slot_number,
                 "activation_amount": float(amount),
                 "spark_contribution_8_percent": float(spark_contribution),
+                "top_leaders_gift_share": float(top_leader_share),
+                "spark_bonus_net": float(net_spark_contribution),
                 "new_balance": float(spark_fund.current_balance),
                 "message": f"Contributed ${float(spark_contribution)} (8%) to {program} Spark Bonus fund"
             }
@@ -115,41 +143,67 @@ class SparkService:
         Matrix distribution gets remaining 80%.
         """
         try:
-            contributed = float(amount) if amount is not None else 0.0
-            
-            # Deduct 2% for Top Leaders Gift Fund
-            top_leaders_amount = contributed * 0.02
-            
-            # Contribute to Top Leaders Gift Fund
-            try:
-                from modules.top_leader_gift.payment_model import TopLeadersGiftFund
-                fund = TopLeadersGiftFund.objects(is_active=True).first()
-                if not fund:
-                    fund = TopLeadersGiftFund()
-                
-                # Determine currency from program/source
-                currency = kwargs.get('currency', 'USDT')
-                if currency == 'BNB' or program == 'binary':
-                    fund.total_fund_bnb += top_leaders_amount
-                    fund.available_bnb += top_leaders_amount
-                else:
-                    fund.total_fund_usdt += top_leaders_amount
-                    fund.available_usdt += top_leaders_amount
-                
-                fund.last_updated = datetime.utcnow()
-                fund.save()
-            except Exception as e:
-                print(f"Failed to contribute to Top Leaders Gift Fund: {str(e)}")
-            
+            contributed = Decimal(str(amount or 0))
+            program_value = (program or source or "").lower()
+            currency = kwargs.get("currency")
+
+            spark_details: Dict[str, Any] | None = None
+            if program_value in ("binary", "matrix"):
+                spark_details = self.contribute_to_spark_fund(
+                    amount=contributed,
+                    program=program_value,
+                    slot_number=kwargs.get("source_slot_no"),
+                    user_id=kwargs.get("source_user_id"),
+                    currency=currency,
+                )
+            elif contributed > 0:
+                try:
+                    from modules.income.bonus_fund import BonusFund
+
+                    spark_fund = BonusFund.objects(
+                        fund_type="spark_bonus",
+                        program=program_value if program_value in ("binary", "matrix", "global") else "matrix",
+                        status="active",
+                    ).first()
+                    if not spark_fund:
+                        spark_fund = BonusFund(
+                            fund_type="spark_bonus",
+                            program=program_value if program_value in ("binary", "matrix", "global") else "matrix",
+                            total_collected=Decimal("0"),
+                            total_distributed=Decimal("0"),
+                            current_balance=Decimal("0"),
+                            status="active",
+                        )
+
+                    spark_fund.total_collected += contributed
+                    spark_fund.current_balance += contributed
+                    spark_fund.updated_at = datetime.utcnow()
+                    spark_fund.save()
+
+                    spark_details = {
+                        "success": True,
+                        "program": spark_fund.program,
+                        "spark_contribution": float(contributed),
+                        "new_balance": float(spark_fund.current_balance),
+                        "message": f"Contributed ${float(contributed)} to Spark Bonus fund",
+                    }
+                except Exception as e:
+                    print(f"[SPARK] Failed to update BonusFund for generic contribution: {e}")
+
+            top_leaders_contribution = 0.0
+            if spark_details and spark_details.get("top_leaders_gift_share") is not None:
+                top_leaders_contribution = spark_details["top_leaders_gift_share"]
+
             return {
                 "success": True,
-                "contributed": contributed,
-                "top_leaders_gift_contribution": top_leaders_amount,
-                "remaining_for_distribution": contributed - top_leaders_amount,
+                "contributed": float(contributed),
+                "top_leaders_gift_contribution": top_leaders_contribution,
+                "remaining_for_distribution": float(contributed) - top_leaders_contribution,
                 "source": source,
                 "program": program or source,
                 "metadata": metadata or {},
-                "extra": {k: v for k, v in (kwargs or {}).items()}
+                "extra": {k: v for k, v in (kwargs or {}).items()},
+                "spark_details": spark_details,
             }
         except Exception as e:
             return {"success": False, "error": str(e)}

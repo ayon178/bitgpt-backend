@@ -945,33 +945,50 @@ class FundDistributionService:
             
             if fund_type and not is_level_dist:
                 try:
-                    from modules.income.bonus_fund import BonusFund
-                    
-                    # Get or create BonusFund
-                    bonus_fund = BonusFund.objects(
-                        fund_type=fund_type,
-                        program=program,
-                        status='active'
-                    ).first()
-                    
-                    if not bonus_fund:
-                        print(f"Creating new BonusFund: {fund_type}_{program}")
-                        bonus_fund = BonusFund(
+                    if fund_type == 'spark_bonus':
+                        from modules.spark.service import SparkService
+
+                        spark_service = SparkService()
+                        spark_result = spark_service.contribute_to_spark_fund(
+                            amount=amount,
+                            program=program,
+                            slot_number=slot_no,
+                            user_id=recipient_id,
+                            currency=currency,
+                        )
+                        fund_updated = spark_result.get("success", False)
+                        if not fund_updated:
+                            print(f"❌ Failed to update Spark Bonus fund via service: {spark_result.get('error')}")
+                        else:
+                            print(f"✅ Updated spark_bonus_{program}: +${spark_result.get('spark_contribution_8_percent')} → ${spark_result.get('new_balance')}")
+                    else:
+                        from modules.income.bonus_fund import BonusFund
+                        
+                        # Get or create BonusFund
+                        bonus_fund = BonusFund.objects(
                             fund_type=fund_type,
                             program=program,
-                            total_collected=Decimal('0'),
-                            total_distributed=Decimal('0'),
-                            current_balance=Decimal('0'),
                             status='active'
-                        )
-                    
-                    # Update fund balances
-                    bonus_fund.total_collected += amount
-                    bonus_fund.current_balance += amount
-                    bonus_fund.updated_at = datetime.utcnow()
-                    bonus_fund.save()
-                    fund_updated = True
-                    print(f"✅ Updated {fund_type}_{program}: +${amount} → ${bonus_fund.current_balance}")
+                        ).first()
+                        
+                        if not bonus_fund:
+                            print(f"Creating new BonusFund: {fund_type}_{program}")
+                            bonus_fund = BonusFund(
+                                fund_type=fund_type,
+                                program=program,
+                                total_collected=Decimal('0'),
+                                total_distributed=Decimal('0'),
+                                current_balance=Decimal('0'),
+                                status='active'
+                            )
+                        
+                        # Update fund balances
+                        bonus_fund.total_collected += amount
+                        bonus_fund.current_balance += amount
+                        bonus_fund.updated_at = datetime.utcnow()
+                        bonus_fund.save()
+                        fund_updated = True
+                        print(f"✅ Updated {fund_type}_{program}: +${amount} → ${bonus_fund.current_balance}")
                     
                 except Exception as e:
                     print(f"❌ Failed to update BonusFund for {income_type} → {fund_type}: {e}")
