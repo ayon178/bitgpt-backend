@@ -675,6 +675,17 @@ async def get_leadership_stipend_income(
             if ls and ls.tiers and len(ls.tiers) > 0:
                 print(f"✅ Tiers found after final DB fetch: {len(ls.tiers)}")
         
+        distribution_percentages = {
+            10: 0.30,
+            11: 0.20,
+            12: 0.10,
+            13: 0.10,
+            14: 0.10,
+            15: 0.10,
+            16: 0.05,
+            17: 0.05,
+        }
+
         # Iterate over tiers (will be empty if ls or ls.tiers is None/empty)
         # Precompute eligible user counts per slot (active tiers only)
         eligible_counts: dict[int, int] = {}
@@ -712,6 +723,10 @@ async def get_leadership_stipend_income(
                     eligible_count = eligible_counts.get(t.slot_number, 0)
                     if eligible_count > 0:
                         claimable_amount = float(t.daily_return) / eligible_count
+
+            tier_percentage = distribution_percentages.get(t.slot_number, 0.0)
+            tier_total_bnb = total_global_bnb * tier_percentage
+            tier_total_usdt = total_global_usdt * tier_percentage
             
             tiers.append({
                 "slot_number": t.slot_number,
@@ -725,7 +740,10 @@ async def get_leadership_stipend_income(
                 "progress_percent": 0,
                 "is_active": bool(t.is_active),
                 "activated_at": t.activated_at,
-                "total_users": eligible_counts.get(t.slot_number, 0)
+                "total_users": eligible_counts.get(t.slot_number, 0),
+                "total_bnb": tier_total_bnb,
+                "total_usdt": tier_total_usdt,
+                "distribution_percentage": tier_percentage * 100,
             })
 
         # Calculate current tier's claimable amount for summary
