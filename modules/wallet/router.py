@@ -735,11 +735,19 @@ async def get_leadership_stipend_income(
             tier_pool_remaining = max(0.0, tier_total_bnb - tier_pool_paid)
             eligible_user_count = eligible_counts.get(t.slot_number, 0)
 
+            tier_cap = float(t.daily_return or 0.0)
+            tier_paid_amount = float(t.total_paid or 0.0)
+            tier_remaining = max(0.0, tier_cap - tier_paid_amount - float(t.pending_amount or 0.0))
+
+            progress_percent = 0.0
+            if tier_cap > 0:
+                progress_percent = min(100.0, (tier_paid_amount / tier_cap) * 100.0)
+
             per_user_pool_share = 0.0
             if tier_is_active and eligible_user_count > 0:
                 per_user_pool_share = tier_pool_remaining / eligible_user_count if tier_pool_remaining > 0 else 0.0
-                claimable_amount = min(claimable_amount, per_user_pool_share)
-            elif not tier_is_active:
+                claimable_amount = min(claimable_amount, per_user_pool_share, tier_remaining)
+            else:
                 claimable_amount = 0.0
             if eligible_user_count == 0:
                 claimable_amount = 0.0
