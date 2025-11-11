@@ -99,6 +99,8 @@ class LeadershipStipendService:
             eligibility.is_eligible_for_stipend = (
                 eligibility.highest_slot_activated >= 10
             )
+            new_highest_slot = eligibility.highest_slot_activated if eligibility.highest_slot_activated >= 10 else 0
+            previous_tier = leadership_stipend.current_tier if leadership_stipend.current_tier else 0
             
             # Update eligibility reasons
             eligibility_reasons = self._get_eligibility_reasons(eligibility)
@@ -108,17 +110,17 @@ class LeadershipStipendService:
                 eligibility.qualified_at = datetime.utcnow()
                 leadership_stipend.is_eligible = True
                 leadership_stipend.qualified_at = datetime.utcnow()
-                leadership_stipend.current_tier = eligibility.highest_slot_activated
+                leadership_stipend.current_tier = new_highest_slot
                 
                 # Set current tier details
-                current_tier_info = self._get_tier_info(eligibility.highest_slot_activated)
+                current_tier_info = self._get_tier_info(new_highest_slot)
                 leadership_stipend.current_tier_name = current_tier_info["tier_name"]
                 leadership_stipend.current_daily_return = current_tier_info["daily_return"]
                 
                 # Determine whether tier still has remaining balance
                 tier_record = None
                 for t in leadership_stipend.tiers:
-                    if t.slot_number == eligibility.highest_slot_activated:
+                    if t.slot_number == new_highest_slot:
                         tier_record = t
                         break
                 tier_cap = float(getattr(tier_record, "daily_return", 0.0) or 0.0) if tier_record else 0.0
@@ -128,12 +130,41 @@ class LeadershipStipendService:
                 
                 if remaining_cap > 0:
                     # Activate current tier and deactivate previous ones
-                    self._activate_tier(leadership_stipend, eligibility.highest_slot_activated)
+                    self._activate_tier(leadership_stipend, new_highest_slot)
                 else:
                     # Tier already fulfilled – keep stipend eligible but without active tier
                     self._set_current_tier_info(leadership_stipend, None)
                 
-                self._log_action(user_id, "became_eligible", f"User became eligible for Leadership Stipend - Slot {eligibility.highest_slot_activated}")
+                self._log_action(user_id, "became_eligible", f"User became eligible for Leadership Stipend - Slot {new_highest_slot}")
+            
+            elif eligibility.is_eligible_for_stipend:
+                # User was already eligible; ensure current tier reflects highest active slot
+                tier_record = None
+                remaining_cap = 0.0
+                if new_highest_slot >= 10:
+                    for t in leadership_stipend.tiers:
+                        if t.slot_number == new_highest_slot:
+                            tier_record = t
+                            break
+                    if tier_record:
+                        tier_cap = float(getattr(tier_record, "daily_return", 0.0) or 0.0)
+                        tier_paid = float(getattr(tier_record, "total_paid", 0.0) or 0.0)
+                        tier_pending = float(getattr(tier_record, "pending_amount", 0.0) or 0.0)
+                        remaining_cap = tier_cap - tier_paid - tier_pending
+                
+                if new_highest_slot >= 10 and remaining_cap > 0 and new_highest_slot != previous_tier:
+                    # Promote to the new slot and deactivate lower tiers
+                    self._activate_tier(leadership_stipend, new_highest_slot)
+                elif new_highest_slot >= 10 and remaining_cap <= 0:
+                    # Highest slot exhausted; deactivate it
+                    if tier_record and tier_record.is_active:
+                        tier_record.is_active = False
+                    self._refresh_current_tier(leadership_stipend)
+                elif new_highest_slot < 10:
+                    self._set_current_tier_info(leadership_stipend, None)
+                else:
+                    # No change in tier but ensure current tier info is consistent
+                    self._set_current_tier_info(leadership_stipend, leadership_stipend.current_tier)
             
             eligibility.last_checked = datetime.utcnow()
             eligibility.save()
@@ -268,7 +299,10 @@ class LeadershipStipendService:
             leadership_stipend = LeadershipStipend.objects(id=payment.leadership_stipend_id).first()
             if leadership_stipend:
                 leadership_stipend.total_paid += payment.daily_return_amount
-                leadership_stipend.pending_amount -= payment.daily_return_amount
+                leadership_stipend.pending_amount = max(
+                    0.0,
+                    float(leadership_stipend.pending_amount or 0.0) - float(payment.daily_return_amount or 0.0)
+                )
                 leadership_stipend.last_payment_date = payment.payment_date
                 leadership_stipend.last_updated = datetime.utcnow()
                 leadership_stipend.save()
