@@ -939,7 +939,7 @@ class WalletService:
             # Get paginated entries, sorted by created_at desc
             entries = WalletLedger.objects(query).order_by('-created_at').skip(skip).limit(limit)
 
-            # Build user lookup for all ledger entries
+			# Build user lookup for all ledger entries (receiver)
             def _normalize_object_id(value):
                 if not value:
                     return None
@@ -984,7 +984,49 @@ class WalletService:
                 else:
                     return {"success": False, "error": "User not found"}
 
-            # Build referrer lookup
+			# Extract potential source user ids from tx_hash of each entry (downline who generated income)
+			# We expect a 24-char hex ObjectId embedded in tx_hash (same heuristic used elsewhere)
+			import re as _re
+			_hex24 = _re.compile(r"([0-9a-fA-F]{24})")
+			entry_id_to_source_id: Dict[str, str] = {}
+			source_user_ids: set[str] = set()
+			for entry in entries:
+				txh = str(getattr(entry, 'tx_hash', '') or '')
+				m = _hex24.search(txh)
+				if not m:
+					continue
+				candidate = m.group(1)
+				try:
+					oid = ObjectId(candidate)
+					entry_id_to_source_id[str(entry.id)] = str(oid)
+					source_user_ids.add(str(oid))
+				except Exception:
+					continue
+
+			# Fetch source users (downlines) and their referrers
+			source_user_map: Dict[str, Any] = {}
+			source_referrer_ids: set[str] = set()
+			if source_user_ids:
+				source_docs = User.objects(id__in=[ObjectId(sid) for sid in source_user_ids if ObjectId.is_valid(sid)]).only('uid', 'refer_code', 'refered_by')
+				for s in source_docs:
+					source_user_map[str(s.id)] = s
+					if getattr(s, 'refered_by', None):
+						try:
+							source_referrer_ids.add(str(ObjectId(getattr(s, 'refered_by'))))
+						except Exception:
+							# If refered_by is already ObjectId, str() still ok
+							source_referrer_ids.add(str(getattr(s, 'refered_by')))
+
+			source_referrer_map: Dict[str, Dict[str, Any]] = {}
+			if source_referrer_ids:
+				ref_docs = User.objects(id__in=[ObjectId(rid) for rid in source_referrer_ids if ObjectId.is_valid(rid)]).only('uid', 'refer_code')
+				for r in ref_docs:
+					source_referrer_map[str(r.id)] = {
+						"uid": getattr(r, 'uid', None),
+						"refer_code": getattr(r, 'refer_code', None)
+					}
+
+			# Build referrer lookup for receiver user (kept for fallback)
             referrer_ids = {
                 _normalize_object_id(getattr(user_doc, 'refered_by', None))
                 for user_doc in user_map.values()
@@ -1002,25 +1044,39 @@ class WalletService:
             # Build rows from ledger entries
             rows = []
             for entry in entries:
-                entry_user_key = _normalize_object_id(getattr(entry, 'user_id', None))
-                entry_user = user_map.get(entry_user_key)
+				# Receiver (current user) - still used for uid field
+				entry_user_key = _normalize_object_id(getattr(entry, 'user_id', None))
+				entry_user = user_map.get(entry_user_key)
 
                 entry_uid = getattr(entry_user, 'uid', None) if entry_user else None
-                entry_refer_code = getattr(entry_user, 'refer_code', None) if entry_user else None
 
-                referrer_uid = 'ROOT'
-                referrer_refer_code = 'ROOT'
-                if entry_user:
-                    ref_key = _normalize_object_id(getattr(entry_user, 'refered_by', None))
-                    if ref_key and ref_key in referrer_map:
-                        ref_info = referrer_map[ref_key]
-                        referrer_uid = ref_info.get("uid") or 'ROOT'
-                        referrer_refer_code = ref_info.get("refer_code") or 'ROOT'
+				# Source user (the downline who generated this income)
+				source_id = entry_id_to_source_id.get(str(entry.id))
+				source_user = source_user_map.get(source_id) if source_id else None
+				source_refer_code = getattr(source_user, 'refer_code', None) if source_user else None
+
+				# Source user's referrer/upline
+				upline_uid = 'ROOT'
+				referrer_refer_code = 'ROOT'
+				if source_user:
+					src_ref_id = _normalize_object_id(getattr(source_user, 'refered_by', None))
+					if src_ref_id and src_ref_id in source_referrer_map:
+						src_ref = source_referrer_map[src_ref_id]
+						upline_uid = src_ref.get("uid") or 'ROOT'
+						referrer_refer_code = src_ref.get("refer_code") or 'ROOT'
+				else:
+					# Fallback to receiver's upline if source not found
+					if entry_user:
+						ref_key = _normalize_object_id(getattr(entry_user, 'refered_by', None))
+						if ref_key and ref_key in referrer_map:
+							ref_info = referrer_map[ref_key]
+							upline_uid = ref_info.get("uid") or 'ROOT'
+							referrer_refer_code = ref_info.get("refer_code") or 'ROOT'
 
                 rows.append({
                     "uid": entry_uid,
-                    "upline_uid": referrer_uid,
-                    "refer_code": entry_refer_code,
+					"upline_uid": upline_uid,
+					"refer_code": source_refer_code,
                     "referrer_refer_code": referrer_refer_code,
                     "amount": float(entry.amount) if entry.amount else 0,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
