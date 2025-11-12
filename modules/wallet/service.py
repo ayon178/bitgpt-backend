@@ -132,35 +132,35 @@ class WalletService:
                     total_deposit[curr] = 0.0
                 total_deposit[curr] += amt
 
-			# Binary manual upgrades (manual activation records)
-			binary_manual = SlotActivation.objects(
-				user_id=user_oid,
-				program='binary',
-				activation_type='manual'
-			).only('amount_paid', 'currency')
-			for act in binary_manual:
-				amt = float(getattr(act, 'amount_paid', 0) or 0)
-				if amt <= 0:
-					continue
-				curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
-				if curr not in total_deposit:
-					total_deposit[curr] = 0.0
-				total_deposit[curr] += amt
+            # Binary manual upgrades (manual activation records)
+            binary_manual = SlotActivation.objects(
+                user_id=user_oid,
+                program='binary',
+                activation_type='manual'
+            ).only('amount_paid', 'currency')
+            for act in binary_manual:
+                amt = float(getattr(act, 'amount_paid', 0) or 0)
+                if amt <= 0:
+                    continue
+                curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
+                if curr not in total_deposit:
+                    total_deposit[curr] = 0.0
+                total_deposit[curr] += amt
 
-			# Binary manual admin upgrades recorded with activation_type='upgrade'
-			binary_upgrades = SlotActivation.objects(
-				user_id=user_oid,
-				program='binary',
-				activation_type='upgrade'
-			).only('amount_paid', 'currency')
-			for act in binary_upgrades:
-				amt = float(getattr(act, 'amount_paid', 0) or 0)
-				if amt <= 0:
-					continue
-				curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
-				if curr not in total_deposit:
-					total_deposit[curr] = 0.0
-				total_deposit[curr] += amt
+            # Binary manual admin upgrades recorded with activation_type='upgrade'
+            binary_upgrades = SlotActivation.objects(
+                user_id=user_oid,
+                program='binary',
+                activation_type='upgrade'
+            ).only('amount_paid', 'currency')
+            for act in binary_upgrades:
+                amt = float(getattr(act, 'amount_paid', 0) or 0)
+                if amt <= 0:
+                    continue
+                curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
+                if curr not in total_deposit:
+                    total_deposit[curr] = 0.0
+                total_deposit[curr] += amt
 
             # Matrix join (slot 1 initial activation)
             matrix_initial = SlotActivation.objects(
