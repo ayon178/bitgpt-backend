@@ -3377,10 +3377,10 @@ class GlobalService:
                 print(f"Triple Entry Reward eligibility check failed for user {user_id}: missing programs")
                 return {"success": False, "error": "User must have all three programs (Binary, Matrix, Global)"}
 
-            # Check if user is not already in triple-entry list
-            existing_triple_entry = TripleEntryReward.objects(user_id=ObjectId(user_id), status='eligible').first()
+            # Check if user is not already recorded in triple-entry cycles
+            existing_triple_entry = TripleEntryReward.objects(eligible_users=ObjectId(user_id)).first()
             if existing_triple_entry:
-                print(f"Triple Entry Reward eligibility check failed for user {user_id}: already in triple-entry list")
+                print(f"Triple Entry Reward eligibility check failed for user {user_id}: already in triple-entry cycle {existing_triple_entry.cycle_no}")
                 return {"success": False, "error": "User already in triple-entry eligibles list"}
 
             print(f"Triple Entry Reward eligibility check passed for user {user_id}: has all three programs")
@@ -3388,17 +3388,32 @@ class GlobalService:
             # 7.1.2 Triple Entry Registration - Section 7.1.2 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
             # Add user to triple-entry eligibles list
             try:
-                # Create `TripleEntryReward` record
-                triple_entry_record = TripleEntryReward(
-                    user_id=ObjectId(user_id),
-                    programs=['binary', 'matrix', 'global'],
-                    eligible_date=datetime.utcnow(),
-                    status='eligible',
-                    created_at=datetime.utcnow()
+                # Determine eligibility cycle based on latest join timestamp among programs
+                eligible_date = (
+                    user.global_joined_at
+                    or user.matrix_joined_at
+                    or user.binary_joined_at
+                    or datetime.utcnow()
                 )
-                triple_entry_record.save()
 
-                print(f"Triple Entry Reward record created: {triple_entry_record.id} for user {user_id}")
+                cycle_no = int(eligible_date.strftime('%Y%m%d'))
+                triple_entry_record = TripleEntryReward.objects(cycle_no=cycle_no).first()
+                if not triple_entry_record:
+                    triple_entry_record = TripleEntryReward(
+                        cycle_no=cycle_no,
+                        pool_amount=Decimal('0'),
+                        distribution_amount=Decimal('0'),
+                        eligible_users=[],
+                        status='active'
+                    )
+
+                user_oid = ObjectId(user_id)
+                if user_oid not in triple_entry_record.eligible_users:
+                    triple_entry_record.eligible_users.append(user_oid)
+                    triple_entry_record.save()
+                    print(f"Triple Entry Reward cycle {cycle_no} updated with user {user_id}")
+                else:
+                    print(f"User {user_id} already present in Triple Entry cycle {cycle_no}")
 
             except Exception as e:
                 print(f"Triple Entry Reward registration failed: {str(e)}")
@@ -3437,9 +3452,8 @@ class GlobalService:
                 "success": True,
                 "user_id": user_id,
                 "programs": ['binary', 'matrix', 'global'],
-                "eligible_date": datetime.utcnow().isoformat(),
-                "status": "eligible",
-                "triple_entry_record_id": str(triple_entry_record.id),
+                "eligible_date": eligible_date.isoformat(),
+                "cycle_no": cycle_no,
                 "global_income": float(global_income),
                 "triple_entry_contribution": float(triple_entry_contribution),
                 "fund_contribution_result": contribution_result
@@ -3485,9 +3499,8 @@ class GlobalService:
             if not user.binary_joined or not user.matrix_joined or not user.global_joined:
                 return {"success": False, "error": "User must have all three programs (Binary, Matrix, Global)"}
 
-            # Check if user already in triple-entry list
-            existing_triple_entry = TripleEntryReward.objects(user_id=ObjectId(user_id), status='eligible').first()
-            if existing_triple_entry:
+            # Check if user already registered in any triple-entry cycle
+            if TripleEntryReward.objects(eligible_users=ObjectId(user_id)).first():
                 return {"success": False, "error": "User already in triple-entry eligibles list"}
 
             # Process the triple entry reward
@@ -3530,6 +3543,7 @@ class GlobalService:
                         "status": "success",
                         "programs": result.get("programs"),
                         "eligible_date": result.get("eligible_date"),
+                        "cycle_no": result.get("cycle_no"),
                         "global_income": result.get("global_income"),
                         "triple_entry_contribution": result.get("triple_entry_contribution")
                     })
