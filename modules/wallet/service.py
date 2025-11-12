@@ -95,115 +95,60 @@ class WalletService:
             print(f"Error calculating missing profit for user {user_id}: {e}")
             # Keep missing_profit as zeros if calculation fails
 
-        # Calculate total deposits (user debits + program join/upgrade amounts)
+        # Calculate total deposits (binary/matrix/global activations regardless of funding source)
         total_deposit = {"USDT": 0.0, "BNB": 0.0}
         try:
-            # Reserve ledger debits represent funds flowing out of the user's reserve
-            # (manual deposits, auto-upgrade deductions, wallet withdrawals to reserve, etc.)
-            reserve_debits = ReserveLedger.objects(
-                user_id=ObjectId(user_id),
-                direction='debit'
-            ).only('amount', 'program')
-
-            for entry in reserve_debits:
-                amount = float(getattr(entry, 'amount', 0) or 0)
-                if amount <= 0:
-                    continue
-                program = getattr(entry, 'program', 'binary') or 'binary'
-                currency = 'BNB' if program == 'binary' else 'USDT'
-                if currency not in total_deposit:
-                    total_deposit[currency] = 0.0
-                total_deposit[currency] += amount
-
-            # Initial join amounts from SlotActivation records
             user_oid = ObjectId(user_id)
+            def _add_deposit_amount(amount_value, currency_value, default_currency: str) -> None:
+                amt = float(amount_value or 0)
+                if amt <= 0:
+                    return
+                currency_key = (str(currency_value or '').upper() or default_currency).upper()
+                if currency_key not in total_deposit:
+                    total_deposit[currency_key] = 0.0
+                total_deposit[currency_key] += amt
 
-            # Binary join (slots 1 & 2 auto-activated)
-            binary_initial = SlotActivation.objects(
+            # Binary program activations (initial/manual/auto/upgrades)
+            binary_activations = SlotActivation.objects(
                 user_id=user_oid,
                 program='binary',
-                slot_no__in=[1, 2],
-                activation_type='initial'
+                status='completed'
             ).only('amount_paid', 'currency')
-            for act in binary_initial:
-                amt = float(getattr(act, 'amount_paid', 0) or 0)
-                curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
-                if curr not in total_deposit:
-                    total_deposit[curr] = 0.0
-                total_deposit[curr] += amt
+            for activation in binary_activations:
+                _add_deposit_amount(
+                    getattr(activation, 'amount_paid', 0),
+                    getattr(activation, 'currency', None),
+                    'BNB'
+                )
 
-            # Binary manual upgrades (manual activation records)
-            binary_manual = SlotActivation.objects(
-                user_id=user_oid,
-                program='binary',
-                activation_type='manual'
-            ).only('amount_paid', 'currency')
-            for act in binary_manual:
-                amt = float(getattr(act, 'amount_paid', 0) or 0)
-                if amt <= 0:
-                    continue
-                curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
-                if curr not in total_deposit:
-                    total_deposit[curr] = 0.0
-                total_deposit[curr] += amt
+            # Matrix program activations (initial + upgrades)
+            try:
+                from ..matrix.model import MatrixActivation
+                matrix_activations = MatrixActivation.objects(
+                    user_id=user_oid,
+                    status='completed'
+                ).only('amount_paid', 'currency')
+                for activation in matrix_activations:
+                    _add_deposit_amount(
+                        getattr(activation, 'amount_paid', 0),
+                        getattr(activation, 'currency', None),
+                        'USDT'
+                    )
+            except Exception as e:
+                print(f"Error fetching matrix activations for user {user_id}: {e}")
 
-            # Binary manual admin upgrades recorded with activation_type='upgrade'
-            binary_upgrades = SlotActivation.objects(
-                user_id=user_oid,
-                program='binary',
-                activation_type='upgrade'
-            ).only('amount_paid', 'currency')
-            for act in binary_upgrades:
-                amt = float(getattr(act, 'amount_paid', 0) or 0)
-                if amt <= 0:
-                    continue
-                curr = (str(getattr(act, 'currency', '')).upper() or 'BNB')
-                if curr not in total_deposit:
-                    total_deposit[curr] = 0.0
-                total_deposit[curr] += amt
-
-            # Matrix join (slot 1 initial activation)
-            matrix_initial = SlotActivation.objects(
-                user_id=user_oid,
-                program='matrix',
-                slot_no=1,
-                activation_type='initial'
-            ).only('amount_paid', 'currency')
-            for act in matrix_initial:
-                amt = float(getattr(act, 'amount_paid', 0) or 0)
-                curr = (str(getattr(act, 'currency', '')).upper() or 'USDT')
-                if curr not in total_deposit:
-                    total_deposit[curr] = 0.0
-                total_deposit[curr] += amt
-
-            # Matrix slot upgrades (any slot number)
-            matrix_upgrades = SlotActivation.objects(
-                user_id=user_oid,
-                program='matrix',
-                activation_type='upgrade'
-            ).only('amount_paid', 'currency')
-            for act in matrix_upgrades:
-                amt = float(getattr(act, 'amount_paid', 0) or 0)
-                if amt <= 0:
-                    continue
-                curr = (str(getattr(act, 'currency', '')).upper() or 'USDT')
-                if curr not in total_deposit:
-                    total_deposit[curr] = 0.0
-                total_deposit[curr] += amt
-
-            # Global join (slot 1 initial activation)
-            global_initial = SlotActivation.objects(
+            # Global program activations (initial/manual/auto/upgrades)
+            global_activations = SlotActivation.objects(
                 user_id=user_oid,
                 program='global',
-                slot_no=1,
-                activation_type='initial'
+                status='completed'
             ).only('amount_paid', 'currency')
-            for act in global_initial:
-                amt = float(getattr(act, 'amount_paid', 0) or 0)
-                curr = (str(getattr(act, 'currency', '')).upper() or 'USDT')
-                if curr not in total_deposit:
-                    total_deposit[curr] = 0.0
-                total_deposit[curr] += amt
+            for activation in global_activations:
+                _add_deposit_amount(
+                    getattr(activation, 'amount_paid', 0),
+                    getattr(activation, 'currency', None),
+                    'USDT'
+                )
 
         except Exception as e:
             print(f"Error calculating total deposits for user {user_id}: {e}")
