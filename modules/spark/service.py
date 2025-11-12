@@ -453,8 +453,10 @@ class SparkService:
                 "slot_number": slot_no,
                 "slot_name": self._slot_name(slot_no),
                 "percentage": s["percentage"],
-                "allocated_amount_usdt": claimable_usdt,  # Now shows user's claimable amount
-                "allocated_amount_bnb": claimable_bnb,    # Now shows user's claimable amount
+                "slot_reserve_usdt": float(total_usdt_alloc),
+                "slot_reserve_bnb": float(total_bnb_alloc),
+                "allocated_amount_usdt": claimable_usdt,  # per-user claimable amount
+                "allocated_amount_bnb": claimable_bnb,    # per-user claimable amount
                 "user_eligible": s.get("user_eligible"),
             })
 
@@ -464,12 +466,20 @@ class SparkService:
                 "baseline_amount": float(baseline_usdt),
                 "total_allocated": float(total_allocated),
                 "unallocated": float(max(Decimal('0'), baseline_usdt - total_allocated)),
+                "slot_reserve": {
+                    s["slot_number"]: float(baseline_usdt * Decimal(str(self._slot_percentage(s["slot_number"]))) / Decimal('100'))
+                    for s in slots_usdt
+                }
             },
             "BNB": {
                 "total_fund_amount": usdt_to_bnb(total_usdt),
                 "baseline_amount": usdt_to_bnb(baseline_usdt),
                 "total_allocated": usdt_to_bnb(total_allocated),
                 "unallocated": usdt_to_bnb(max(Decimal('0'), baseline_usdt - total_allocated)),
+                "slot_reserve": {
+                    s["slot_number"]: usdt_to_bnb(baseline_usdt * Decimal(str(self._slot_percentage(s["slot_number"]))) / Decimal('100'))
+                    for s in slots_usdt
+                }
             }
         }
 
