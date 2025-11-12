@@ -40,7 +40,7 @@ class SparkDistributeRequest(BaseModel):
 async def get_spark_bonus_history(
     user_id: str = Query(..., description="User ID"),
     currency: str | None = Query(None, description="Filter by currency (USDT or BNB)"),
-    slot_number: int | None = Query(None, ge=1, le=14, description="Filter by matrix slot 1-14"),
+    slot_number: int | None = Query(None, ge=1, le=15, description="Filter by matrix slot 1-15"),
     start_date: str | None = Query(None, description="YYYY-MM-DD inclusive"),
     end_date: str | None = Query(None, description="YYYY-MM-DD inclusive"),
     page: int = Query(1, ge=1),
