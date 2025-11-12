@@ -466,20 +466,12 @@ class SparkService:
                 "baseline_amount": float(baseline_usdt),
                 "total_allocated": float(total_allocated),
                 "unallocated": float(max(Decimal('0'), baseline_usdt - total_allocated)),
-                "slot_reserve": {
-                    s["slot_number"]: float(baseline_usdt * Decimal(str(self._slot_percentage(s["slot_number"]))) / Decimal('100'))
-                    for s in slots_usdt
-                }
             },
             "BNB": {
                 "total_fund_amount": usdt_to_bnb(total_usdt),
                 "baseline_amount": usdt_to_bnb(baseline_usdt),
                 "total_allocated": usdt_to_bnb(total_allocated),
                 "unallocated": usdt_to_bnb(max(Decimal('0'), baseline_usdt - total_allocated)),
-                "slot_reserve": {
-                    s["slot_number"]: usdt_to_bnb(baseline_usdt * Decimal(str(self._slot_percentage(s["slot_number"]))) / Decimal('100'))
-                    for s in slots_usdt
-                }
             }
         }
 
