@@ -1073,47 +1073,19 @@ class GlobalService:
                 has_binary = getattr(user, 'binary_joined', False)
                 has_matrix = getattr(user, 'matrix_joined', False)
                 has_global = getattr(user, 'global_joined', False)  # Will be True after this join
+                eligible_for_triple_entry = has_binary and has_matrix
                 
                 print(f"Triple Entry Check for user {user.id}: Binary={has_binary}, Matrix={has_matrix}, Global={has_global}")
                 
                 # Since we're setting global_joined=True after this check, we need to check if user will have all three
-                if has_binary and has_matrix:
+                if eligible_for_triple_entry:
                     # User will have all three programs after this Global join
                     print(f"User {user.id} eligible for Triple Entry Reward - has Binary + Matrix + Global")
-                    triple_entry_result = SparkService.compute_triple_entry_eligibles(datetime.utcnow())
-                    print(f"Triple Entry eligibility computed: {triple_entry_result}")
-                    
-                    # Auto-join President Reward program when user has all 3 programs
-                    try:
-                        from modules.president_reward.service import PresidentRewardService
-                        from modules.president_reward.model import PresidentReward
-                        pr_existing = PresidentReward.objects(user_id=user.id).first()
-                        if not pr_existing:
-                            pr_svc = PresidentRewardService()
-                            pr_result = pr_svc.join_president_reward_program(str(user.id))
-                            print(f"President Reward auto-join for user {user.id}: {pr_result}")
-                        else:
-                            print(f"User {user.id} already in President Reward program")
-                    except Exception as pr_e:
-                        print(f"President Reward auto-join failed for user {user.id}: {str(pr_e)}")
-                    
-                    # Auto-join Royal Captain Bonus program when user has all 3 programs
-                    try:
-                        from modules.royal_captain.service import RoyalCaptainService
-                        from modules.royal_captain.model import RoyalCaptain
-                        rc_existing = RoyalCaptain.objects(user_id=user.id).first()
-                        if not rc_existing:
-                            rc_svc = RoyalCaptainService()
-                            rc_result = rc_svc.join_royal_captain_program(str(user.id))
-                            print(f"Royal Captain auto-join for user {user.id}: {rc_result}")
-                        else:
-                            print(f"User {user.id} already in Royal Captain program")
-                    except Exception as rc_e:
-                        print(f"Royal Captain auto-join failed for user {user.id}: {str(rc_e)}")
                 else:
                     print(f"User {user.id} not yet eligible for Triple Entry Reward - missing programs")
             except Exception as e:
                 print(f"Triple Entry eligibility check failed for user {user.id}: {str(e)}")
+                eligible_for_triple_entry = False
 
             # Update user's global_joined flag and related fields
             user.global_joined = True
@@ -1143,6 +1115,46 @@ class GlobalService:
             user.global_total_spent += float(expected_amount)
             
             user.save()
+
+            if eligible_for_triple_entry:
+                try:
+                    triple_entry_result = self.spark_service.compute_triple_entry_eligibles(datetime.utcnow())
+                    print(f"Triple Entry eligibility computed: {triple_entry_result}")
+                except Exception as te_e:
+                    print(f"Triple Entry eligibility computation failed for user {user.id}: {str(te_e)}")
+                
+                try:
+                    process_result = self.process_triple_entry_reward(user_id)
+                    print(f"Triple Entry reward registration result for user {user.id}: {process_result}")
+                except Exception as pr_e:
+                    print(f"Triple Entry reward registration failed for user {user.id}: {str(pr_e)}")
+
+                # Auto-enroll user into President Reward and Royal Captain programs now that all prerequisites are met
+                try:
+                    from modules.president_reward.service import PresidentRewardService
+                    from modules.president_reward.model import PresidentReward
+                    pr_existing = PresidentReward.objects(user_id=user.id).first()
+                    if not pr_existing:
+                        pr_svc = PresidentRewardService()
+                        pr_result = pr_svc.join_president_reward_program(str(user.id))
+                        print(f"President Reward auto-join for user {user.id}: {pr_result}")
+                    else:
+                        print(f"User {user.id} already in President Reward program")
+                except Exception as pr_e:
+                    print(f"President Reward auto-join failed for user {user.id}: {str(pr_e)}")
+
+                try:
+                    from modules.royal_captain.service import RoyalCaptainService
+                    from modules.royal_captain.model import RoyalCaptain
+                    rc_existing = RoyalCaptain.objects(user_id=user.id).first()
+                    if not rc_existing:
+                        rc_svc = RoyalCaptainService()
+                        rc_result = rc_svc.join_royal_captain_program(str(user.id))
+                        print(f"Royal Captain auto-join for user {user.id}: {rc_result}")
+                    else:
+                        print(f"User {user.id} already in Royal Captain program")
+                except Exception as rc_e:
+                    print(f"Royal Captain auto-join failed for user {user.id}: {str(rc_e)}")
             
             # Update current user's own GlobalPhaseProgression team tracking
             try:
