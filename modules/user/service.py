@@ -1572,7 +1572,9 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
 
         # Initialize BinaryAutoUpgrade tracking
         try:
-            BinaryAutoUpgrade.objects(user_id=ObjectId(user.id)).update_one(
+            user_object_id = ObjectId(user.id)
+            BinaryAutoUpgrade.objects(user_id=user_object_id).update_one(
+                set_on_insert__user_id=user_object_id,
                 set__current_slot_no=1,
                 set__current_level=1,
                 set__partners_required=2,
@@ -2132,7 +2134,9 @@ def create_root_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
 
         # Seed BinaryAutoUpgrade tracking for root
         try:
-            BinaryAutoUpgrade.objects(user_id=ObjectId(user.id)).update_one(
+            user_object_id = ObjectId(user.id)
+            BinaryAutoUpgrade.objects(user_id=user_object_id).update_one(
+                set_on_insert__user_id=user_object_id,
                 set__current_slot_no=1,
                 set__current_level=1,
                 set__partners_required=2,

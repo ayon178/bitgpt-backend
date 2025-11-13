@@ -1750,8 +1750,41 @@ class WalletService:
                         partner_uid = getattr(partner, 'uid', None)
                         partner_refer_code = getattr(partner, 'refer_code', None)
                 
-                # User level/rank info
-                user_level = entry.user_level
+                # Rank calculation per business rule:
+                # - Must be joined in BOTH binary and matrix
+                # - Rank number = min(active_binary_slot, active_matrix_slot)
+                rank_number = 0
+                try:
+                    from modules.slot.model import SlotActivation
+                    from modules.matrix.model import MatrixActivation
+                    # Fetch highest active slots
+                    binary_max = 0
+                    matrix_max = 0
+                    if missed_user:
+                        # Check joined flags if available; fallback to activations
+                        binary_joined = getattr(missed_user, 'binary_joined', False)
+                        matrix_joined = getattr(missed_user, 'matrix_joined', False)
+                        # Highest binary slot
+                        b_act = SlotActivation.objects(
+                            user_id=entry.user_id,
+                            program='binary',
+                            status='completed'
+                        ).order_by('-slot_no').first()
+                        if b_act:
+                            binary_max = int(getattr(b_act, 'slot_no', 0) or 0)
+                        # Highest matrix slot
+                        m_act = MatrixActivation.objects(
+                            user_id=entry.user_id,
+                            status='completed'
+                        ).order_by('-slot_no').first()
+                        if m_act:
+                            matrix_max = int(getattr(m_act, 'slot_no', 0) or 0)
+                        if binary_joined and matrix_joined and binary_max > 0 and matrix_max > 0:
+                            rank_number = min(binary_max, matrix_max)
+                        else:
+                            rank_number = 0
+                except Exception:
+                    rank_number = 0
                 
                 # Dynamic currency field based on actual currency
                 currency_field = f"miss_{currency.lower()}"
@@ -1763,7 +1796,7 @@ class WalletService:
                     "partner": partner_id,
                     "partner_uid": partner_uid or "--",
                     "partner_refer_code": partner_refer_code or "--",
-                    "rank": user_level,
+                    "rank": rank_number,
                     currency_field: float(entry.missed_profit_amount),
                     "time_date": time_date,
                     "missed_profit_type": entry.missed_profit_type,
