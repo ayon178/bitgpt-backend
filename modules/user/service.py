@@ -325,21 +325,33 @@ class UserService:
                     }
                 slot_number = max_active_slot
             else:
-                # If slot_number is provided, validate it against max active slot
+                # If slot_number is provided, validate it. Allow viewing higher slots when tree placements exist.
                 if slot_number > max_active_slot:
-                    # Requested slot is higher than user's max active slot, return empty data
-                    return {
-                        "success": True,
-                        "data": {
-                            "community_members": [],
-                            "pagination": {
-                                "page": page,
-                                "limit": limit,
-                                "total_count": 0,
-                                "total_pages": 0
+                    has_slot_tree = TreePlacement.objects(
+                        program=program_type,
+                        slot_no=slot_number,
+                        is_active=True,
+                        upline_id=user_oid
+                    ).first() or TreePlacement.objects(
+                        program=program_type,
+                        slot_no=slot_number,
+                        is_active=True,
+                        user_id=user_oid
+                    ).first()
+                    
+                    if not has_slot_tree:
+                        return {
+                            "success": True,
+                            "data": {
+                                "community_members": [],
+                                "pagination": {
+                                    "page": page,
+                                    "limit": limit,
+                                    "total_count": 0,
+                                    "total_pages": 0
+                                }
                             }
                         }
-                    }
             
             # Use BFS traversal to get ALL downline users (all levels) in this slot tree
             unique_user_ids = []
