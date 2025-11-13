@@ -982,52 +982,88 @@ class AutoUpgradeService:
             else:
                 # Slot 2+: Check reserve routing rules
                 nth_upline_for_cost = self._get_nth_upline_by_slot(user_id, slot_no, slot_no)
+                routed_to_mother = False
+                mother_reason = None
+                target_upline = nth_upline_for_cost
                 if nth_upline_for_cost:
-                    is_first_second_cost = self._is_first_or_second_under_upline(user_id, nth_upline_for_cost, slot_no, required_level=slot_no)
-                    if is_first_second_cost:
-                        # Route to Nth upline's reserve for slot N+1 (cascade)
+                    from ..slot.model import SlotActivation
+                    upline_has_slot = SlotActivation.objects(
+                        user_id=nth_upline_for_cost,
+                        program='binary',
+                        slot_no__gte=slot_no,
+                        status='completed'
+                    ).first() is not None
+                    if not upline_has_slot:
+                        routed_to_mother = True
+                        mother_reason = f"auto_upgrade_level_insufficient_slot_{slot_no}"
                         try:
-                            cascade_reserve_entry = ReserveLedger(
-                                user_id=nth_upline_for_cost,
+                            from ..commission.service import CommissionService
+                            CommissionService().handle_missed_profit(
+                                user_id=str(nth_upline_for_cost),
+                                from_user_id=str(user_id),
                                 program='binary',
-                                slot_no=slot_no + 1,
+                                slot_no=slot_no,
+                                slot_name=slot_name,
                                 amount=slot_cost,
-                                direction='credit',
-                                source='tree_upline_reserve',  # Changed from 'tree_upline_reserve_cascade' (not in model choices)
-                                balance_after=Decimal('0'),
-                                created_at=datetime.utcnow()
+                                currency='BNB',
+                                reason=mother_reason
                             )
-                            cascade_reserve_entry.save()
-                            print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost ({slot_cost} BNB) to {nth_upline_for_cost}'s reserve for slot {slot_no + 1}")
-                            
-                            # Check if this triggers another auto-upgrade (CASCADE OF CASCADE)
-                            try:
-                                cascade_auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(nth_upline_for_cost, slot_no + 1)
-                                if cascade_auto_upgrade_result.get("auto_upgrade_triggered"):
-                                    print(f"[BINARY_ROUTING] 🚀 CASCADE: Slot {slot_no + 1} auto-upgraded for {nth_upline_for_cost} from cascaded reserve")
-                            except Exception as e:
-                                print(f"[BINARY_ROUTING] ⚠️ Cascade auto-upgrade check failed: {e}")
-                        except Exception as e:
-                            print(f"[BINARY_ROUTING] ❌ Failed to create cascade ReserveLedger: {e}")
+                        except Exception as exc:
+                            print(f"[BINARY_ROUTING] ⚠️ Failed to record auto-upgrade missed profit for upline {nth_upline_for_cost}: {exc}")
                     else:
-                        # Not first/second: distribute via pools
-                        from ..fund_distribution.service import FundDistributionService
-                        from ..user.model import User
-                        fund = FundDistributionService()
-                        ref = User.objects(id=user_id).only('refered_by').first()
-                        referrer_id = str(ref.refered_by) if ref and ref.refered_by else None
-                        fund.distribute_binary_funds(
-                            user_id=str(user_id),
-                            amount=slot_cost,
-                            slot_no=slot_no,
-                            referrer_id=referrer_id,
-                            tx_hash=f"auto_cascade_pools_slot{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
-                            currency='BNB'
-                        )
-                        print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost distributed via pools")
+                        is_first_second_cost = self._is_first_or_second_under_upline(user_id, nth_upline_for_cost, slot_no, required_level=slot_no)
+                        if is_first_second_cost:
+                            # Route to Nth upline's reserve for slot N+1 (cascade)
+                            try:
+                                cascade_reserve_entry = ReserveLedger(
+                                    user_id=nth_upline_for_cost,
+                                    program='binary',
+                                    slot_no=slot_no + 1,
+                                    amount=slot_cost,
+                                    direction='credit',
+                                    source='tree_upline_reserve',  # Changed from 'tree_upline_reserve_cascade' (not in model choices)
+                                    balance_after=Decimal('0'),
+                                    created_at=datetime.utcnow()
+                                )
+                                cascade_reserve_entry.save()
+                                print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost ({slot_cost} BNB) to {nth_upline_for_cost}'s reserve for slot {slot_no + 1}")
+                                
+                                # Check if this triggers another auto-upgrade (CASCADE OF CASCADE)
+                                try:
+                                    cascade_auto_upgrade_result = self._check_binary_auto_upgrade_from_reserve(nth_upline_for_cost, slot_no + 1)
+                                    if cascade_auto_upgrade_result.get("auto_upgrade_triggered"):
+                                        print(f"[BINARY_ROUTING] 🚀 CASCADE: Slot {slot_no + 1} auto-upgraded for {nth_upline_for_cost} from cascaded reserve")
+                                except Exception as e:
+                                    print(f"[BINARY_ROUTING] ⚠️ Cascade auto-upgrade check failed: {e}")
+                            except Exception as e:
+                                print(f"[BINARY_ROUTING] ❌ Failed to create cascade ReserveLedger: {e}")
+                        else:
+                            # Not first/second: distribute via pools
+                            from ..fund_distribution.service import FundDistributionService
+                            from ..user.model import User
+                            fund = FundDistributionService()
+                            ref = User.objects(id=user_id).only('refered_by').first()
+                            referrer_id = str(ref.refered_by) if ref and ref.refered_by else None
+                            fund.distribute_binary_funds(
+                                user_id=str(user_id),
+                                amount=slot_cost,
+                                slot_no=slot_no,
+                                referrer_id=referrer_id,
+                                tx_hash=f"auto_cascade_pools_slot{slot_no}_{user_id}_{int(datetime.utcnow().timestamp())}",
+                                currency='BNB'
+                            )
+                            print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost distributed via pools")
                 else:
-                    # No Nth upline: send to mother account
-                    self._send_to_mother_account(slot_cost, slot_no)
+                    routed_to_mother = True
+                    mother_reason = f"auto_upgrade_no_upline_slot_{slot_no}"
+                if routed_to_mother:
+                    self._send_to_mother_account(
+                        slot_cost,
+                        slot_no,
+                        missed_user_id=target_upline,
+                        from_user_id=user_id,
+                        reason=mother_reason
+                    )
                     print(f"[BINARY_ROUTING] ✅ Cascaded slot {slot_no} cost sent to mother account")
             
             # Record the activation

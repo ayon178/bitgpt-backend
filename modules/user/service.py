@@ -1560,17 +1560,19 @@ def create_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any
 
         # Initialize BinaryAutoUpgrade tracking
         try:
-            BinaryAutoUpgrade(
-                user_id=ObjectId(user.id),
-                current_slot_no=1,
-                current_level=1,
-                partners_required=2,
-                partners_available=0,
-                is_eligible=False,
-                can_upgrade=False
-            ).save()
-        except Exception:
-            pass
+            BinaryAutoUpgrade.objects(user_id=ObjectId(user.id)).update_one(
+                set__current_slot_no=1,
+                set__current_level=1,
+                set__partners_required=2,
+                set__partners_available=0,
+                set__is_eligible=False,
+                set__can_upgrade=False,
+                set__is_active=True,
+                set__updated_at=datetime.utcnow(),
+                upsert=True
+            )
+        except Exception as e:
+            print(f"⚠️ Failed to seed BinaryAutoUpgrade for user {user.id}: {e}")
 
         # Create Newcomer Support record (one per user)
         try:
@@ -2118,18 +2120,19 @@ def create_root_user_service(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str
 
         # Seed BinaryAutoUpgrade tracking for root
         try:
-            if not BinaryAutoUpgrade.objects(user_id=ObjectId(user.id)).first():
-                BinaryAutoUpgrade(
-                    user_id=ObjectId(user.id),
-                    current_slot_no=1,
-                    current_level=1,
-                    partners_required=2,
-                    partners_available=0,
-                    is_eligible=False,
-                    can_upgrade=False
-                ).save()
-        except Exception:
-            pass
+            BinaryAutoUpgrade.objects(user_id=ObjectId(user.id)).update_one(
+                set__current_slot_no=1,
+                set__current_level=1,
+                set__partners_required=2,
+                set__partners_available=0,
+                set__is_eligible=False,
+                set__can_upgrade=False,
+                set__is_active=True,
+                set__updated_at=datetime.utcnow(),
+                upsert=True
+            )
+        except Exception as e:
+            print(f"⚠️ Failed to seed BinaryAutoUpgrade for root {user.id}: {e}")
 
         # Issue token
         token = authentication_service.create_access_token(
