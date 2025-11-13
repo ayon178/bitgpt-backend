@@ -387,8 +387,9 @@ class UserService:
             print(f"[MY-COMMUNITY] Found {len(unique_user_ids)} total downline users in slot {slot_number} tree")
             
             # Filter: Only keep users who actually have placement in this slot
-            # AND whose max active slot matches the requested slot_number
-            
+            # NOTE: Do not exclude users who later upgraded to higher slots.
+            # Presence in this slot's TreePlacement is sufficient for inclusion.
+            # (Previously we filtered by highest active slot == requested slot, which hid users after upgrades.)
             # First, get all users with placement in this slot
             users_with_placement = []
             for user_id_obj in unique_user_ids:
@@ -400,50 +401,44 @@ class UserService:
                 ).first()
                 if placement:
                     users_with_placement.append(user_id_obj)
-            
-            # Batch fetch max slots for all users to optimize performance
+            # Compute highest active slot per user (program-specific) and include ONLY users
+            # whose highest active slot equals the requested slot_number (show only at highest slot)
             user_max_slots_map = {}
             
-            # Get max slots from SlotActivation for all users at once
+            # Get max slots from SlotActivation for all users at once (program-specific)
             all_slot_activations = SlotActivation.objects(
                 user_id__in=users_with_placement,
                 program=program_type,
                 status='completed'
             )
-            
-            # Find max slot_no for each user
             for activation in all_slot_activations:
                 user_id_str = str(activation.user_id)
                 current_max = user_max_slots_map.get(user_id_str, 0)
                 if activation.slot_no > current_max:
                     user_max_slots_map[user_id_str] = activation.slot_no
             
-            # For matrix program, also check MatrixActivation and take max
+            # For matrix program, also check MatrixActivation and take the max
             if program_type == "matrix":
                 from modules.matrix.model import MatrixActivation
                 all_matrix_activations = MatrixActivation.objects(
                     user_id__in=users_with_placement,
                     status='completed'
                 )
-                
                 for activation in all_matrix_activations:
                     user_id_str = str(activation.user_id)
                     current_max = user_max_slots_map.get(user_id_str, 0)
-                    user_max_slots_map[user_id_str] = max(current_max, activation.slot_no)
+                    if activation.slot_no > current_max:
+                        user_max_slots_map[user_id_str] = activation.slot_no
             
-            # Filter: Only include users whose highest active slot exactly matches the requested slot number
+            # Final filter: show users only on their highest active slot view
             users_with_slot_placement = []
             for user_id_obj in users_with_placement:
                 user_id_str = str(user_id_obj)
                 user_max_slot = user_max_slots_map.get(user_id_str, 0)
-                
-                # Include users only when their max active slot matches the requested slot
                 if user_max_slot == slot_number:
                     users_with_slot_placement.append(user_id_obj)
-                else:
-                    print(f"[MY-COMMUNITY] Skipping user {user_id_obj}: max_slot={user_max_slot}, requested={slot_number}")
             
-            print(f"[MY-COMMUNITY] After slot placement verification: {len(users_with_slot_placement)} users")
+            print(f"[MY-COMMUNITY] After highest-slot filter: {len(users_with_slot_placement)} users")
             
             # Get total count (only users with placement in this slot)
             total_count = len(users_with_slot_placement)
