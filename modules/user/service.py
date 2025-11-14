@@ -325,35 +325,12 @@ class UserService:
                     }
                 slot_number = max_active_slot
             else:
-                # If slot_number is provided, validate it. Allow viewing higher slots when tree placements exist.
-                if slot_number > max_active_slot:
-                    has_slot_tree = TreePlacement.objects(
-                        program=program_type,
-                        slot_no=slot_number,
-                        is_active=True,
-                        upline_id=user_oid
-                    ).first() or TreePlacement.objects(
-                        program=program_type,
-                        slot_no=slot_number,
-                        is_active=True,
-                        user_id=user_oid
-                    ).first()
-                    
-                    if not has_slot_tree:
-                        return {
-                            "success": True,
-                            "data": {
-                                "community_members": [],
-                                "pagination": {
-                                    "page": page,
-                                    "limit": limit,
-                                    "total_count": 0,
-                                    "total_pages": 0
-                                }
-                            }
-                        }
+                # If slot_number is provided, allow viewing even if user's own max slot is lower.
+                # We will filter descendants by their highest active slot instead of requiring
+                # the root user to be in that specific slot tree.
+                pass
             
-            # Use BFS traversal to get ALL downline users (all levels) in this slot tree
+            # Use BFS traversal to get ALL downline users (all levels) in this program tree
             unique_user_ids = []
             queue = [user_oid]  # Start from root user
             visited = set()
@@ -365,11 +342,10 @@ class UserService:
             while queue:
                 current_upline_id = queue.pop(0)
                 
-                # Get all children of current user in this slot tree
+                # Get all children of current user in this program tree (ignore slot filter here)
                 children_query = {
                     "upline_id": current_upline_id,
                     "program": program_type,
-                    "slot_no": slot_number,
                     "is_active": True
                 }
                 
