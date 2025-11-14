@@ -456,11 +456,16 @@ class WalletService:
 
             def map_reason_to_pool(reason: str) -> str | None:
                 r = (reason or "").lower()
-                # Duel tree: ONLY explicit slot-1 full credits
-                if r == "binary_slot1_full":
+                # Duel tree: all 10% sponsor-based credits (slot1 full + joining + upgrades)
+                if (
+                    r == "binary_slot1_full"
+                    or r == "binary_joining_commission"
+                    or r == "binary_partner_incentive"
+                    or r.startswith("binary_upgrade_")
+                ):
                     return "duel_tree"
-                # Binary Partner Incentive: ONLY partner incentive credits per user request
-                if r == "binary_partner_incentive":
+                # Binary Partner Incentive: dual-tree level payouts (from wallet_ledger)
+                if r == "binary_level_payout":
                     return "binary_partner_incentive"
                 # Matrix Partner Incentive includes: partner incentive and level distributions (matrix_dual_tree_level_X)
                 if r == "matrix_partner_incentive" or r.startswith("matrix_dual_tree_"):
@@ -575,22 +580,14 @@ class WalletService:
             # Fallback: IncomeEvent-driven pools if not already handled
             if IncomeEvent:
                 try:
-                    def _sum_income(types: list[str]) -> float:
-                        agg = [
-                            {"$match": {"user_id": ObjectId(user_id), "income_type": {"$in": types}, "status": {"$in": ["pending", "completed"]}}},
-                            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
-                        ]
-                        res = list(IncomeEvent.objects.aggregate(agg))
-                        return float(res[0]["total"]) if res else 0.0
-
-                    # Fallback for Binary Partner Incentive and Duel Tree when WalletLedger is missing
+                    # Fallback for Binary Partner Incentive when WalletLedger is missing
                     # Use IncomeEvent ONLY if WalletLedger totals are zero to avoid double counting
                     try:
                         agg_pi = [
                             {"$match": {
                                 "user_id": ObjectId(user_id),
                                 "program": "binary",
-                                "income_type": "partner_incentive",
+                                "income_type": "level_payout",
                                 "status": {"$in": ["pending", "completed"]}
                             }},
                             {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
@@ -598,23 +595,6 @@ class WalletService:
                         res_pi = list(IncomeEvent.objects.aggregate(agg_pi))
                         if (totals.get("binary_partner_incentive", {}).get("BNB", 0.0) or 0.0) == 0.0:
                             totals["binary_partner_incentive"]["BNB"] += float(res_pi[0]["total"]) if res_pi else 0.0
-                    except Exception:
-                        pass
-
-                    # Sum duel tree level distributions for binary as BNB
-                    try:
-                        agg_dt = [
-                            {"$match": {
-                                "user_id": ObjectId(user_id),
-                                "program": "binary",
-                                "income_type": {"$regex": "^level_\\d+_distribution$"},
-                                "status": {"$in": ["pending", "completed"]}
-                            }},
-                            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
-                        ]
-                        res_dt = list(IncomeEvent.objects.aggregate(agg_dt))
-                        if (totals.get("duel_tree", {}).get("BNB", 0.0) or 0.0) == 0.0:
-                            totals["duel_tree"]["BNB"] += float(res_dt[0]["total"]) if res_dt else 0.0
                     except Exception:
                         pass
                 except Exception:
