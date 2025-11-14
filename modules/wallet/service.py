@@ -725,13 +725,21 @@ class WalletService:
     def get_duel_tree_earnings(self, user_id: str, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
         """
         Return a paginated list of Duel Tree earnings for a specific user.
-        Definition: Duel Tree = credits with reason == "binary_slot1_full" in wallet_ledger.
+        
+        Updated definition (per business spec):
+        - Duel Tree earnings = all binary sponsor-based earnings:
+          * binary_slot1_full      → Slot 1 full amount to direct upline
+          * binary_joining_commission (10% join)
+          * binary_partner_incentive (10% from upgrades/other)
+          * binary_upgrade_* (10% from each slot upgrade)
+        Previously this endpoint only included reason == "binary_slot1_full".
         Sorted by earning time (desc).
         Columns: uid, time, upline uid, partner count, rank, amount, reason.
         """
         try:
             from ..user.model import User, PartnerGraph
             from bson import ObjectId
+            from mongoengine import Q
 
             # Convert user_id to ObjectId if needed
             try:
@@ -740,16 +748,18 @@ class WalletService:
                 user_oid = user_id
 
             # Get wallet ledger entries for this specific user
-            # Only include Duel Tree earnings: binary_slot1_full
-            match_filter = {
-                "user_id": user_oid,
-                "type": "credit",
-                "reason": "binary_slot1_full",
-                "currency": currency.upper()
-            }
+            # Include all Binary Duel Tree (sponsor) earnings
+            base_filter = Q(user_id=user_oid) & Q(type="credit") & Q(currency=currency.upper())
+            reason_filter = (
+                Q(reason="binary_slot1_full") |
+                Q(reason="binary_joining_commission") |
+                Q(reason="binary_partner_incentive") |
+                Q(reason__startswith="binary_upgrade_")
+            )
+            query = base_filter & reason_filter
             
             # Count total entries
-            total = WalletLedger.objects(**match_filter).count()
+            total = WalletLedger.objects(query).count()
             
             # Paginate
             page = max(1, int(page or 1))
@@ -757,7 +767,7 @@ class WalletService:
             skip = (page - 1) * limit
             
             # Get paginated entries, sorted by created_at desc
-            entries = WalletLedger.objects(**match_filter).order_by('-created_at').skip(skip).limit(limit)
+            entries = WalletLedger.objects(query).order_by('-created_at').skip(skip).limit(limit)
 
             # Get user info
             user = User.objects(id=user_oid).first()

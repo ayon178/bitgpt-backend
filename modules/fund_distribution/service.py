@@ -637,48 +637,58 @@ class FundDistributionService:
     
     def _get_nth_upline_by_slot_for_distribution(self, user_id: str, slot_no: int) -> Optional[ObjectId]:
         """
-        Find Nth upline from activating user using base binary tree (slot 1).
-        This ensures ROOT ancestry is correctly identified even if higher-slot placements are absent.
+        Find Nth upline from activating user using the Binary tree placement (`TreePlacement.upline_id`).
+        
+        Business rule (per latest spec):
+        - Level distribution should follow the same Binary tree that first/second position logic uses,
+          but ONLY for upline chain (no change to reserve routing logic elsewhere).
+        - Starting point: user's placement in the slot-N tree (preferred), falling back to slot-1 base tree.
+        - Each step moves to the current node's `upline_id`.
+        - After N steps, we return that ancestor as the Nth upline.
         """
         try:
-            # Start from user's base placement (slot 1 preferred)
+            from modules.tree.model import TreePlacement
+
+            oid = ObjectId(user_id) if not isinstance(user_id, ObjectId) else user_id
+
+            # Prefer placement in the specific slot tree; fallback to base (slot 1)
             current = TreePlacement.objects(
-                user_id=ObjectId(user_id),
-                program='binary',
-                slot_no=1,
-                is_active=True
+                user_id=oid, program='binary', slot_no=slot_no, is_active=True
             ).first()
-            
             if not current:
-                print(f"[BINARY_LEVEL_DIST] No base placement found for user {user_id}")
+                current = TreePlacement.objects(
+                    user_id=oid, program='binary', slot_no=1, is_active=True
+                ).first()
+            if not current:
+                print(f"[BINARY_LEVEL_DIST] No placement found for user {user_id} in slot {slot_no} or base tree")
                 return None
-            
+
             steps = 0
-            upline = getattr(current, 'upline_id', None) or getattr(current, 'parent_id', None)
-            
+            upline = current.upline_id
+
             while upline and steps < slot_no:
                 steps += 1
                 if steps == slot_no:
                     return upline
-                
-                # Get next ancestor from base tree (slot 1)
+
+                # Move one step up via upline's own placement
                 next_pl = TreePlacement.objects(
-                    user_id=upline,
-                    program='binary',
-                    slot_no=1,
-                    is_active=True
+                    user_id=upline, program='binary', slot_no=slot_no, is_active=True
                 ).first()
-                
+                if not next_pl:
+                    next_pl = TreePlacement.objects(
+                        user_id=upline, program='binary', slot_no=1, is_active=True
+                    ).first()
                 if not next_pl:
                     break
-                    
-                upline = getattr(next_pl, 'upline_id', None) or getattr(next_pl, 'parent_id', None)
-            
-            print(f"[BINARY_LEVEL_DIST] Reached root or missing upline at step {steps}, needed step {slot_no}")
+
+                upline = next_pl.upline_id
+
+            print(f"[BINARY_LEVEL_DIST] Reached top of tree or missing upline at step {steps}, needed {slot_no}")
             return None
-            
+
         except Exception as e:
-            print(f"[BINARY_LEVEL_DIST] Error finding {slot_no}th upline: {e}")
+            print(f"[BINARY_LEVEL_DIST] Error finding {slot_no}th upline (tree upline_id): {e}")
             import traceback
             traceback.print_exc()
             return None
