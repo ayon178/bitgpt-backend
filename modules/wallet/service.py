@@ -870,10 +870,11 @@ class WalletService:
     def get_binary_partner_incentive(self, user_id: str, currency: str = "BNB", page: int = 1, limit: int = 50) -> Dict[str, Any]:
         """
         Return a paginated list of Binary Partner Incentive earnings for a specific user.
-        Per PROJECT_DOCUMENTATION.md Section 8: Binary Partner Incentive includes:
-        - binary_joining_commission (10% from joining)
-        - binary_partner_incentive (partner incentive)
-        - binary_upgrade_* (10% from each slot upgrade)
+        
+        Updated definition (aligned with pools summary):
+        - Binary Partner Incentive pool represents **dual-tree level payouts** for the user
+        - These payouts are recorded in `WalletLedger` with reason == "binary_level_payout"
+        
         Columns: uid (receiver), upline_uid, amount, time, reason, tx_hash.
         """
         try:
@@ -888,9 +889,9 @@ class WalletService:
                 user_oid = user_id
 
             # Get wallet ledger entries for this specific user
-            # Include all Binary Partner Incentive related reasons per documentation
+            # Binary Partner Incentive = dual-tree level payouts recorded as "binary_level_payout"
             base_filter = Q(user_id=user_oid) & Q(type="credit") & Q(currency=currency.upper())
-            reason_filter = Q(reason="binary_partner_incentive") | Q(reason="binary_joining_commission") | Q(reason__startswith="binary_upgrade_")
+            reason_filter = Q(reason="binary_level_payout")
             query = base_filter & reason_filter
             
             # Count total entries
