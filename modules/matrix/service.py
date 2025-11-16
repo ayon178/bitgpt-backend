@@ -738,6 +738,10 @@ class MatrixService:
             results = {}
             
             # 1. Joining Commission (10% to direct upline)
+            # NOTE: For MATRIX, the 10% Partner Incentive is already handled inside
+            # FundDistributionService.distribute_matrix_funds (matrix_percentages['partner_incentive'])
+            # which creates IncomeEvent + WalletLedger entries and credits the upline wallet.
+            # To avoid double-crediting, we DO NOT call calculate_partner_incentive here.
             joining_result = self.commission_service.calculate_joining_commission(
                 from_user_id=user_id,
                 program='matrix',
@@ -745,16 +749,13 @@ class MatrixService:
                 currency=currency
             )
             results['joining_commission'] = joining_result
-            
-            # 2. Partner Incentive (10% to upline from joining)
-            partner_result = self.commission_service.calculate_partner_incentive(
-                from_user_id=user_id,
-                to_user_id=referrer_id,
-                program='matrix',
-                amount=amount,
-                currency=currency
-            )
-            results['partner_incentive'] = partner_result
+            # Partner Incentive result is derived via fund distribution, so we only record metadata.
+            results['partner_incentive'] = {
+                "success": True,
+                "commission_amount": float(amount * Decimal('0.10')),
+                "upline_id": referrer_id,
+                "note": "Wallet credit handled by FundDistributionService (matrix_percentages['partner_incentive'])."
+            }
             
             # 3. Level Distribution (20/20/60 within the 40% pool)
             level_result = self._calculate_level_distribution(user_id, amount, currency, placement_context=placement_context, slot_no=slot_no)

@@ -1207,31 +1207,75 @@ class WalletService:
             # Get paginated entries, sorted by created_at desc
             entries = WalletLedger.objects(query).order_by('-created_at').skip(skip).limit(limit)
 
-            # Get user info
+            # Get user info (receiver)
             user = User.objects(id=user_oid).first()
             if not user:
                 return {"success": False, "error": "User not found"}
+            receiver_uid = getattr(user, 'uid', None)
+            receiver_refer_code = getattr(user, 'refer_code', None)
             
-            # Get upline info
-            ref = getattr(user, 'refered_by', None)
-            upline_uid = None
-            if ref:
-                upline = User.objects(id=ref).only('uid').first()
-                if upline:
-                    upline_uid = getattr(upline, 'uid', None)
-            if not upline_uid:
-                upline_uid = 'ROOT'
+            # Preload IncomeEvent data to resolve source users (downlines) by tx_hash
+            try:
+                from ..income.model import IncomeEvent
+            except Exception:
+                IncomeEvent = None
+
+            income_by_tx: Dict[str, Any] = {}
+            source_ids: set[str] = set()
+            if IncomeEvent:
+                tx_hashes = [str(getattr(e, 'tx_hash', '') or '') for e in entries if getattr(e, 'tx_hash', None)]
+                if tx_hashes:
+                    try:
+                        income_events = IncomeEvent.objects(
+                            tx_hash__in=tx_hashes,
+                            program='matrix'
+                        ).only('tx_hash', 'source_user_id')
+                        for ie in income_events:
+                            txh = str(getattr(ie, 'tx_hash', '') or '')
+                            income_by_tx[txh] = ie
+                            sid = getattr(ie, 'source_user_id', None)
+                            if sid:
+                                source_ids.add(str(sid))
+                    except Exception:
+                        income_by_tx = {}
+                        source_ids = set()
+
+            # Load source users (downlines) to fetch their uid & refer_code
+            source_user_map: Dict[str, Any] = {}
+            if source_ids:
+                try:
+                    source_users = User.objects(id__in=[ObjectId(sid) for sid in source_ids if ObjectId.is_valid(sid)]).only('uid', 'refer_code')
+                    for su in source_users:
+                        source_user_map[str(su.id)] = su
+                except Exception:
+                    source_user_map = {}
 
             # Build rows from ledger entries
             rows = []
             for entry in entries:
+                txh = str(getattr(entry, 'tx_hash', '') or '')
+                src_uid = None
+                src_refer_code = None
+                if txh and txh in income_by_tx:
+                    ie = income_by_tx[txh]
+                    sid = getattr(ie, 'source_user_id', None)
+                    sid_str = str(sid) if sid else None
+                    if sid_str and sid_str in source_user_map:
+                        su = source_user_map[sid_str]
+                        src_uid = getattr(su, 'uid', None)
+                        src_refer_code = getattr(su, 'refer_code', None)
+
                 rows.append({
-                    "uid": getattr(user, 'uid', None),
-                    "upline_uid": upline_uid,
+                    # Receiver (who got the income)
+                    "uid": receiver_uid,
+                    "receiver_refer_code": receiver_refer_code,
+                    # Source user (from whom the income originated, if resolvable)
+                    "source_uid": src_uid,
+                    "source_refer_code": src_refer_code,
                     "amount": float(entry.amount) if entry.amount else 0,
                     "time": entry.created_at.isoformat() if entry.created_at else None,
                     "reason": entry.reason,
-                    "tx_hash": entry.tx_hash or ""
+                    "tx_hash": txh
                 })
 
             return {
