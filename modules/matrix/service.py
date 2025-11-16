@@ -785,14 +785,15 @@ class MatrixService:
             results['shareholders'] = shareholders_result
             
             # 8. Newcomer Growth Support (20% contribution + instant bonus)
-            ngs_result = self.newcomer_support_service.process_matrix_contribution(
-                user_id=user_id,
-                amount=float(amount),
-                referrer_id=referrer_id,
-                tx_hash=(placement_context or {}).get('tx_hash') if placement_context else None,
-                currency=currency
-            )
-            results['newcomer_support'] = ngs_result
+            # NOTE: Matrix NGS distribution (20% → 10% instant + 10% time-locked)
+            # is handled centrally inside FundDistributionService.distribute_matrix_funds
+            # via the 'newcomer_support' branch, which calls NewcomerSupportService once
+            # per transaction. To avoid double-processing and double-crediting,
+            # we do not call NewcomerSupportService here.
+            results['newcomer_support'] = {
+                "success": True,
+                "note": "Handled by FundDistributionService.distribute_matrix_funds (newcomer_support branch)."
+            }
             
             # 9. Mentorship Bonus (10% to super upline - direct-of-direct)
             mentorship_result = self.mentorship_service.process_matrix_mentorship(

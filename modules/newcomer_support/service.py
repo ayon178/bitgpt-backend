@@ -160,6 +160,81 @@ class NewcomerSupportService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def process_matured_upline_reserve_bonuses(self, batch_size: int = 500) -> Dict[str, Any]:
+        """
+        Automatically process upline_reserve bonuses whose 30-day lock has expired.
+
+        This is intended to be called from a cron-style background job on server startup.
+        Behavior:
+          - Find NewcomerSupportBonus with:
+              bonus_type == 'upline_reserve'
+              payment_status == 'pending'
+              available_from <= now
+          - For each:
+              * credit the user's main wallet with bonus_amount (reason='ngs_auto')
+              * mark payment_status='paid', paid_at & processed_at = now
+        """
+        from modules.wallet.service import WalletService
+
+        now = datetime.utcnow()
+        ws = WalletService()
+        processed = 0
+        total_amount = 0.0
+
+        q = NewcomerSupportBonus.objects(
+            bonus_type="upline_reserve",
+            payment_status="pending",
+            available_from__lte=now,
+        ).order_by("available_from")
+
+        for bonus in q.limit(batch_size):
+            try:
+                user_id = str(bonus.user_id)
+                amount = float(bonus.bonus_amount or 0.0)
+                if amount <= 0:
+                    bonus.payment_status = "failed"
+                    bonus.processed_at = now
+                    bonus.failed_reason = "Non-positive bonus_amount"
+                    bonus.save()
+                    continue
+
+                tx_hash = bonus.payment_reference or f"NGS-AUTO-{user_id}-{int(now.timestamp())}"
+                res = ws.credit_main_wallet(
+                    user_id=user_id,
+                    amount=Decimal(str(amount)),
+                    currency=bonus.currency or "USDT",
+                    reason="ngs_auto",
+                    tx_hash=tx_hash,
+                )
+                if not res.get("success"):
+                    bonus.payment_status = "failed"
+                    bonus.processed_at = now
+                    bonus.failed_reason = res.get("error", "wallet credit failed")
+                    bonus.save()
+                    continue
+
+                bonus.payment_status = "paid"
+                bonus.payment_method = "wallet"
+                bonus.payment_reference = tx_hash
+                bonus.processed_at = now
+                bonus.paid_at = now
+                bonus.save()
+
+                processed += 1
+                total_amount += amount
+            except Exception as e:
+                bonus.payment_status = "failed"
+                bonus.processed_at = now
+                bonus.failed_reason = str(e)
+                bonus.save()
+
+        return {
+            "success": True,
+            "processed": processed,
+            "total_amount": total_amount,
+            "timestamp": now.isoformat(),
+        }
+
     def check_eligibility(self, user_id: str, force_check: bool = False) -> Dict[str, Any]:
         """Check Newcomer Support eligibility for user"""
         try:

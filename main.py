@@ -293,6 +293,32 @@ async def startup_initializer():
         for ft in fund_types:
             for pg in programs:
                 _ensure_bonus_fund(ft, pg)
+
+        # Start background cron-style task for Newcomer Growth Support upline 10% auto-payout
+        try:
+            from modules.newcomer_support.service import NewcomerSupportService
+            import asyncio
+
+            async def _run_ngs_cron():
+                svc = NewcomerSupportService()
+                while True:
+                    try:
+                        res = svc.process_matured_upline_reserve_bonuses()
+                        if res.get("processed"):
+                            print(
+                                f"[NGS_CRON] Processed {res['processed']} upline_reserve bonuses, "
+                                f"total={res['total_amount']} USDT at {res['timestamp']}"
+                            )
+                    except Exception as cron_err:
+                        print(f"[NGS_CRON] Error: {cron_err}")
+                    # Sleep 24 hours between runs (once per day)
+                    await asyncio.sleep(24 * 60 * 60)
+
+            loop = asyncio.get_event_loop()
+            loop.create_task(_run_ngs_cron())
+        except Exception as e:
+            print(f"[NGS_CRON] Failed to start background task: {e}")
+
     except Exception:
         # Startup should not crash app if seeding fails; logs are preferred in real env
         pass
