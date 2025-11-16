@@ -85,19 +85,25 @@ class TreeService:
             
             # Direct placement under referrer if space available
             if available_position:
+                user_level = (referrer_level or 1) + 1
                 placement = TreePlacement(
                     user_id=user_id,
                     program=program,
                     parent_id=referrer_id,
                     upline_id=referrer_id,
                     position=available_position,
-                    level=(referrer_level or 1) + 1,
+                    level=user_level,
                     slot_no=slot_no,
+                    # Matrix-specific: mark Level 2 middle position as upline-reserve
+                    is_upline_reserve=(
+                        program == 'matrix'
+                        and user_level == 2
+                        and available_position == 'middle'
+                    ),
                     is_active=True,
                     created_at=datetime.utcnow()
                 )
                 placement.save()
-                user_level = (referrer_level or 1) + 1
                 print(f"✅ Created {program} tree placement: User {user_id} at Level {user_level}, Position {available_position} under {referrer_id}")
                 return True
             
@@ -173,6 +179,12 @@ class TreeService:
             placement_info = find_level_wise_position(referrer_id, referrer_level or 1)
             
             if placement_info:
+                # Matrix-specific upline reserve: Level 2 middle child
+                is_upline_reserve = (
+                    program == 'matrix'
+                    and placement_info.get('level') == 2
+                    and placement_info.get('position') == 'middle'
+                )
                 placement = TreePlacement(
                     user_id=user_id,
                     program=program,
@@ -183,6 +195,7 @@ class TreeService:
                     slot_no=slot_no,
                     is_spillover=True,
                     spillover_from=referrer_id,
+                    is_upline_reserve=is_upline_reserve,
                     is_active=True,
                     created_at=datetime.utcnow()
                 )

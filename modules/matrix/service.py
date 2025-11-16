@@ -1370,8 +1370,15 @@ class MatrixService:
     def _check_and_process_automatic_recycle(self, user_id: str, slot_no: int):
         """Check and automatically process recycle when 39 members complete."""
         try:
-            return None
-        except Exception:
+            # Delegate to MatrixRecycleService to handle 39-member completion,
+            # snapshot creation, new-tree creation, and recycled placement.
+            # This keeps business logic in one place.
+            if not self.recycle_service:
+                return None
+            result = self.recycle_service.check_recycle_completion(user_id, slot_no)
+            return result
+        except Exception as e:
+            print(f"Error in _check_and_process_automatic_recycle: {e}")
             return None
     
     def _get_current_member_count(self, user_id: str):
@@ -4384,10 +4391,6 @@ class MatrixService:
     def _log_matrix_upgrade(self, *args, **kwargs):
         """Log matrix upgrade - stub for tests"""
         return {"log_id": "test-log", "logged": True}
-    
-    def _check_and_process_automatic_upgrade(self, *args, **kwargs):
-        """Check and process automatic upgrade - stub for tests"""
-        return None
     
     def get_middle_three_earnings(self, user_id: str, slot_no: int = 1):
         """Get middle three earnings calculation - stub for tests"""
