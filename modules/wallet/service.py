@@ -1186,14 +1186,21 @@ class WalletService:
                 user_oid = user_id
 
             # Get wallet ledger entries for this specific user
-            # Include all Dream Matrix Partner Incentive related reasons and level distributions
+            # Include all Dream Matrix Partner Incentive related reasons and level distributions.
+            # IMPORTANT: Exclude legacy CommissionService-created partner incentives for matrix
+            # which used tx_hash starting with 'PARTNER-' to avoid double counting.
             base_filter = Q(user_id=user_oid) & Q(type="credit") & Q(currency=currency.upper())
-            reason_filter = (
-                Q(reason__in=["matrix_partner_incentive", "dream_matrix_partner_incentive", "dream_matrix_commission"]) |
-                Q(reason__startswith="dream_matrix_") |
-                Q(reason__startswith="matrix_partner_") |
-                Q(reason__startswith="matrix_dual_tree_")  # Include level distributions
+            partner_filter = (
+                Q(reason="matrix_partner_incentive")
+                & ~Q(tx_hash__startswith="PARTNER-")
             )
+            other_filter = (
+                Q(reason__in=["dream_matrix_partner_incentive", "dream_matrix_commission"])
+                | Q(reason__startswith="dream_matrix_")
+                | Q(reason__startswith="matrix_partner_")
+                | Q(reason__startswith="matrix_dual_tree_")  # Include level distributions
+            )
+            reason_filter = partner_filter | other_filter
             query = base_filter & reason_filter
             
             # Count total entries
