@@ -431,9 +431,29 @@ class WalletService:
             }
 
             # 1) Single aggregation over wallet_ledger credits for specific user
+            # NOTE: Exclude legacy Matrix partner incentive credits with tx_hash starting
+            # with "PARTNER-" to avoid double counting (these were created by the old
+            # CommissionService path; new FundDistribution path uses different tx_hash).
             pipeline = [
-                {"$match": {"type": "credit", "user_id": ObjectId(user_id)}},
-                {"$group": {"_id": {"reason": "$reason", "currency": "$currency"}, "total": {"$sum": "$amount"}}}
+                {
+                    "$match": {
+                        "type": "credit",
+                        "user_id": ObjectId(user_id),
+                        "$or": [
+                            {"reason": {"$ne": "matrix_partner_incentive"}},
+                            {
+                                "reason": "matrix_partner_incentive",
+                                "tx_hash": {"$not": {"$regex": r"^PARTNER-"}},
+                            },
+                        ],
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {"reason": "$reason", "currency": "$currency"},
+                        "total": {"$sum": "$amount"},
+                    }
+                },
             ]
             results = list(WalletLedger.objects.aggregate(pipeline))
 
