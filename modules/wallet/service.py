@@ -1187,20 +1187,16 @@ class WalletService:
 
             # Get wallet ledger entries for this specific user
             # Include all Dream Matrix Partner Incentive related reasons and level distributions.
-            # IMPORTANT: Exclude legacy CommissionService-created partner incentives for matrix
-            # which used tx_hash starting with 'PARTNER-' to avoid double counting.
+            # NOTE: Legacy CommissionService-created matrix partner incentives used tx_hash starting
+            # with "PARTNER-". We keep the query broad and filter those out in Python to avoid
+            # depending on MongoEngine's unary operators on Q.
             base_filter = Q(user_id=user_oid) & Q(type="credit") & Q(currency=currency.upper())
-            partner_filter = (
-                Q(reason="matrix_partner_incentive")
-                & ~Q(tx_hash__startswith="PARTNER-")
-            )
-            other_filter = (
-                Q(reason__in=["dream_matrix_partner_incentive", "dream_matrix_commission"])
+            reason_filter = (
+                Q(reason__in=["matrix_partner_incentive", "dream_matrix_partner_incentive", "dream_matrix_commission"])
                 | Q(reason__startswith="dream_matrix_")
                 | Q(reason__startswith="matrix_partner_")
                 | Q(reason__startswith="matrix_dual_tree_")  # Include level distributions
             )
-            reason_filter = partner_filter | other_filter
             query = base_filter & reason_filter
             
             # Count total entries
@@ -1260,6 +1256,12 @@ class WalletService:
             # Build rows from ledger entries
             rows = []
             for entry in entries:
+                # Skip legacy CommissionService-created matrix partner incentives to avoid duplicates
+                if (
+                    getattr(entry, "reason", "") == "matrix_partner_incentive"
+                    and str(getattr(entry, "tx_hash", "") or "").startswith("PARTNER-")
+                ):
+                    continue
                 txh = str(getattr(entry, 'tx_hash', '') or '')
                 src_uid = None
                 src_refer_code = None
