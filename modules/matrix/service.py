@@ -1696,16 +1696,16 @@ class MatrixService:
             print(f"Error processing automatic upgrade: {e}")
             return {"success": False, "error": str(e)}
     
-    def _create_matrix_upgrade_log(self, user_id: str, from_slot_no: int, to_slot_no: int, 
-                                 upgrade_cost: float, earnings_used: float, profit_gained: float,
-                                 trigger_type: str, contributors: list):
+    def _create_matrix_upgrade_log(self, user_id: str, from_slot_no: int, to_slot_no: int,
+                                   upgrade_cost: float, earnings_used: float, profit_gained: float,
+                                   trigger_type: str, contributors: list):
         """Create matrix upgrade log entry."""
         try:
             from_slot_info = self.MATRIX_SLOTS.get(from_slot_no, {})
             to_slot_info = self.MATRIX_SLOTS.get(to_slot_no, {})
             
             MatrixUpgradeLog(
-            user_id=ObjectId(user_id),
+                user_id=ObjectId(user_id),
                 from_slot_no=from_slot_no,
                 to_slot_no=to_slot_no,
                 from_slot_name=from_slot_info.get('name', f'SLOT_{from_slot_no}'),
@@ -1716,13 +1716,153 @@ class MatrixService:
                 profit_gained=profit_gained,
                 trigger_type=trigger_type,
                 contributors=[ObjectId(contributor) for contributor in contributors],
-            status='completed',
+                status='completed',
                 created_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
+                completed_at=datetime.utcnow()
             ).save()
         except Exception as e:
             print(f"Error creating matrix upgrade log: {e}")
-    
+
+    def _ensure_matrix_tree_placement_for_slot(self, user_id: str, slot_no: int) -> Optional[dict]:
+        """
+        Ensure there is a TreePlacement row for a user in Matrix for a specific slot,
+        using sweepover-style eligibility for the upline chain.
+
+        Rules:
+        - Start from the direct referrer (binary/matrix referrer).
+        - Move up to MATRIX_MAX_ESCALATION_DEPTH levels using User.refered_by
+          until we find an upline who has this slot (or higher) activated.
+        - Use that eligible upline as the root for slot_no's tree.
+        - If they don't yet have a TreePlacement for this slot, create a root placement.
+        - Then run TreeService.place_user_in_tree(...) to actually place the user and
+          let BFS decide level/position (including spillover).
+        """
+        try:
+            from modules.tree.model import TreePlacement as _TP
+            from modules.tree.service import TreeService
+            from modules.slot.model import SlotActivation as _SA
+            from datetime import datetime as _DT
+
+            oid_user = ObjectId(user_id)
+
+            # 0. If already placed for this slot, nothing to do
+            existing = _TP.objects(
+                user_id=oid_user,
+                program="matrix",
+                slot_no=slot_no,
+                is_active=True,
+            ).first()
+            if existing:
+                return {
+                    "user_id": str(existing.user_id),
+                    "upline_id": str(getattr(existing, "upline_id", None) or ""),
+                    "level": getattr(existing, "level", None),
+                    "position": getattr(existing, "position", None),
+                }
+
+            # 1. Find eligible upline by sweepover on direct referrer chain
+            referrer_id = self._get_direct_upline_user_id(user_id)
+            candidate_id = referrer_id
+            visited = 0
+            eligible_upline_id: Optional[str] = None
+
+            while candidate_id and visited < MATRIX_MAX_ESCALATION_DEPTH:
+                # Check if candidate has this slot (or higher) active in Matrix
+                try:
+                    act = _SA.objects(
+                        user_id=ObjectId(candidate_id),
+                        program="matrix",
+                        slot_no__gte=slot_no,
+                        status="completed",
+                    ).order_by("-slot_no").first()
+                except Exception:
+                    act = None
+
+                if act:
+                    eligible_upline_id = candidate_id
+                    break
+
+                # Move to next upline (super upline)
+                try:
+                    cand_u = User.objects(id=ObjectId(candidate_id)).first()
+                    candidate_id = (
+                        str(getattr(cand_u, "refered_by", None))
+                        if cand_u and getattr(cand_u, "refered_by", None)
+                        else None
+                    )
+                except Exception:
+                    candidate_id = None
+
+                visited += 1
+
+            # Fallback to Matrix Mother if nothing found
+            if not eligible_upline_id:
+                if MATRIX_MOTHER_ID:
+                    eligible_upline_id = MATRIX_MOTHER_ID
+                else:
+                    print(
+                        f"[MATRIX_TREE_PLACEMENT] No eligible upline found for user {user_id} slot {slot_no}"
+                    )
+                    return None
+
+            oid_upline = ObjectId(eligible_upline_id)
+
+            # 2. Ensure root placement for the eligible upline on this slot
+            ref_pl = _TP.objects(
+                user_id=oid_upline,
+                program="matrix",
+                slot_no=slot_no,
+                is_active=True,
+                level=0,
+            ).first()
+            if not ref_pl:
+                ref_pl = _TP(
+                    user_id=oid_upline,
+                    program="matrix",
+                    parent_id=oid_upline,
+                    upline_id=oid_upline,
+                    position="root",
+                    level=0,
+                    slot_no=slot_no,
+                    is_active=True,
+                    created_at=_DT.utcnow(),
+                )
+                ref_pl.save()
+
+            # 3. Place the user under the eligible upline tree for this slot
+            tree_service = TreeService()
+            placed_ok = tree_service.place_user_in_tree(
+                user_id=oid_user,
+                referrer_id=oid_upline,
+                program="matrix",
+                slot_no=slot_no,
+            )
+
+            if not placed_ok:
+                print(
+                    f"[MATRIX_TREE_PLACEMENT] Failed to place user {user_id} in matrix tree for slot {slot_no}"
+                )
+                return None
+
+            # 4. Return the resulting placement info
+            final_tp = _TP.objects(
+                user_id=oid_user,
+                program="matrix",
+                slot_no=slot_no,
+                is_active=True,
+            ).first()
+            if not final_tp:
+                return None
+
+            return {
+                "user_id": str(final_tp.user_id),
+                "upline_id": str(getattr(final_tp, "upline_id", None) or ""),
+                "level": getattr(final_tp, "level", None),
+                "position": getattr(final_tp, "position", None),
+            }
+        except Exception as e:
+            print(f"[MATRIX_TREE_PLACEMENT] Error ensuring placement for user {user_id} slot {slot_no}: {e}")
+            return None
     def check_and_process_automatic_upgrade(self, user_id: str, slot_no: int):
         """
         Check and automatically process upgrade when middle 3 earnings are sufficient.
@@ -1854,6 +1994,12 @@ class MatrixService:
                 
             except Exception as e:
                 print(f"  ⚠️ Error creating activation record: {e}")
+            
+            # Ensure TreePlacement exists for this matrix slot using sweepover rules
+            try:
+                self._ensure_matrix_tree_placement_for_slot(upline_id, next_slot)
+            except Exception as e:
+                print(f"  ⚠️ Error ensuring TreePlacement for auto-upgrade slot {next_slot}: {e}")
             
             # Update user's matrix_slots array with MatrixSlotInfo
             try:
@@ -2342,7 +2488,7 @@ class MatrixService:
                     override_cost = None
                 upgrade_type = "manual"
 
-            # Get slot costs and calculate upgrade cost
+            # Get slot costs and calculate upgrade cost (price difference)
             slot_costs = self._get_matrix_slot_costs()
             upgrade_cost = slot_costs.get(to_slot_no, 0) - slot_costs.get(from_slot_no, 0)
             if override_cost is not None:
@@ -2359,7 +2505,26 @@ class MatrixService:
             except Exception:
                 early_success = False
 
-            # Check if user has sufficient funds first (for manual upgrades)
+            # Matrix reserve integration:
+            # For manual upgrades, we first use any available Matrix reserve for from_slot_no,
+            # then only the remaining amount must be paid from the user's wallet.
+            from decimal import Decimal as _D
+            reserve_balance = _D("0")
+            if upgrade_type == "manual":
+                try:
+                    from modules.user.tree_reserve_service import TreeUplineReserveService
+                    rs = TreeUplineReserveService()
+                    # Reserve for current slot (from_slot_no) is used to fund upgrade to to_slot_no
+                    reserve_balance = rs.get_reserve_balance(user_id, "matrix", from_slot_no)
+                except Exception:
+                    reserve_balance = _D("0")
+            upgrade_cost_dec = _D(str(upgrade_cost))
+            wallet_needed_dec = upgrade_cost_dec - reserve_balance
+            if wallet_needed_dec < _D("0"):
+                wallet_needed_dec = _D("0")
+            wallet_needed = float(wallet_needed_dec)
+
+            # Check if user has sufficient funds in wallet for the remaining portion (for manual upgrades)
             user = None
             if upgrade_type == "manual" and not early_success:
                 user = User.objects(id=ObjectId(user_id)).first()
@@ -2368,15 +2533,15 @@ class MatrixService:
                     from ..wallet.service import WalletService
                     ws = WalletService()
                     resp = ws.get_currency_balances(user_id=user_id, wallet_type='main')
-                    balances = (resp or {}).get('balances') or {}
-                    wallet_balance = float(balances.get('USDT', 0))
+                    balances = (resp or {}).get("balances") or {}
+                    wallet_balance = float(balances.get("USDT", 0))
                 except Exception:
                     # Fallback to optional user field if present
-                    wallet_balance = getattr(user, 'wallet_balance', 0) if user else 0
-                if wallet_balance < upgrade_cost:
+                    wallet_balance = getattr(user, "wallet_balance", 0) if user else 0
+                if wallet_balance < wallet_needed:
                     return {
                         "success": False,
-                        "error": f"Insufficient funds. Required: ${upgrade_cost}, Available: ${wallet_balance}"
+                        "error": f"Insufficient funds. Required from wallet: ${wallet_needed}, Available: ${wallet_balance}"
                     }
                 
             # Get user's matrix tree (after funds check to satisfy tests)
@@ -2389,23 +2554,43 @@ class MatrixService:
             if matrix_tree and not early_success and matrix_tree.current_slot != from_slot_no:
                 return {"success": False, "error": f"User is not currently on slot {from_slot_no}"}
 
-            # Deduct from wallet now that validations passed
+            # Deduct from reserve + wallet now that validations passed (manual upgrades)
             if upgrade_type == "manual" and (user is not None) and not early_success:
-                # Deduct from ledger-based wallet (USDT)
                 try:
                     from ..wallet.model import WalletLedger
-                    from decimal import Decimal
-                    from datetime import datetime
-                    # Record debit entry; reconciliation will update UserWallet
-                    WalletLedger(
-                        user_id=ObjectId(user_id),
-                        amount=Decimal(str(upgrade_cost)),
-                        currency='USDT',
-                        type='debit',
-                        reason='matrix_manual_upgrade',
-                        tx_hash=f"MATRIX-UPGRADE-{user_id}-{to_slot_no}",
-                        created_at=datetime.utcnow()
-                    ).save()
+                    from modules.user.tree_reserve_service import TreeUplineReserveService
+                    # Compute how much to use from reserve vs wallet
+                    reserve_used = min(reserve_balance, upgrade_cost_dec)
+                    wallet_used_dec = upgrade_cost_dec - reserve_used
+
+                    tx_hash = f"MATRIX-UPGRADE-{user_id}-{to_slot_no}"
+
+                    # 1) Deduct from reserve, if any
+                    if reserve_used > _D("0"):
+                        try:
+                            rs = TreeUplineReserveService()
+                            rs._deduct_reserve_fund(
+                                user_id=user_id,
+                                program="matrix",
+                                slot_no=from_slot_no,
+                                amount=reserve_used,
+                                tx_hash=tx_hash,
+                            )
+                        except Exception:
+                            # If reserve deduction fails, we still continue; worst case, reserve is slightly off
+                            pass
+
+                    # 2) Deduct remaining from wallet via WalletLedger
+                    if wallet_used_dec > _D("0"):
+                        WalletLedger(
+                            user_id=ObjectId(user_id),
+                            amount=wallet_used_dec,
+                            currency="USDT",
+                            type="debit",
+                            reason="matrix_manual_upgrade",
+                            tx_hash=tx_hash,
+                            created_at=datetime.utcnow(),
+                        ).save()
                 except Exception:
                     pass
             
@@ -2452,19 +2637,61 @@ class MatrixService:
             except Exception as e:
                 print(f"MatrixService: failed to create SlotActivation for slot {to_slot_no}: {e}")
 
+            # Ensure TreePlacement exists for this matrix slot (manual upgrade path) using sweepover rules.
+            try:
+                self._ensure_matrix_tree_placement_for_slot(user_id, to_slot_no)
+            except Exception as e:
+                print(f"⚠️ Error ensuring TreePlacement for manual upgrade slot {to_slot_no}: {e}")
+
             # Distribute Matrix funds for this upgrade (updates BonusFund and wallet credits)
             try:
                 from modules.fund_distribution.service import FundDistributionService
+                from modules.tree.model import TreePlacement as _TP
+
                 fund_service = FundDistributionService()
                 direct_upline = self._get_direct_upline_user_id(user_id)
                 dist_tx = f"MATRIX_UPGRADE_DIST_{user_id}_{to_slot_no}_{int(datetime.utcnow().timestamp())}"
+                # Build placement_context from matrix TreePlacement for this slot (with fallback to slot 1)
+                placement_ctx = None
+                try:
+                    tp = _TP.objects(
+                        user_id=ObjectId(user_id),
+                        program="matrix",
+                        slot_no=to_slot_no,
+                        is_active=True,
+                    ).first()
+                    if not tp:
+                        # Legacy fallback: use slot 1 placement if per-slot placement missing
+                        tp = _TP.objects(
+                            user_id=ObjectId(user_id),
+                            program="matrix",
+                            slot_no=1,
+                            is_active=True,
+                        ).first()
+                    if tp:
+                        pos_map = {"left": 0, "center": 1, "right": 2}
+                        pos_idx = pos_map.get(getattr(tp, "position", ""), None)
+                        parent_id = str(
+                            getattr(tp, "upline_id", None)
+                            or getattr(tp, "parent_id", None)
+                            or ""
+                        )
+                        placement_ctx = {
+                            "placed_under_user_id": parent_id,
+                            "level": int(getattr(tp, "level", 0)),
+                            "position": pos_idx,
+                        }
+                except Exception:
+                    placement_ctx = None
+
                 dist_res = fund_service.distribute_matrix_funds(
                     user_id=user_id,
                     amount=Decimal(str(upgrade_cost)),
                     slot_no=to_slot_no,
                     referrer_id=direct_upline,
                     tx_hash=dist_tx,
-                    currency='USDT'
+                    currency="USDT",
+                    placement_context=placement_ctx,
                 )
                 if not dist_res.get('success'):
                     print(f"⚠️ Matrix upgrade fund distribution failed: {dist_res.get('error')}")

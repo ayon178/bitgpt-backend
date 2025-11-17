@@ -7,6 +7,10 @@ from modules.user.model import User
 from modules.matrix.service import MatrixService
 from modules.matrix.model import MatrixTree
 from modules.matrix.recycle_service import MatrixRecycleService
+from modules.user.tree_reserve_service import TreeUplineReserveService
+from modules.tree.model import TreePlacement
+from modules.wallet.model import ReserveLedger
+from modules.income.model import IncomeEvent
 
 
 def create_user(name: str, referrer_id: str | None) -> str:
@@ -28,6 +32,14 @@ def create_user(name: str, referrer_id: str | None) -> str:
 
 
 def main():
+    """
+    High–level Matrix behaviour demo:
+    - Builds a tree under R and verifies middle‑3 detection & earnings.
+    - Shows a simple sweepover example (A -> B -> C).
+    - Calls a diagram-specific scenario that mirrors the doc tree for A and
+      prints TreePlacement + ReserveLedger so you can visually map users 1..12,
+      the middle‑three (7/8/9 style), and which tx_hashes filled A's reserve.
+    """
     connect_to_db()
     print("✅ DB connected")
 
@@ -145,6 +157,12 @@ def quick_recycle_demo():
     except Exception as e:
         print(f"⚠️ Recycle check error: {e}")
 
+    # Run dedicated diagram scenario for A-tree + reserve visualisation
+    try:
+        run_diagram_scenario()
+    except Exception as e:
+        print(f"⚠️ Diagram scenario error: {e}")
+
 
 def quick_recycle_bulk_insert():
     """Ultra-fast recycle check by bulk-creating 39 nodes without service joins."""
@@ -196,6 +214,89 @@ def quick_recycle_bulk_insert():
         print(f"🔁 Bulk-insert recycle check: {status}")
     except Exception as e:
         print(f"⚠️ Bulk recycle error: {e}")
+
+
+def run_diagram_scenario():
+    """
+    Build a Matrix tree that mirrors the documentation diagram:
+    - A is the main user (root) at Slot 1.
+    - A directly invites users 1..12; BFS placement fills:
+      - Level 1: 1,2,3
+      - Level 2 & 3: remaining users spill under them.
+    - We then:
+      - Print TreePlacement rows (program='matrix', slot 1) for all these users
+        so you can see exact level/position (left/center/right).
+      - Detect A's middle-three (Level-2 center positions) via MatrixService.
+      - Show ReserveLedger entries + balances for A's matrix reserve so you can
+        confirm that payments from middle positions routed into A's reserve fund.
+    """
+    print("\n================ DIAGRAM SCENARIO (A tree) ================\n")
+    connect_to_db()
+    svc = MatrixService()
+    reserve_svc = TreeUplineReserveService()
+
+    # 1) Create main user A and join Matrix slot 1 (self-referral for root)
+    A = create_user("A_diagram", None)
+    print(f"👤 Created main user A = {A}")
+    res = svc.join_matrix(user_id=A, referrer_id=A, tx_hash=f"tx_A_diagram", amount=Decimal('11'))
+    assert res.get("success"), res
+    print("✅ A joined Matrix Slot 1")
+
+    # 2) A directly invites users 1..12 (like picture 1,2,3,4..12)
+    direct_users = []
+    for i in range(1, 13):
+        uid = create_user(f"A_dir_{i}", A)
+        direct_users.append(uid)
+        r = svc.join_matrix(user_id=uid, referrer_id=A, tx_hash=f"tx_A_dir_{i}", amount=Decimal('11'))
+        assert r.get("success"), r
+        print(f"✅ User {i} joined under A with id={uid}")
+
+    # 3) Print TreePlacement info for A + all directs for Slot 1 (matrix)
+    print("\n📌 TreePlacement for A & directs (program='matrix', slot 1):")
+    placements = TreePlacement.objects(
+        program="matrix",
+        slot_no=1,
+        user_id__in=[A] + direct_users
+    ).order_by("level", "parent_id", "position")
+
+    def fmt_pos(p: str) -> str:
+        return {"left": "0-left", "center": "1-center", "right": "2-right"}.get(p, p)
+
+    for p in placements:
+        print(
+            f" - user={p.user_id} parent={p.parent_id} "
+            f"level={p.level} pos={fmt_pos(p.position)} "
+            f"is_spillover={getattr(p, 'is_spillover', False)} "
+            f"is_upline_reserve={getattr(p, 'is_upline_reserve', False)}"
+        )
+
+    # 4) Detect middle-three under A (Level-2 middle positions in MatrixTree)
+    mid = svc.detect_middle_three_members(user_id=A, slot_no=1)
+    print("\n🔎 detect_middle_three_members(A@S1):")
+    print(mid)
+
+    # 5) Show A's matrix reserve fund for slot 1 (feeds Slot 2 auto-upgrade)
+    reserve_balance = reserve_svc.get_reserve_balance(user_id=A, program="matrix", slot_no=1)
+    print(f"\n💰 A's matrix reserve balance for Slot 1 (towards Slot 2): {reserve_balance}")
+
+    # 6) Print detailed ReserveLedger credits for A on matrix slot 1
+    print("\n📒 ReserveLedger entries for A (program='matrix', slot_no=1):")
+    ledgers = ReserveLedger.objects(user_id=A, program="matrix", slot_no=1).order_by("created_at")
+    if not ledgers:
+        print("   (no reserve ledger entries yet for A @ matrix slot 1)")
+    for rl in ledgers:
+        # Try to find source user via IncomeEvent
+        ie = IncomeEvent.objects(tx_hash=rl.tx_hash, program="matrix").first()
+        src = str(getattr(ie, "source_user_id", "")) if ie else ""
+        print(
+            f" - at={rl.created_at} amount={rl.amount} balance_after={rl.balance_after} "
+            f"tx_hash={rl.tx_hash} source_user_id={src}"
+        )
+
+    print("\n✅ Diagram scenario complete. You can now visually compare:")
+    print("   - TreePlacement levels/positions with your A → 1,2,3 → 4..12 diagram;")
+    print("   - detect_middle_three_members output for A (these are 7/8/9-style centers);")
+    print("   - ReserveLedger credits for A showing which joins filled A's Slot‑2 reserve.\n")
 
 
 

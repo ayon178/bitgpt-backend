@@ -253,6 +253,16 @@ class TreeUplineReserveService:
                 ).save()
             except Exception:
                 pass
+
+            # MATRIX-SPECIFIC: when a user's Matrix slot is auto-upgraded from reserve,
+            # ensure TreePlacement for that slot exists using the same sweepover rules as
+            # manual upgrades (so that per-slot trees reflect real eligible uplines).
+            if program == 'matrix':
+                try:
+                    from modules.matrix.service import MatrixService
+                    MatrixService()._ensure_matrix_tree_placement_for_slot(user_id, slot_no)
+                except Exception as e:
+                    print(f"[MATRIX_AUTO_RESERVE] Error ensuring TreePlacement for auto-upgrade slot {slot_no}: {e}")
             
             return True
             

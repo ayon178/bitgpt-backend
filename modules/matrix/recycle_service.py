@@ -74,11 +74,13 @@ class MatrixRecycleService:
         Trigger the recycle process when 39 members are completed.
         """
         try:
-            # Create recycle instance snapshot
+            # Create recycle instance snapshot (immutable history of the filled tree)
             recycle_instance = self._create_recycle_snapshot(user_id, slot_no, matrix_tree)
             
-            # Create new empty tree for the same slot
-            new_tree = self._create_new_tree_for_recycle(user_id, slot_no)
+            # Reset the existing MatrixTree into a fresh, empty tree for the same slot
+            # NOTE: We intentionally reuse the same MatrixTree document to respect the
+            # unique(user_id) index on MatrixTree and keep per-user state (slots, reserve_fund)
+            new_tree = self._create_new_tree_for_recycle(user_id, slot_no, matrix_tree)
             
             # Process recycle placement for the triggering user
             recycle_result = self._process_recycle_placement(user_id, slot_no)
@@ -139,27 +141,55 @@ class MatrixRecycleService:
         except Exception as e:
             raise Exception(f"Failed to create recycle snapshot: {str(e)}")
     
-    def _create_new_tree_for_recycle(self, user_id: str, slot_no: int) -> MatrixTree:
+    def _create_new_tree_for_recycle(self, user_id: str, slot_no: int, existing_tree: MatrixTree | None = None) -> MatrixTree:
         """
-        Create a new empty matrix tree for the recycled slot.
+        Create (or reset) an empty matrix tree for the recycled slot.
+        
+        Business rule from docs/user:
+        - When a tree reaches 39 members (3 + 9 + 27), that tree is considered "Recycle N".
+        - A **fresh, empty** tree for the SAME user + slot is immediately created for "Recycle N+1".
+        
+        Implementation rule:
+        - We **reuse** the same MatrixTree document for the user (user_id is unique in collection).
+          Only the structural fields (members, levels, nodes, is_complete, timestamps) are reset.
+        - Slot-related meta (`slots`, `reserve_fund`) is preserved so auto-upgrade / reserve logic
+          continues to work across recycles.
         """
         try:
-            # Create new matrix tree
-            new_tree = MatrixTree(
-                user_id=ObjectId(user_id),
-                current_slot=slot_no,
-                current_level=1,
-                total_members=0,
-                level_1_members=0,
-                level_2_members=0,
-                level_3_members=0,
-                is_complete=False,
-                nodes=[],
-                slots=[],
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            new_tree.save()
+            # Prefer the in-memory tree passed by caller; otherwise fetch from DB
+            tree = existing_tree or MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            
+            if tree:
+                # Reset structural fields for a brand new 3x matrix tree for this slot
+                tree.current_slot = slot_no
+                tree.current_level = 1
+                tree.total_members = 0
+                tree.level_1_members = 0
+                tree.level_2_members = 0
+                tree.level_3_members = 0
+                tree.is_complete = False
+                tree.nodes = []  # Clear all node placements; snapshot already stored separately
+                tree.updated_at = datetime.utcnow()
+                tree.created_at = datetime.utcnow()
+                tree.save()
+                new_tree = tree
+            else:
+                # Fallback: if for some reason user has no MatrixTree yet, create one
+                new_tree = MatrixTree(
+                    user_id=ObjectId(user_id),
+                    current_slot=slot_no,
+                    current_level=1,
+                    total_members=0,
+                    level_1_members=0,
+                    level_2_members=0,
+                    level_3_members=0,
+                    is_complete=False,
+                    nodes=[],
+                    slots=[],
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                new_tree.save()
             
             print(f"Created new matrix tree for recycle: User {user_id}, Slot {slot_no}")
             return new_tree
@@ -268,23 +298,46 @@ class MatrixRecycleService:
     
     def _find_bfs_placement_position(self, matrix_tree: MatrixTree) -> Optional[Dict[str, int]]:
         """
-        Find available position using Breadth-First Search algorithm.
+        Find available position using the same SWEEPOVER BFS algorithm
+        used by the main MatrixService.
+        
+        Sweepover Logic (Wave Placement):
+        - Level 1: Fill positions 0, 1, 2 sequentially (left → middle → right)
+        - Level 2: Fill in waves across all L1 parents:
+          Wave 1 (first child of each L1): pos 0, 3, 6
+          Wave 2 (second child of each L1): pos 1, 4, 7
+          Wave 3 (third child of each L1): pos 2, 5, 8
+        - Level 3: Fill in waves across all L2 parents (same pattern).
+        
+        This ensures that recycle placements follow the exact same
+        visual/tree structure as normal Matrix join/upgrade placements,
+        matching the documentation diagrams.
         """
         try:
-            # Level 1: 3 positions (0, 1, 2)
+            # Level 1: positions 0, 1, 2 (left, middle, right) – sequential
             for pos in range(3):
                 if not self._position_occupied(matrix_tree, 1, pos):
                     return {"level": 1, "position": pos}
             
-            # Level 2: 9 positions (0-8)
-            for pos in range(9):
-                if not self._position_occupied(matrix_tree, 2, pos):
-                    return {"level": 2, "position": pos}
+            # Level 2: positions 0–8 using SWEEPOVER (wave across L1 parents)
+            # Wave 1: first child of each L1 parent (positions 0, 3, 6)
+            # Wave 2: second child of each L1 parent (positions 1, 4, 7)
+            # Wave 3: third child of each L1 parent (positions 2, 5, 8)
+            for child_index in range(3):  # 0, 1, 2 (first, second, third child)
+                for parent_index in range(3):  # 0, 1, 2 (L1 positions)
+                    pos = parent_index * 3 + child_index
+                    if not self._position_occupied(matrix_tree, 2, pos):
+                        return {"level": 2, "position": pos}
             
-            # Level 3: 27 positions (0-26)
-            for pos in range(27):
-                if not self._position_occupied(matrix_tree, 3, pos):
-                    return {"level": 3, "position": pos}
+            # Level 3: positions 0–26 using SWEEPOVER (wave across L2 parents)
+            # Wave 1: first child of each L2 parent
+            # Wave 2: second child of each L2 parent
+            # Wave 3: third child of each L2 parent
+            for child_index in range(3):  # 0, 1, 2 (first, second, third child)
+                for parent_index in range(9):  # 0–8 (L2 positions)
+                    pos = parent_index * 3 + child_index
+                    if not self._position_occupied(matrix_tree, 3, pos):
+                        return {"level": 3, "position": pos}
             
             return None  # No available position
             
