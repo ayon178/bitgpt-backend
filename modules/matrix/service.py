@@ -134,6 +134,52 @@ class MatrixService:
             # 4. Initialize MatrixAutoUpgrade tracking
             self._initialize_matrix_auto_upgrade(user_id)
             
+            # 4a. Ensure Matrix TreePlacement exists before fund distribution so placement_context is accurate
+            try:
+                from modules.tree.service import TreeService as _TreeServiceInit
+                from modules.tree.model import TreePlacement as _TPInit
+                from datetime import datetime as _DTInit
+
+                _tree_service = _TreeServiceInit()
+
+                # Ensure referrer has a root placement for Matrix slot 1
+                _ref_pl = _TPInit.objects(
+                    user_id=ObjectId(referrer_id),
+                    program="matrix",
+                    slot_no=1,
+                    is_active=True,
+                ).first()
+                if not _ref_pl:
+                    _ref_pl = _TPInit(
+                        user_id=ObjectId(referrer_id),
+                        program="matrix",
+                        parent_id=ObjectId(referrer_id),
+                        upline_id=ObjectId(referrer_id),
+                        position="root",
+                        level=0,
+                        slot_no=1,
+                        is_active=True,
+                        created_at=_DTInit.utcnow(),
+                    )
+                    _ref_pl.save()
+
+                # Ensure user has a placement for Matrix slot 1 (idempotent)
+                _existing_user_tp = _TPInit.objects(
+                    user_id=ObjectId(user_id),
+                    program="matrix",
+                    slot_no=1,
+                    is_active=True,
+                ).first()
+                if not _existing_user_tp:
+                    _tree_service.place_user_in_tree(
+                        user_id=ObjectId(user_id),
+                        referrer_id=ObjectId(referrer_id),
+                        program="matrix",
+                        slot_no=1,
+                    )
+            except Exception as _e_init:
+                print(f"⚠️ Pre-distribution Matrix TreePlacement ensure failed: {_e_init}")
+            
             # 5. Distribute funds and commissions AFTER TreePlacement so placement_context is accurate
             distribution_result = {"success": False, "error": "skipped"}
             commission_results = {}
@@ -146,8 +192,8 @@ class MatrixService:
                 tp = _TP.objects(user_id=ObjectId(user_id), program='matrix', slot_no=1, is_active=True).first()
                 placement_ctx = None
                 if tp:
-                    # Map matrix position: left/center/right → 0/1/2
-                    pos_map = {'left': 0, 'center': 1, 'right': 2}
+                    # Map matrix position: left/middle/center/right → 0/1/2
+                    pos_map = {'left': 0, 'middle': 1, 'center': 1, 'right': 2}
                     pos_idx = pos_map.get(getattr(tp, 'position', ''), None)
                     parent_id = str(getattr(tp, 'upline_id', None) or getattr(tp, 'parent_id', None) or '')
                     placement_ctx = {
@@ -1865,185 +1911,177 @@ class MatrixService:
             return None
     def check_and_process_automatic_upgrade(self, user_id: str, slot_no: int):
         """
-        Check and automatically process upgrade when middle 3 earnings are sufficient.
-        This method is called after each user joins to check if their upline can auto-upgrade.
+        Check and automatically process Matrix auto-upgrade for a tree owner
+        when their Level-2 middle-3 positions are filled.
+
+        This now uses the owner's `MatrixTree` (3x matrix nodes) instead of the
+        global `TreePlacement` tree so that it exactly matches the Matrix diagram:
+        - Level 1: 3 directs under the owner
+        - Level 2: 9 users under those directs
+        - Middle-3: the center child (offset 1) under each Level-1 branch
         """
         try:
-            from ..tree.model import TreePlacement
             from ..slot.model import SlotActivation
-            
-            print(f"Checking auto-upgrade for user {user_id} after slot {slot_no} activation...")
-            
-            # Get the user's upline (where they were placed)
-            user_placement = TreePlacement.objects(
-                user_id=ObjectId(user_id),
-                program='matrix',
-                slot_no=slot_no
-            ).first()
-            
-            if not user_placement or not user_placement.upline_id:
-                print(f"  No upline found for user {user_id}")
-                return None
-            
-            # Get the upline's user_id (whose tree this user was placed in)
-            upline_id = str(user_placement.upline_id)
-            
-            print(f"  Checking if upline {upline_id} can auto-upgrade...")
-            
-            # Get upline's matrix tree
+
+            print(f"Checking auto-upgrade for matrix tree owner {user_id} at slot {slot_no}...")
+
+            # Treat user_id as the Matrix tree owner
+            upline_id = user_id
+
+            # Get owner's matrix tree
             upline_tree = MatrixTree.objects(user_id=ObjectId(upline_id)).first()
             if not upline_tree:
-                print(f"  Upline {upline_id} doesn't have matrix tree")
+                print(f"  MatrixTree not found for owner {upline_id}")
                 return None
-            
-            current_slot = upline_tree.current_slot
-            
-            # Check if upline is still on this slot (not already upgraded)
+
+            current_slot = getattr(upline_tree, "current_slot", 1) or 1
+
+            # Only auto-upgrade when we're still on this slot
             if current_slot != slot_no:
-                print(f"  Upline already at slot {current_slot}, not slot {slot_no}")
+                print(f"  Owner already at slot {current_slot}, not slot {slot_no}")
                 return None
-            
-            # Check if upline has 3 Level 1 children
-            level1_count = TreePlacement.objects(
-                program='matrix',
-                upline_id=ObjectId(upline_id),
-                level=1,
-                slot_no=slot_no
-            ).count()
-            
-            if level1_count < 3:
-                print(f"  Upline only has {level1_count} Level 1 children (need 3)")
-                return None
-            
-            # Get Level 1 children
-            level1_children = TreePlacement.objects(
-                program='matrix',
-                upline_id=ObjectId(upline_id),
-                level=1,
-                slot_no=slot_no
+
+            nodes = getattr(upline_tree, "nodes", []) or []
+
+            # Collect Level-1 children (direct partners) in this MatrixTree
+            level1_nodes = [n for n in nodes if getattr(n, "level", 0) == 1]
+            level1_nodes_sorted = sorted(
+                level1_nodes, key=lambda n: getattr(n, "position", 0)
             )
-            
-            # Count middle (center) children at Level 2 (one from each L1 branch)
-            middle_count = 0
-            for l1_child in level1_children:
-                middle = TreePlacement.objects(
-                    program='matrix',
-                    upline_id=l1_child.user_id,
-                    level=2,
-                    slot_no=slot_no,
-                    is_upline_reserve=True
-                ).first()
-                
+            level1_count = len(level1_nodes_sorted)
+
+            if level1_count < 3:
+                print(f"  Owner only has {level1_count} Level 1 children (need 3)")
+                return None
+
+            # For each of the first three Level-1 branches, require the center Level-2 child
+            middle_nodes = []
+            for l1 in level1_nodes_sorted[:3]:
+                parent_pos = getattr(l1, "position", 0)
+                center_pos = parent_pos * 3 + 1  # middle child under this branch
+                middle = next(
+                    (
+                        n
+                        for n in nodes
+                        if getattr(n, "level", 0) == 2
+                        and getattr(n, "position", -1) == center_pos
+                    ),
+                    None,
+                )
                 if middle:
-                    middle_count += 1
-            
-            print(f"  Middle members count: {middle_count}/3")
-            
+                    middle_nodes.append(middle)
+
+            middle_count = len(middle_nodes)
+            print(f"  Middle-3 members (Level-2 centers) found: {middle_count}/3")
+
             if middle_count < 3:
                 print(f"  Need 3 middle members, only have {middle_count}")
                 return None
-            
-            # Calculate reserve fund (100% from each middle member)
-            slot_value = self.MATRIX_SLOTS.get(slot_no, {}).get('value', 0)
+
+            # Conceptual reserve fund: each of the 3 middle users contributes 100% of slot value
+            slot_value = self.MATRIX_SLOTS.get(slot_no, {}).get("value", 0)
             reserve_fund = slot_value * middle_count
-            
+
             # Check next slot cost
             next_slot = slot_no + 1
             if next_slot > 15:
-                print(f"  Already at maximum slot")
+                print("  Already at maximum slot")
                 return None
-            
-            next_slot_cost = self.MATRIX_SLOTS.get(next_slot, {}).get('value', 0)
-            
-            print(f"  Reserve fund: ${reserve_fund}, Next slot cost: ${next_slot_cost}")
-            
+
+            next_slot_cost = self.MATRIX_SLOTS.get(next_slot, {}).get("value", 0)
+
+            print(f"  Reserve fund (virtual): ${reserve_fund}, Next slot cost: ${next_slot_cost}")
+
             if reserve_fund < next_slot_cost:
                 print(f"  Insufficient reserve (need ${next_slot_cost - reserve_fund} more)")
                 return None
-            
-            # CAN AUTO-UPGRADE! Trigger it
-            print(f"  ✅ CAN AUTO-UPGRADE! Upgrading upline {upline_id} from slot {slot_no} → {next_slot}")
-            
+
+            # CAN AUTO-UPGRADE! Trigger it for the tree owner
+            print(f"  ✅ CAN AUTO-UPGRADE! Upgrading owner {upline_id} from slot {slot_no} → {next_slot}")
+
             # Update MatrixTree
             upline_tree.current_slot = next_slot
             upline_tree.updated_at = datetime.utcnow()
             upline_tree.save()
-            
+
             print(f"  ✓ Updated MatrixTree.current_slot to {next_slot}")
-            
-            # Create SlotActivation record
+
+            # Create SlotActivation record for Matrix program
             try:
-                tx_hash_unique = f"auto_upgrade_{upline_id}_{slot_no}_{next_slot}_{int(datetime.utcnow().timestamp() * 1000)}"
-                
+                tx_hash_unique = (
+                    f"auto_upgrade_{upline_id}_{slot_no}_{next_slot}_"
+                    f"{int(datetime.utcnow().timestamp() * 1000)}"
+                )
+
                 activation = SlotActivation(
                     user_id=ObjectId(upline_id),
                     slot_no=next_slot,
-                    program='matrix',
-                    status='completed',
-                    activation_type='auto',
+                    program="matrix",
+                    status="completed",
+                    activation_type="auto",
                     amount_paid=Decimal(str(next_slot_cost)),
-                    funded_by='reserve_fund',
-                    currency='USDT',
+                    currency="USDT",
                     tx_hash=tx_hash_unique,
                     activated_at=datetime.utcnow(),
-                    completed_at=datetime.utcnow()
+                    completed_at=datetime.utcnow(),
                 )
                 activation.save()
-                
+
                 print(f"  ✓ Created SlotActivation record for slot {next_slot}")
-                
+
             except Exception as e:
                 print(f"  ⚠️ Error creating activation record: {e}")
-            
+
             # Ensure TreePlacement exists for this matrix slot using sweepover rules
             try:
                 self._ensure_matrix_tree_placement_for_slot(upline_id, next_slot)
             except Exception as e:
                 print(f"  ⚠️ Error ensuring TreePlacement for auto-upgrade slot {next_slot}: {e}")
-            
+
             # Update user's matrix_slots array with MatrixSlotInfo
             try:
                 upline_user = User.objects(id=ObjectId(upline_id)).first()
                 if upline_user:
-                    if not hasattr(upline_user, 'matrix_slots') or upline_user.matrix_slots is None:
+                    if not hasattr(upline_user, "matrix_slots") or upline_user.matrix_slots is None:
                         upline_user.matrix_slots = []
-                    
+
                     # Check if slot already exists
                     next_slot_info = self.MATRIX_SLOTS.get(next_slot, {})
                     slot_exists = any(
-                        getattr(s, 'slot_name', None) == next_slot_info.get('name')
+                        getattr(s, "slot_name", None) == next_slot_info.get("name")
                         for s in upline_user.matrix_slots
                     )
-                    
+
                     if not slot_exists:
                         from ..user.model import MatrixSlotInfo
+
                         new_slot = MatrixSlotInfo(
-                            slot_name=next_slot_info.get('name', f'Slot {next_slot}'),
-                            slot_value=float(next_slot_info.get('value', 0)),
-                            level=next_slot_info.get('level', next_slot),
+                            slot_name=next_slot_info.get("name", f"Slot {next_slot}"),
+                            slot_value=float(next_slot_info.get("value", 0)),
+                            level=next_slot_info.get("level", next_slot),
                             is_active=True,
-                            activated_at=datetime.utcnow()
+                            activated_at=datetime.utcnow(),
                         )
                         upline_user.matrix_slots.append(new_slot)
                         upline_user.updated_at = datetime.utcnow()
                         upline_user.save()
-                        
-                        print(f"  ✓ Updated user's matrix_slots array")
-                
+
+                        print("  ✓ Updated user's matrix_slots array")
+
             except Exception as e:
                 print(f"  ⚠️ Error updating user slots: {e}")
-            
+
             print(f"  🎉 AUTO-UPGRADE COMPLETED: {upline_id} is now at Slot {next_slot}!")
-            
+
             return {
                 "success": True,
                 "upline_id": upline_id,
                 "upgraded_from": slot_no,
                 "upgraded_to": next_slot,
                 "reserve_used": reserve_fund,
-                "middle_members": middle_count
+                "middle_members": middle_count,
             }
-            
+
         except Exception as e:
             print(f"Error in check_and_process_automatic_upgrade: {e}")
             import traceback
@@ -2669,7 +2707,7 @@ class MatrixService:
                             is_active=True,
                         ).first()
                     if tp:
-                        pos_map = {"left": 0, "center": 1, "right": 2}
+                        pos_map = {"left": 0, "middle": 1, "center": 1, "right": 2}
                         pos_idx = pos_map.get(getattr(tp, "position", ""), None)
                         parent_id = str(
                             getattr(tp, "upline_id", None)

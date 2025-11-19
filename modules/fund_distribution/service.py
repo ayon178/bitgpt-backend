@@ -225,24 +225,14 @@ class FundDistributionService:
                         print(f"[MATRIX ROUTING] placement_context={placement_context}")
                     except Exception:
                         pass
-                    placed_under_user_id = placement_context.get('placed_under_user_id')  # immediate parent in many flows
+                    placed_under_user_id = placement_context.get('placed_under_user_id')
                     placement_level = placement_context.get('level')
                     placement_position = placement_context.get('position')
                     # Case A: Level-2 placement and it's the middle child (position % 3 == 1)
-                    # In many code paths, placed_under_user_id is the immediate parent (Level-1 node),
-                    # so resolve the tree owner as parent.parent_id for this slot.
+                    # For Matrix, we treat `placed_under_user_id` as the tree owner (main user)
+                    # whose 3x Matrix tree this position belongs to.
                     if placed_under_user_id and placement_level == 2 and placement_position is not None and int(placement_position) % 3 == 1:
-                        try:
-                            # Resolve tree owner (super upline) via parent chain
-                            parent_link = TreePlacement.objects(
-                                user_id=ObjectId(placed_under_user_id),
-                                program='matrix',
-                                slot_no=slot_no,
-                                is_active=True
-                            ).first()
-                            tree_owner_id = str(parent_link.parent_id) if parent_link and getattr(parent_link, 'parent_id', None) else str(placed_under_user_id)
-                        except Exception:
-                            tree_owner_id = str(placed_under_user_id)
+                        tree_owner_id = str(placed_under_user_id)
 
                         next_slot_no = slot_no + 1
                         already_active = False
