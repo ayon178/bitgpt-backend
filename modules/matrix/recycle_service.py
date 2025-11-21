@@ -74,6 +74,10 @@ class MatrixRecycleService:
         Trigger the recycle process when 39 members are completed.
         """
         try:
+            # Capture original member count BEFORE we reset the tree so that
+            # status messages remain accurate for logs / API responses.
+            original_member_count = getattr(matrix_tree, "total_members", 0)
+            
             # Create recycle instance snapshot (immutable history of the filled tree)
             recycle_instance = self._create_recycle_snapshot(user_id, slot_no, matrix_tree)
             
@@ -92,7 +96,9 @@ class MatrixRecycleService:
                 "recycle_instance_id": str(recycle_instance.id),
                 "new_tree_id": str(new_tree.id),
                 "placement_result": recycle_result,
-                "message": f"Matrix slot {slot_no} recycled successfully with {matrix_tree.total_members} members"
+                # Use the pre-reset member count in the message so it reflects
+                # the actual completed tree size (typically 39 members).
+                "message": f"Matrix slot {slot_no} recycled successfully with {original_member_count} members"
             }
             
         except Exception as e:
