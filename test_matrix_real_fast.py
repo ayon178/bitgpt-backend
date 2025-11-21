@@ -216,6 +216,57 @@ def quick_recycle_bulk_insert():
         print(f"⚠️ Bulk recycle error: {e}")
 
 
+def middle_upgrade_slot2_demo():
+    """
+    Simple scenario to mirror the user's case:
+    - Create user A and join Matrix slot 1.
+    - Create 12 direct partners under A, all join Matrix slot 1.
+    - Manually upgrade all 12 from slot 1 → slot 2.
+    - Check whether A's slot 3 is auto-upgraded.
+    """
+    connect_to_db()
+    svc = MatrixService()
+
+    print("\n================ SLOT-2 MIDDLE UPGRADE DEMO (A tree) ================\n")
+
+    # Create main user A and join Matrix
+    A = create_user("A_slot2_demo", None)
+    print(f"👤 Created main user A = {A}")
+    assert svc.join_matrix(user_id=A, referrer_id=A, tx_hash=f"tx_A_S1", amount=Decimal('11')).get("success")
+    print("✅ A joined Matrix Slot 1")
+
+    # Create 12 direct users under A, all join Matrix slot 1
+    directs = []
+    for i in range(1, 13):
+        uid = create_user(f"A_demo_dir_{i}", A)
+        directs.append(uid)
+        res = svc.join_matrix(user_id=uid, referrer_id=A, tx_hash=f"tx_A_demo_dir_{i}", amount=Decimal('11'))
+        assert res.get("success"), res
+        print(f"✅ Direct {i} joined under A with id={uid}")
+
+    # Show A's current matrix slot before any manual upgrades
+    tree = MatrixTree.objects(user_id=ObjectId(A)).first()
+    print(f"\n📊 Before manual upgrades: A.current_slot = {getattr(tree, 'current_slot', None)}")
+
+    # Manually upgrade all 12 directs from slot 1 → slot 2
+    for uid in directs:
+        r = svc.upgrade_matrix_slot(user_id=uid, from_slot_no=1, to_slot_no=2, upgrade_type="manual")
+        print(f"🔼 Manual upgrade {uid} S1→S2: {r}")
+
+    # Reload A's MatrixTree and check current_slot
+    tree = MatrixTree.objects(user_id=ObjectId(A)).first()
+    print(f"\n📊 After 12 manual S1→S2 upgrades: A.current_slot = {getattr(tree, 'current_slot', None)}")
+
+    # Also check explicit SlotActivation for A@Slot3 (matrix)
+    from modules.slot.model import SlotActivation
+
+    act_s2 = SlotActivation.objects(user_id=ObjectId(A), program="matrix", slot_no=2, status="completed").first()
+    act_s3 = SlotActivation.objects(user_id=ObjectId(A), program="matrix", slot_no=3, status="completed").first()
+    print(f"🔎 A Slot2 activation exists: {bool(act_s2)}")
+    print(f"🔎 A Slot3 activation exists: {bool(act_s3)}")
+
+    print("\n🎯 Slot-2 middle upgrade demo complete.\n")
+
 def run_diagram_scenario():
     """
     Build a Matrix tree that mirrors the documentation diagram:

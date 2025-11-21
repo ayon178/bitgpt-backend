@@ -229,10 +229,37 @@ class FundDistributionService:
                     placement_level = placement_context.get('level')
                     placement_position = placement_context.get('position')
                     # Case A: Level-2 placement and it's the middle child (position % 3 == 1)
-                    # For Matrix, we treat `placed_under_user_id` as the tree owner (main user)
-                    # whose 3x Matrix tree this position belongs to.
+                    # For Matrix, the *tree owner* is the root of the TreePlacement tree
+                    # for this slot (level==0), not necessarily the immediate parent.
                     if placed_under_user_id and placement_level == 2 and placement_position is not None and int(placement_position) % 3 == 1:
+                        # Resolve tree owner (root) for this slot
                         tree_owner_id = str(placed_under_user_id)
+                        try:
+                            root_tp = TreePlacement.objects(
+                                user_id=ObjectId(placed_under_user_id),
+                                program='matrix',
+                                slot_no=slot_no,
+                                is_active=True
+                            ).first()
+                            # Climb up to the root (level 0) if needed
+                            visited_ids = set()
+                            while root_tp and getattr(root_tp, "level", 0) > 0 and getattr(root_tp, "parent_id", None):
+                                if str(root_tp.user_id) in visited_ids:
+                                    break
+                                visited_ids.add(str(root_tp.user_id))
+                                parent_tp = TreePlacement.objects(
+                                    user_id=root_tp.parent_id,
+                                    program='matrix',
+                                    slot_no=slot_no,
+                                    is_active=True
+                                ).first()
+                                if not parent_tp:
+                                    break
+                                root_tp = parent_tp
+                            if root_tp:
+                                tree_owner_id = str(root_tp.user_id)
+                        except Exception as _e_resolve_owner:
+                            print(f"[MATRIX ROUTING] Failed to resolve tree owner from placed_under={placed_under_user_id}: {_e_resolve_owner}")
 
                         next_slot_no = slot_no + 1
                         already_active = False
