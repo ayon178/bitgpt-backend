@@ -1840,6 +1840,7 @@ class MatrixService:
 
             while candidate_id and visited < MATRIX_MAX_ESCALATION_DEPTH:
                 # Check if candidate has this slot (or higher) active in Matrix
+                # Priority 1: explicit SlotActivation (strongest signal)
                 try:
                     act = _SA.objects(
                         user_id=ObjectId(candidate_id),
@@ -1850,7 +1851,18 @@ class MatrixService:
                 except Exception:
                     act = None
 
-                if act:
+                # Priority 2: fallback to MatrixTree.current_slot (covers legacy
+                # auto-upgrades where SlotActivation might be missing or failed)
+                has_tree_slot = False
+                if not act:
+                    try:
+                        tree = MatrixTree.objects(user_id=ObjectId(candidate_id)).first()
+                    except Exception:
+                        tree = None
+                    if tree and (getattr(tree, "current_slot", None) or 1) >= slot_no:
+                        has_tree_slot = True
+
+                if act or has_tree_slot:
                     eligible_upline_id = candidate_id
                     break
 
@@ -2038,13 +2050,22 @@ class MatrixService:
                     f"auto_upgrade_{upline_id}_{slot_no}_{next_slot}_"
                     f"{int(datetime.utcnow().timestamp() * 1000)}"
                 )
-                
+
+                # Resolve slot catalog so we can set required fields like slot_name
+                from ..slot.model import SlotCatalog as _MatrixSlotCatalog
+                cat = _MatrixSlotCatalog.objects(
+                    program="matrix", slot_no=next_slot, is_active=True
+                ).first()
+                slot_name_val = getattr(cat, "name", None) or f"Slot {next_slot}"
+
                 activation = SlotActivation(
                     user_id=ObjectId(upline_id),
                     slot_no=next_slot,
                     program="matrix",
+                    slot_name=slot_name_val,
                     status="completed",
                     activation_type="auto",
+                    upgrade_source="auto",
                     amount_paid=Decimal(str(next_slot_cost)),
                     currency="USDT",
                     tx_hash=tx_hash_unique,
@@ -2052,9 +2073,9 @@ class MatrixService:
                     completed_at=datetime.utcnow(),
                 )
                 activation.save()
-                
+
                 print(f"  ✓ Created SlotActivation record for slot {next_slot}")
-                
+
             except Exception as e:
                 print(f"  ⚠️ Error creating activation record: {e}")
             
