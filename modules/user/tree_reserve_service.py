@@ -215,7 +215,7 @@ class TreeUplineReserveService:
             remaining_reserve = available_reserve - slot_cost
             self._deduct_reserve_fund(user_id, program, slot_no - 1, slot_cost, f"RESERVE-AUTO-{user_id}-S{slot_no}")
             
-            # Update user's slot information
+            # Update user's slot information (binary-specific structure)
             self._update_user_slot_info(user_id, catalog, slot_cost)
             
             # Create blockchain event
@@ -255,9 +255,39 @@ class TreeUplineReserveService:
                 pass
 
             # MATRIX-SPECIFIC: when a user's Matrix slot is auto-upgraded from reserve,
-            # ensure TreePlacement for that slot exists using the same sweepover rules as
-            # manual upgrades (so that per-slot trees reflect real eligible uplines).
+            # 1) ensure MatrixTree.current_slot reflects the highest activated slot
+            # 2) ensure TreePlacement for that slot exists using the same sweepover rules
+            #    as manual upgrades (so that per-slot trees reflect real eligible uplines).
             if program == 'matrix':
+                try:
+                    from modules.matrix.model import MatrixTree as _MatrixTree
+
+                    mt = _MatrixTree.objects(user_id=ObjectId(user_id)).first()
+                    if not mt:
+                        mt = _MatrixTree(
+                            user_id=ObjectId(user_id),
+                            current_slot=slot_no,
+                            current_level=1,
+                            total_members=0,
+                            level_1_members=0,
+                            level_2_members=0,
+                            level_3_members=0,
+                            is_complete=False,
+                            nodes=[],
+                            slots=[],
+                            reserve_fund=float(remaining_reserve),
+                            created_at=datetime.utcnow(),
+                            updated_at=datetime.utcnow(),
+                        )
+                    else:
+                        # Only move current_slot forward
+                        if not getattr(mt, "current_slot", None) or mt.current_slot < slot_no:
+                            mt.current_slot = slot_no
+                        mt.updated_at = datetime.utcnow()
+                    mt.save()
+                except Exception as e:
+                    print(f"[MATRIX_AUTO_RESERVE] Error updating MatrixTree for auto-upgrade slot {slot_no}: {e}")
+
                 try:
                     from modules.matrix.service import MatrixService
                     MatrixService()._ensure_matrix_tree_placement_for_slot(user_id, slot_no)
