@@ -928,6 +928,51 @@ The Matrix Auto Upgrade System automatically uses earnings from specific members
 5. **Manual Activation Option**: Users can manually add funds to activate slots
 6. **Reserve Combination**: 2 reserves + 1 manual fund, or 1 reserve + 2 manual funds
 
+#### Second Upline Reserve Rules (Implementation Detail)
+
+- **Per-slot Matrix trees**:
+  - Each Matrix slot (1–15) has its own `TreePlacement` tree: `program='matrix', slot_no = N`.
+  - Joining Matrix places the user only in **Slot‑1** tree. Each later slot upgrade (manual/auto) creates a new `TreePlacement` row for that slot using the **same BFS logic** as the initial join, but scoped to that slot.
+  - For all slots:
+    - `parent_id` = **direct referrer** (who invited the user) and never changes.
+    - `upline_id` = **tree parent for that slot**, which may change due to spillover / sweepover.
+
+- **Example structure (Slot‑1 tree)**:
+  - A is root.
+  - Level‑1: B, C, D under A.
+  - Level‑2: E,F,G under B; H,I,J under C; K,L,M under D.
+  - All E..M are invited by A → for them, `parent_id = A`, but `upline_id` = B/C/D in Slot‑1.
+
+- **Level‑2 middle‑3 (F, I, L)**:
+  - They are the middle child under B, C, D at Level‑2 in Slot‑1.
+  - For **each slot‑1 join/upgrade of F, I, L**:
+    - 100% of that slot‑1 amount is routed to the **reserve of their second tree‑upline in Slot‑1**, which in this structure is **A**.
+    - Concretely: their fees go to `TreeUplineReserveService` with `tree_upline_id = A`, `program='matrix'`, `slot_no = 1`.
+
+- **Level‑1 middle (C)**:
+  - C is the middle child at Level‑1 under A.
+  - For **each slot‑N join/upgrade of C**:
+    - 100% of that slot‑N amount is routed to the **reserve of C’s second tree‑upline for that slot**, i.e., the tree‑upline of A in that same slot (often A’s upline or Mother ID).
+
+- **Upgrades reuse the same logic, per slot**:
+  - When a downline (e.g., F) upgrades to Slot‑2:
+    - We treat the upgrade as a placement in the **Slot‑2 tree**:
+      - Start from the eligible upline for Slot‑2 (typically A, once A’s Slot‑2 is active).
+      - Run BFS in Slot‑2 tree to place the user:
+        - If A has free Level‑1 positions in Slot‑2, F will be placed at **Level‑1 left under A**.
+        - In this Slot‑2 tree: `parent_id` remains A, `upline_id` becomes A (tree parent for Slot‑2).
+  - As more Slot‑2 upgrades happen under A, the Slot‑2 tree fills Level‑1 (left, middle, right) then Level‑2, and so on. **Middle positions in Slot‑2 are evaluated from the Slot‑2 tree only**, independent of Slot‑1.
+
+- **Auto‑upgrade source of truth**:
+  - For any slot N:
+    - Matrix middle‑3 routing sends 100% of those slot‑N amounts into the second‑upline’s **Matrix reserve** for `slot_no = N`.
+    - `TreeUplineReserveService` tracks `reserve_balance(user, 'matrix', slot_no=N)` and **auto‑upgrades only when**:
+      - `reserve_balance(N) ≥ price_of_slot_(N+1)` for the Matrix program.
+    - This guarantees:
+      - Slot‑2 auto‑upgrade happens only from **Slot‑1’s own** Level‑2 middle‑3 (F, I, L).
+      - Slot‑3 auto‑upgrade happens only from **Slot‑2’s own** Level‑2 middle‑3 in the Slot‑2 tree.
+      - Higher slots never upgrade from lower‑slot fills alone; each slot’s tree and middle‑3 + reserve are evaluated **per slot**.
+
 ### Super Upline Detection
 - **System Check**: When user joins matrix, system checks upline's upline level and position
 - **Middle Position**: If user is in middle position of their level, fee goes to super upline's slot activation fund
