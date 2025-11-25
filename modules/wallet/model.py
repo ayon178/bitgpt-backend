@@ -23,7 +23,7 @@ class ReserveLedger(Document):
     slot_no = IntField(required=True)  # Target slot for auto upgrade
     amount = DecimalField(required=True, precision=8)
     direction = StringField(choices=['credit', 'debit'], required=True)
-    source = StringField(choices=['tree_upline_reserve', 'income', 'manual', 'transfer'], required=True)
+    source = StringField(choices=['tree_upline_reserve', 'income', 'manual', 'transfer', 'auto_activation', 'middle_3_earnings'], required=True)
     balance_after = DecimalField(precision=8, default=0)  # Optional for auto upgrade
     tx_hash = StringField()  # Optional for auto upgrade
     created_at = DateTimeField(default=datetime.utcnow)

@@ -228,65 +228,64 @@ class FundDistributionService:
                     placed_under_user_id = placement_context.get('placed_under_user_id')
                     placement_level = placement_context.get('level')
                     placement_position = placement_context.get('position')
-                    # Case A: Level-2 placement and it's the middle child (position % 3 == 1)
-                    # For Matrix, the *tree owner* is the root of the TreePlacement tree
-                    # for this slot (level==0), not necessarily the immediate parent.
-                    if placed_under_user_id and placement_level == 2 and placement_position is not None and int(placement_position) % 3 == 1:
-                        # Resolve tree owner (root) for this slot
-                        tree_owner_id = str(placed_under_user_id)
+                    # Case A: Middle child (position % 3 == 1) → Route to 2nd Upline (Grandparent)
+                    # This applies to ANY level, not just Level 2.
+                    # The "middle 3" rule means the middle child of any node contributes to that node's parent's reserve.
+                    if placed_under_user_id and placement_position is not None and int(placement_position) % 3 == 1:
+                        print(f"[MATRIX ROUTING] Middle child detected (pos {placement_position}). Routing to 2nd upline.")
+                        
+                        # Find 2nd upline (Grandparent)
+                        # We need the parent of the placed_under_user_id
+                        grandparent_id = None
                         try:
-                            root_tp = TreePlacement.objects(
+                            # Get parent's placement to find their parent
+                            parent_tp = TreePlacement.objects(
                                 user_id=ObjectId(placed_under_user_id),
                                 program='matrix',
                                 slot_no=slot_no,
                                 is_active=True
                             ).first()
-                            # Climb up to the root (level 0) if needed
-                            visited_ids = set()
-                            while root_tp and getattr(root_tp, "level", 0) > 0 and getattr(root_tp, "parent_id", None):
-                                if str(root_tp.user_id) in visited_ids:
-                                    break
-                                visited_ids.add(str(root_tp.user_id))
-                                parent_tp = TreePlacement.objects(
-                                    user_id=root_tp.parent_id,
+                            
+                            if parent_tp:
+                                # Use upline_id (placement parent) or parent_id (referrer) depending on tree logic
+                                # For Matrix, we follow the placement tree structure
+                                grandparent_id = str(getattr(parent_tp, 'upline_id', None) or getattr(parent_tp, 'parent_id', None))
+                        except Exception as e:
+                            print(f"[MATRIX ROUTING] Error finding grandparent: {e}")
+
+                        if grandparent_id:
+                            print(f"[MATRIX ROUTING] Found grandparent: {grandparent_id}")
+                            next_slot_no = slot_no + 1
+                            already_active = False
+                            try:
+                                act = SlotActivation.objects(user_id=ObjectId(grandparent_id), program='matrix', slot_no=next_slot_no, status='completed').first()
+                                already_active = bool(act)
+                            except Exception:
+                                already_active = False
+                            
+                            if not already_active:
+                                reserve_service = TreeUplineReserveService()
+                                ok, msg = reserve_service.add_to_reserve_fund(
+                                    tree_upline_id=grandparent_id,
                                     program='matrix',
                                     slot_no=slot_no,
-                                    is_active=True
-                                ).first()
-                                if not parent_tp:
-                                    break
-                                root_tp = parent_tp
-                            if root_tp:
-                                tree_owner_id = str(root_tp.user_id)
-                        except Exception as _e_resolve_owner:
-                            print(f"[MATRIX ROUTING] Failed to resolve tree owner from placed_under={placed_under_user_id}: {_e_resolve_owner}")
-
-                        next_slot_no = slot_no + 1
-                        already_active = False
-                        try:
-                            act = SlotActivation.objects(user_id=ObjectId(tree_owner_id), program='matrix', slot_no=next_slot_no, status='completed').first()
-                            already_active = bool(act)
-                        except Exception:
-                            already_active = False
-                        if not already_active:
-                            reserve_service = TreeUplineReserveService()
-                            ok, msg = reserve_service.add_to_reserve_fund(
-                                tree_upline_id=tree_owner_id,
-                                program='matrix',
-                                slot_no=slot_no,
-                                amount=Decimal(str(amount)),
-                                source_user_id=str(user_id),
-                                tx_hash=tx_hash
-                            )
-                            distributions.append({
-                                "type": "super_upline_middle_reserve",
-                                "to_user_id": tree_owner_id,
-                                "amount": float(amount),
-                                "slot_no": slot_no,
-                                "message": msg,
-                                "success": ok
-                            })
-                            return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
+                                    amount=Decimal(str(amount)),
+                                    source_user_id=str(user_id),
+                                    tx_hash=tx_hash
+                                )
+                                distributions.append({
+                                    "type": "super_upline_middle_reserve",
+                                    "to_user_id": grandparent_id,
+                                    "amount": float(amount),
+                                    "slot_no": slot_no,
+                                    "message": msg,
+                                    "success": ok
+                                })
+                                return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
+                            else:
+                                print(f"[MATRIX ROUTING] Grandparent {grandparent_id} already has slot {next_slot_no} active. Skipping reserve.")
+                        else:
+                            print(f"[MATRIX ROUTING] No grandparent found for {placed_under_user_id}")
                     # Case B: placement is Level-1 under a child; if child is Level-1 under a super upline and child_offset is middle → treat as Level-2 middle under super upline
                     if placed_under_user_id and placement_level == 1 and placement_position is not None:
                         try:

@@ -155,12 +155,25 @@ class TreeUplineReserveService:
             if not next_slot_catalog:
                 return False
             
-            next_slot_cost = next_slot_catalog.price
+            # Calculate upgrade cost (difference between next slot and current slot)
+            upgrade_cost = next_slot_catalog.price
+            
+            # Try to get current slot price to calculate difference
+            try:
+                current_slot_catalog = SlotCatalog.objects(
+                    program=program,
+                    slot_no=current_slot,
+                    is_active=True
+                ).first()
+                if current_slot_catalog:
+                    upgrade_cost = next_slot_catalog.price - current_slot_catalog.price
+            except Exception:
+                pass
             
             # Check if reserve is sufficient
-            if reserve_balance >= next_slot_cost:
+            if reserve_balance >= upgrade_cost:
                 # Auto-activate next slot
-                return self._auto_activate_slot(user_id, program, next_slot_no, next_slot_cost, reserve_balance)
+                return self._auto_activate_slot(user_id, program, next_slot_no, upgrade_cost, reserve_balance)
             
             return False
             
@@ -258,9 +271,36 @@ class TreeUplineReserveService:
             # 1) ensure MatrixTree.current_slot reflects the highest activated slot
             # 2) ensure TreePlacement for that slot exists using the same sweepover rules
             #    as manual upgrades (so that per-slot trees reflect real eligible uplines).
+            # 3) ensure MatrixActivation exists (required for MatrixService checks)
             if program == 'matrix':
                 try:
                     from modules.matrix.model import MatrixTree as _MatrixTree
+                    from modules.matrix.model import MatrixActivation as _MatrixActivation
+
+                    # Create MatrixActivation if it doesn't exist (SlotActivation is generic)
+                    # Note: SlotActivation was already created above, but MatrixService checks MatrixActivation
+                    ma_exists = _MatrixActivation.objects(
+                        user_id=ObjectId(user_id),
+                        slot_no=slot_no,
+                        status='completed'
+                    ).first()
+                    
+                    if not ma_exists:
+                        _MatrixActivation(
+                            user_id=ObjectId(user_id),
+                            slot_no=slot_no,
+                            slot_name=catalog.name,
+                            activation_type='upgrade',
+                            upgrade_source='auto',
+                            amount_paid=slot_cost,
+                            currency='USDT',
+                            tx_hash=f"RESERVE-AUTO-{user_id}-S{slot_no}",
+                            is_auto_upgrade=True,
+                            status='completed',
+                            activated_at=datetime.utcnow(),
+                            completed_at=datetime.utcnow()
+                        ).save()
+                        print(f"[MATRIX_AUTO_RESERVE] Created MatrixActivation for slot {slot_no}")
 
                     mt = _MatrixTree.objects(user_id=ObjectId(user_id)).first()
                     if not mt:
@@ -286,7 +326,7 @@ class TreeUplineReserveService:
                         mt.updated_at = datetime.utcnow()
                     mt.save()
                 except Exception as e:
-                    print(f"[MATRIX_AUTO_RESERVE] Error updating MatrixTree for auto-upgrade slot {slot_no}: {e}")
+                    print(f"[MATRIX_AUTO_RESERVE] Error updating MatrixTree/Activation for auto-upgrade slot {slot_no}: {e}")
 
                 try:
                     from modules.matrix.service import MatrixService
