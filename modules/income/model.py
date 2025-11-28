@@ -14,7 +14,8 @@ class IncomeEvent(Document):
         'newcomer_support', 'triple_entry', 'shareholders',
         'global_phase_1', 'global_phase_2', 'newcomer_growth_instant',
         'newcomer_growth_upline_fund', 'newcomer_growth_mother_fund',
-        'newcomer_growth_monthly_distribution'
+        'newcomer_growth_monthly_distribution',
+        'missed_profit', 'level_1_distribution', 'level_2_distribution', 'level_3_distribution'
     ], required=True)
     amount = DecimalField(required=True, precision=8)
     percentage = DecimalField(required=True, precision=4)

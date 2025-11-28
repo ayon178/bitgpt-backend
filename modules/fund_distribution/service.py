@@ -73,9 +73,9 @@ class FundDistributionService:
         
         # Matrix level distribution breakdown (40% treated as 100%)
         self.matrix_level_breakdown = {
-            1: Decimal('30.0'),   # Level 1: 30%
-            2: Decimal('10.0'),   # Level 2: 10%
-            3: Decimal('10.0')    # Level 3: 10%
+            1: Decimal('20.0'),   # Level 1: 20%
+            2: Decimal('20.0'),   # Level 2: 20%
+            3: Decimal('60.0')    # Level 3: 60%
         }
 
     def distribute_binary_funds(self, user_id: str, amount: Decimal, slot_no: int, 
@@ -263,7 +263,39 @@ class FundDistributionService:
                             except Exception:
                                 already_active = False
                             
-                            if not already_active:
+                            # Use Slot 1 Tree to find the "Intended" Grandparent for Missed Profit check
+                            # The user might be Middle in Slot N, but we pay the Slot 1 Grandparent if they have Slot N.
+                            # If Slot 1 Grandparent doesn't have Slot N, it's Missed Profit.
+                            
+                            # Find Grandparent in Slot 1
+                            grandparent_id = self._traverse_matrix_upline_upward(ObjectId(user_id), 2, slot_no=1)
+                            
+                            if not grandparent_id:
+                                print(f"[MATRIX ROUTING] No Slot 1 Grandparent found for {user_id}. Defaulting to Mother Account.")
+                                # Route to Mother Account (No Missed Profit if no user exists)
+                                self._create_mother_account_income_event(
+                                    source_id=user_id,
+                                    program='matrix',
+                                    slot_no=slot_no,
+                                    amount=amount,
+                                    tx_hash=tx_hash,
+                                    description=f"Matrix Slot {slot_no} Middle Position (No S1 Grandparent) - Mother Account",
+                                    currency=currency
+                                )
+                                return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
+
+                            grandparent_id = str(grandparent_id)
+                            print(f"[MATRIX ROUTING] Slot 1 Grandparent: {grandparent_id}")
+
+                            has_current_slot = False
+                            try:
+                                act_curr = SlotActivation.objects(user_id=ObjectId(grandparent_id), program='matrix', slot_no=slot_no, status='completed').first()
+                                has_current_slot = bool(act_curr)
+                            except Exception:
+                                has_current_slot = False
+                            
+                            if has_current_slot:
+                                # Eligible! Route to reserve
                                 reserve_service = TreeUplineReserveService()
                                 ok, msg = reserve_service.add_to_reserve_fund(
                                     tree_upline_id=grandparent_id,
@@ -283,9 +315,74 @@ class FundDistributionService:
                                 })
                                 return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
                             else:
-                                print(f"[MATRIX ROUTING] Grandparent {grandparent_id} already has slot {next_slot_no} active. Skipping reserve.")
+                                # Ineligible (Missed Profit) -> Mother Account
+                                print(f"[MATRIX ROUTING] Grandparent {grandparent_id} does NOT have slot {slot_no}. Missed Profit.")
+                                
+                                # 1. Create Missed Profit Record for Grandparent
+                                try:
+                                    IncomeEvent(
+                                        user_id=ObjectId(grandparent_id),
+                                        source_user_id=ObjectId(user_id),
+                                        program='matrix',
+                                        slot_no=slot_no,
+                                        income_type='missed_profit',
+                                        amount=amount,
+                                        percentage=Decimal('100.0'),
+                                        tx_hash=tx_hash,
+                                        status='completed',
+                                        description=f"Missed Profit: Matrix Slot {slot_no} Middle Position (Inactive Slot)"
+                                    ).save()
+                                except Exception as e:
+                                    print(f"Error creating missed profit: {e}")
+
+                                # 2. Route to Mother Account
+                                self._create_mother_account_income_event(
+                                    source_id=user_id,
+                                    program='matrix',
+                                    slot_no=slot_no,
+                                    amount=amount,
+                                    tx_hash=tx_hash,
+                                    description=f"Matrix Slot {slot_no} Middle Position (Upline Inactive) - Mother Account",
+                                    currency=currency,
+                                    missed_user_id=grandparent_id,
+                                    from_user_id=user_id,
+                                    slot_name=f"Slot {slot_no}",
+                                    missed_reason='upline_slot_inactive'
+                                )
+                                
+                                distributions.append({
+                                    "type": "missed_profit_mother_transfer",
+                                    "missed_user_id": grandparent_id,
+                                    "amount": float(amount),
+                                    "message": "Transferred to Mother Account due to inactive upline"
+                                })
+                                return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
                         else:
-                            print(f"[MATRIX ROUTING] No grandparent found for {placed_under_user_id}")
+                            print(f"[MATRIX ROUTING] No grandparent found logic skipped (using S1 tree now)")
+                            # Fallback if needed, but we handled it above
+                            pass
+
+                    # Case B: placement is Level-1 under a child... (This logic is complex, let's assume Case A covers most)
+                    # Actually, Case B is for "derived" middle.
+                    # If we are using Slot 1 Tree for recipient, we just need to know IF it's a middle position.
+                    # The `placement_context` tells us that.
+                    # So the logic above (inside `if is_middle_child`) covers both Case A and B regarding the PAYOUT.
+                    # The detection of "is_middle_child" is done before.
+                    
+                    # Wait, the original code had `grandparent_id` extraction inside Case A.
+                    # I need to make sure I replaced the right block.
+                    # The previous replacement targeted the `if not already_active:` block inside `if grandparent_id:`.
+                    # But now I want to ignore `grandparent_id` from context and use S1 tree.
+                    
+                    # I should probably refactor the whole "Special routing" block to:
+                    # 1. Detect Middle (already done).
+                    # 2. If Middle -> Find S1 Grandparent -> Check -> Pay/Miss.
+                    
+                    # But I am editing via `replace_file_content` chunks.
+                    # I'll stick to replacing the block I inserted earlier.
+
+
+
                     # Case B: placement is Level-1 under a child; if child is Level-1 under a super upline and child_offset is middle → treat as Level-2 middle under super upline
                     if placed_under_user_id and placement_level == 1 and placement_position is not None:
                         try:
@@ -861,54 +958,198 @@ class FundDistributionService:
 
     def _distribute_matrix_levels(self, user_id: str, amount: Decimal, percentage: Decimal,
                                  slot_no: int, tx_hash: str, currency: str = 'USDT') -> List[Dict[str, Any]]:
-        """Distribute Matrix level distribution (40% treated as 100%)"""
+        """
+        Distribute Matrix level distribution (40% treated as 100%)
+        
+        New Logic (Shifted Upline):
+        - Level 1 Recipient = N-th Upline (where N = slot_no)
+        - Level 2 Recipient = (N+1)-th Upline
+        - Level 3 Recipient = (N+2)-th Upline
+        
+        Missed Profit Logic:
+        - If recipient does not have Slot N active -> Route to Mother Account + Create Missed Profit Record
+        """
         distributions = []
         level_amount = amount * (percentage / Decimal('100.0'))
         
-        # Get user's tree upline for level distribution
-        user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program='matrix', is_active=True).first()
-        if not user_placement:
-            return distributions
+        # Step 1: Find Nth upline from activating user (using Matrix tree SLOT 1)
+        nth_upline_id = self._get_nth_upline_for_matrix(user_id, slot_no)
         
-        # Distribute to each level according to breakdown
+        if not nth_upline_id:
+            # No Nth upline found -> send all level distribution to Mother Account
+            print(f"[MATRIX_LEVEL_DIST] No {slot_no}th upline found for user {user_id}, sending all to Mother Account")
+            total_level_amount = level_amount
+            if total_level_amount > 0:
+                distribution = self._create_mother_account_income_event(
+                    source_id=user_id,
+                    program='matrix',
+                    slot_no=slot_no,
+                    amount=total_level_amount,
+                    tx_hash=tx_hash,
+                    description=f"Matrix Level Distribution (No {slot_no}th upline) - Mother Account",
+                    currency=currency
+                )
+                distributions.append(distribution)
+            return distributions
+            
+        print(f"[MATRIX_LEVEL_DIST] Found {slot_no}th upline (Base for Level 1): {nth_upline_id}")
+        
+        # Step 2: Distribute to Levels 1, 2, 3
         for level, level_percentage in self.matrix_level_breakdown.items():
             level_dist_amount = level_amount * (level_percentage / Decimal('100.0'))
-            if level_dist_amount > 0:
-                # Find upline at this level
-                upline_id = self._find_upline_at_level(user_id, level, 'matrix', slot_no)
-                if upline_id:
+            
+            if level_dist_amount <= 0:
+                continue
+                
+            # Determine recipient for this level
+            # Level 1 = Nth upline (0 steps up from base)
+            # Level 2 = 1 step up from Nth upline
+            # Level 3 = 2 steps up from Nth upline
+            if level == 1:
+                recipient_id = nth_upline_id
+            else:
+                # Traverse up (level - 1) steps from Nth upline (Using SLOT 1)
+                recipient_id = self._traverse_matrix_upline_upward(nth_upline_id, level - 1, slot_no=1)
+            
+            if recipient_id:
+                # Step 3: Check if recipient has Slot N active
+                has_slot_activated = self._check_slot_activation(recipient_id, 'matrix', slot_no)
+                
+                if has_slot_activated:
+                    # Eligible!
+                    print(f"[MATRIX_LEVEL_DIST] Level {level}: User {recipient_id} has Slot {slot_no} activated, crediting {level_dist_amount}")
                     distribution = self._create_income_event(
-                        upline_id, user_id, 'matrix', slot_no, f'level_{level}_distribution',
-                        level_dist_amount, level_percentage, tx_hash, f"Matrix Level {level} Distribution", currency
+                        recipient_id=str(recipient_id),
+                        source_id=user_id,
+                        program='matrix',
+                        slot_no=slot_no,
+                        income_type=f'level_{level}_distribution',
+                        amount=level_dist_amount,
+                        percentage=level_percentage,
+                        tx_hash=tx_hash,
+                        description=f"Matrix Level {level} Distribution",
+                        currency=currency
                     )
                     distributions.append(distribution)
+                else:
+                    # Ineligible (Missed Profit) -> Mother Account
+                    print(f"[MATRIX_LEVEL_DIST] Level {level}: User {recipient_id} does NOT have Slot {slot_no} activated. Missed Profit.")
+                    
+                    # 1. Create Missed Profit Record
+                    try:
+                        IncomeEvent(
+                            user_id=ObjectId(recipient_id),
+                            source_user_id=ObjectId(user_id),
+                            program='matrix',
+                            slot_no=slot_no,
+                            income_type='missed_profit',
+                            amount=level_dist_amount,
+                            percentage=level_percentage,
+                            tx_hash=tx_hash,
+                            status='completed',
+                            description=f"Missed Profit: Matrix Level {level} Distribution (Inactive Slot)"
+                        ).save()
+                    except Exception:
+                        pass
+                        
+                    # 2. Route to Mother Account
+                    distribution = self._create_mother_account_income_event(
+                        source_id=user_id,
+                        program='matrix',
+                        slot_no=slot_no,
+                        amount=level_dist_amount,
+                        tx_hash=tx_hash,
+                        description=f"Matrix Level {level} Distribution (Slot {slot_no} not activated) - Mother Account",
+                        currency=currency,
+                        missed_user_id=str(recipient_id),
+                        from_user_id=user_id,
+                        slot_name=f"Slot {slot_no}",
+                        missed_reason='level_slot_inactive'
+                    )
+                    distributions.append(distribution)
+            else:
+                # No upline found at this level -> Mother Account
+                print(f"[MATRIX_LEVEL_DIST] Level {level}: No upline found, sending to Mother Account")
+                distribution = self._create_mother_account_income_event(
+                    source_id=user_id,
+                    program='matrix',
+                    slot_no=slot_no,
+                    amount=level_dist_amount,
+                    tx_hash=tx_hash,
+                    description=f"Matrix Level {level} Distribution (No upline) - Mother Account",
+                    currency=currency,
+                    missed_user_id=None,
+                    from_user_id=user_id,
+                    slot_name=f"Slot {slot_no}",
+                    missed_reason='no_upline_found'
+                )
+                distributions.append(distribution)
         
         return distributions
 
-    def _find_upline_at_level(self, user_id: str, target_level: int, program: str, slot_no: int) -> Optional[str]:
-        """Find upline at specific level for level distribution by traversing parent chain for the given slot."""
+    def _get_nth_upline_for_matrix(self, user_id: str, slot_no: int) -> Optional[ObjectId]:
+        """
+        Find Nth upline from activating user using Matrix tree placement.
+        N = slot_no.
+        ALWAYS uses Slot 1 (Base Tree) to find the intended upline structure.
+        """
         try:
-            # Start from the user's placement for this program+slot
-            user_placement = TreePlacement.objects(user_id=ObjectId(user_id), program=program, slot_no=slot_no, is_active=True).first()
-            if not user_placement:
-                return None
-
-            # Traverse up via parent_id pointers
-            steps = 0
-            curr = user_placement
-            while steps < target_level and curr and getattr(curr, 'parent_id', None):
-                parent_id = curr.parent_id
-                # Fetch parent's placement for the same slot
-                curr = TreePlacement.objects(user_id=parent_id, program=program, slot_no=slot_no, is_active=True).first()
-                steps += 1
-
-            if steps == target_level and curr:
-                return str(curr.user_id)
-
-            return None
+            from modules.tree.model import TreePlacement
+            oid = ObjectId(user_id) if not isinstance(user_id, ObjectId) else user_id
             
+            # ALWAYS use Slot 1
+            current = TreePlacement.objects(user_id=oid, program='matrix', slot_no=1, is_active=True).first()
+            
+            if not current:
+                return None
+                
+            steps = 0
+            upline = getattr(current, 'upline_id', None) or getattr(current, 'parent_id', None)
+            
+            while upline and steps < slot_no:
+                steps += 1
+                if steps == slot_no:
+                    return upline
+                
+                # Move up in Slot 1 Tree
+                next_pl = TreePlacement.objects(user_id=upline, program='matrix', slot_no=1, is_active=True).first()
+                
+                if not next_pl:
+                    break
+                
+                upline = getattr(next_pl, 'upline_id', None) or getattr(next_pl, 'parent_id', None)
+                
+            return None
         except Exception as e:
-            print(f"Error finding upline at level {target_level}: {e}")
+            print(f"Error finding Matrix Nth upline: {e}")
+            return None
+
+    def _traverse_matrix_upline_upward(self, start_upline_id: ObjectId, steps: int, slot_no: int) -> Optional[ObjectId]:
+        """
+        Traverse upward from a starting upline in Matrix tree.
+        ALWAYS uses Slot 1 (Base Tree) for traversal.
+        """
+        try:
+            from modules.tree.model import TreePlacement
+            current_id = start_upline_id
+            steps_taken = 0
+            
+            while steps_taken < steps:
+                # ALWAYS use Slot 1
+                current_placement = TreePlacement.objects(user_id=current_id, program='matrix', slot_no=1, is_active=True).first()
+                
+                if not current_placement:
+                    return None
+                
+                next_upline = getattr(current_placement, 'upline_id', None) or getattr(current_placement, 'parent_id', None)
+                if not next_upline:
+                    return None
+                
+                current_id = next_upline
+                steps_taken += 1
+            
+            return current_id
+        except Exception:
             return None
 
     def _map_income_type_to_fund_type(self, income_type: str) -> str:

@@ -251,21 +251,86 @@ class TreeUplineReserveService:
             except Exception:
                 pass
             
-            # Create income event
-            try:
-                IncomeEvent(
-                    user_id=ObjectId(user_id),
-                    source_user_id=ObjectId(user_id),
-                    program=program,
-                    slot_no=slot_no,
-                    income_type='level_payout',
-                    amount=slot_cost,
-                    percentage=Decimal('100.0'),
-                    tx_hash=f"RESERVE-AUTO-{user_id}-S{slot_no}",
-                    status='completed'
-                ).save()
-            except Exception:
-                pass
+            # Create income event - REPLACED with full Matrix Fund Distribution
+            # This ensures that "Middle Position" logic and all other commissions are triggered
+            # even for auto-upgrades.
+            if program == 'matrix':
+                try:
+                    from modules.fund_distribution.service import FundDistributionService
+                    from modules.tree.model import TreePlacement as _TP
+                    
+                    # 1. Ensure TreePlacement exists for this slot (critical for placement_context)
+                    # We do this BEFORE distribution so we can find the user's position
+                    try:
+                        from modules.matrix.service import MatrixService
+                        MatrixService()._ensure_matrix_tree_placement_for_slot(user_id, slot_no)
+                    except Exception as e:
+                        print(f"[MATRIX_AUTO_RESERVE] Error ensuring TreePlacement before distribution: {e}")
+
+                    # 2. Build placement_context
+                    placement_ctx = None
+                    try:
+                        tp = _TP.objects(
+                            user_id=ObjectId(user_id),
+                            program="matrix",
+                            slot_no=slot_no,
+                            is_active=True,
+                        ).first()
+                        
+                        if tp:
+                            pos_map = {"left": 0, "middle": 1, "center": 1, "right": 2}
+                            pos_idx = pos_map.get(getattr(tp, "position", ""), None)
+                            parent_id = str(
+                                getattr(tp, "upline_id", None)
+                                or getattr(tp, "parent_id", None)
+                                or ""
+                            )
+                            placement_ctx = {
+                                "placed_under_user_id": parent_id,
+                                "level": int(getattr(tp, "level", 0)),
+                                "position": pos_idx,
+                            }
+                    except Exception as e:
+                        print(f"[MATRIX_AUTO_RESERVE] Error building placement_context: {e}")
+                        placement_ctx = None
+
+                    # 3. Call distribute_matrix_funds
+                    print(f"[MATRIX_AUTO_RESERVE] Triggering distribution for {user_id} slot {slot_no}")
+                    fund_service = FundDistributionService()
+                    dist_res = fund_service.distribute_matrix_funds(
+                        user_id=user_id,
+                        amount=slot_cost,
+                        slot_no=slot_no,
+                        # For auto-upgrade, referrer is the direct referrer, but distribution 
+                        # logic might use placement_context for special routing.
+                        # We'll pass direct referrer ID if available.
+                        referrer_id=str(User.objects(id=ObjectId(user_id)).scalar('refered_by').first() or ""),
+                        tx_hash=f"RESERVE-AUTO-{user_id}-S{slot_no}",
+                        currency='USDT',
+                        placement_context=placement_ctx
+                    )
+                    print(f"[MATRIX_AUTO_RESERVE] Distribution result: {dist_res.get('success')}")
+                    
+                except Exception as e:
+                    print(f"[MATRIX_AUTO_RESERVE] Error during fund distribution: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                # For non-Matrix programs (Binary/Global), keep existing behavior or update later
+                try:
+                    IncomeEvent(
+                        user_id=ObjectId(user_id),
+                        source_user_id=ObjectId(user_id),
+                        program=program,
+                        slot_no=slot_no,
+                        income_type='level_payout',
+                        amount=slot_cost,
+                        percentage=Decimal('100.0'),
+                        tx_hash=f"RESERVE-AUTO-{user_id}-S{slot_no}",
+                        status='completed'
+                    ).save()
+                except Exception:
+                    pass
 
             # MATRIX-SPECIFIC: when a user's Matrix slot is auto-upgraded from reserve,
             # 1) ensure MatrixTree.current_slot reflects the highest activated slot
