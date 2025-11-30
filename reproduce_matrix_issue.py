@@ -15,7 +15,7 @@ from modules.wallet.model import ReserveLedger, UserWallet, WalletLedger
 from modules.slot.model import SlotActivation
 from modules.tree.model import TreePlacement
 
-ROOT_ID = "690849071d19c24e852d38ae"
+# ROOT_ID will be fetched in main()
 
 def create_user(referrer_id, label):
     uid = f"mx_test_{label}_{datetime.utcnow().timestamp()}".replace(".", "")[-20:]
@@ -46,8 +46,14 @@ def fund_wallet(user_id, amount):
     uw.save()
 
 def main():
+    from core.config import MONGO_URI
+    print(f"Connecting to: {MONGO_URI.split('@')[1] if '@' in MONGO_URI else 'localhost'}")
     connect_to_db()
     print("✅ DB connected")
+
+    # Find ROOT user (using known ID from remote DB)
+    ROOT_ID = "68bee3aec1eac053757f5cf1"
+    print(f"✅ Using ROOT user: {ROOT_ID}")
     
     svc = MatrixService()
     
@@ -55,6 +61,20 @@ def main():
     print("\n--- Creating User A ---")
     user_a_id = create_user(ROOT_ID, "UserA")
     print(f"Created User A: {user_a_id}")
+    
+    # Verify User A exists
+    ua = User.objects(id=ObjectId(user_a_id)).first()
+    if ua:
+        print(f"✅ User A found in DB: {ua.id}")
+    else:
+        print(f"❌ User A NOT found in DB after save!")
+
+    # Verify ROOT exists
+    root = User.objects(id=ObjectId(ROOT_ID)).first()
+    if root:
+        print(f"✅ ROOT found in DB: {root.id}")
+    else:
+        print(f"❌ ROOT NOT found in DB!")
     
     # 2. Join A to Matrix Slot 1
     print("\n--- Joining A to Matrix Slot 1 ---")
@@ -73,7 +93,7 @@ def main():
         uid = create_user(user_a_id, label)
         downline_ids.append(uid)
         
-        res = svc.join_matrix(user_id=uid, referrer_id=user_a_id, tx_hash=f"tx_join_{label}", amount=Decimal("11"))
+        res = svc.join_matrix(user_id=uid, referrer_id=user_a_id, tx_hash=f"tx_join_{label}_{datetime.utcnow().timestamp()}", amount=Decimal("11"))
         if not res.get("success"):
             print(f"❌ Failed to join {label}: {res}")
         else:

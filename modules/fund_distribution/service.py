@@ -225,17 +225,17 @@ class FundDistributionService:
                         print(f"[MATRIX ROUTING] placement_context={placement_context}")
                     except Exception:
                         pass
+                    
                     placed_under_user_id = placement_context.get('placed_under_user_id')
                     placement_level = placement_context.get('level')
                     placement_position = placement_context.get('position')
-                    # Case A: Middle child (position % 3 == 1) → Route to 2nd Upline (Grandparent)
-                    # This applies to ANY level, not just Level 2.
-                    # The "middle 3" rule means the middle child of any node contributes to that node's parent's reserve.
+
+                    # CRITICAL FIX: Middle 3 members (positions 1, 4, 7) earnings go to 2nd upline (Grandparent)
+                    # This applies to ANY level where a user is a middle child of their parent
                     if placed_under_user_id and placement_position is not None and int(placement_position) % 3 == 1:
                         print(f"[MATRIX ROUTING] Middle child detected (pos {placement_position}). Routing to 2nd upline.")
                         
                         # Find 2nd upline (Grandparent)
-                        # We need the parent of the placed_under_user_id
                         grandparent_id = None
                         try:
                             # Get parent's placement to find their parent
@@ -248,7 +248,6 @@ class FundDistributionService:
                             
                             if parent_tp:
                                 # Use upline_id (placement parent) or parent_id (referrer) depending on tree logic
-                                # For Matrix, we follow the placement tree structure
                                 grandparent_id = str(getattr(parent_tp, 'upline_id', None) or getattr(parent_tp, 'parent_id', None))
                         except Exception as e:
                             print(f"[MATRIX ROUTING] Error finding grandparent: {e}")

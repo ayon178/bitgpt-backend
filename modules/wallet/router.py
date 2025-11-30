@@ -540,7 +540,7 @@ async def get_leadership_stipend_income(
                 ls.save()
                 print(f"✅ Auto-created Leadership Stipend record for user {user_id} with {len(ls.tiers)} tiers")
             except Exception as e:
-                print(f"❌ Error creating Leadership Stipend record for user {user_id}: {e}")
+                print(f"Error creating Leadership Stipend record for user {user_id}: {e}")
                 import traceback
                 traceback.print_exc()
         
@@ -579,7 +579,7 @@ async def get_leadership_stipend_income(
                         if ls and ls.tiers and len(ls.tiers) > 0:
                             print(f"✅ Tiers found after manual reload: {len(ls.tiers)}")
                 except Exception as e:
-                    print(f"❌ Error initializing tiers for user {user_id}: {e}")
+                    print(f"Error initializing tiers for user {user_id}: {e}")
                     import traceback
                     traceback.print_exc()
             else:

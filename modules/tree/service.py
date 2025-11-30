@@ -53,14 +53,15 @@ class TreeService:
                 if ref_slot1:
                     referrer_level = ref_slot1.level
                     print(f"⚠️ Referrer {referrer_id} has no slot {slot_no} placement; using slot 1 level {referrer_level} as anchor")
+                    print(f"Referrer {referrer_id} has no slot {slot_no} placement; using slot 1 level {referrer_level} as anchor")
                 else:
                     # As a last resort, assume root level
                     referrer_level = 1
-                    print(f"⚠️ Referrer {referrer_id} has no placement; assuming level 1 for slot {slot_no}")
+                    print(f"Referrer {referrer_id} has no placement; assuming level 1 for slot {slot_no}")
             elif referrer_placement:
                 referrer_level = referrer_placement.level
             else:
-                print(f"❌ Referrer {referrer_id} not found in tree for {program} slot {slot_no}")
+                print(f"Referrer {referrer_id} not found in tree for {program} slot {slot_no}")
                 return False
             
             # Determine positions based on program type
@@ -104,7 +105,7 @@ class TreeService:
                     created_at=datetime.utcnow()
                 )
                 placement.save()
-                print(f"✅ Created {program} tree placement: User {user_id} at Level {user_level}, Position {available_position} under {referrer_id}")
+                print(f"Created {program} tree placement: User {user_id} at Level {user_level}, Position {available_position} under {referrer_id}")
                 return True
             
             # All direct positions filled - use level-wise BFS for spillover
@@ -200,14 +201,14 @@ class TreeService:
                     created_at=datetime.utcnow()
                 )
                 placement.save()
-                print(f"✅ Created {program} SPILLOVER placement: User {user_id} at Level {placement_info['level']}, Position {placement_info['position']} under {placement_info['upline_id']} (referred by {referrer_id})")
+                print(f"Created {program} SPILLOVER placement: User {user_id} at Level {placement_info['level']}, Position {placement_info['position']} under {placement_info['upline_id']} (referred by {referrer_id})")
                 return True
             
-            print(f"❌ No available position found in tree (shouldn't happen)")
+            print(f"No available position found in tree (shouldn't happen)")
             return False
             
         except Exception as e:
-            print(f"❌ Error creating tree placement: {e}")
+            print(f"Error creating tree placement: {e}")
             import traceback
             traceback.print_exc()
             return False

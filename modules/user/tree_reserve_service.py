@@ -68,9 +68,11 @@ class TreeUplineReserveService:
         Add funds to tree upline's reserve for next slot activation
         """
         try:
+            print(f"[RESERVE_DEBUG] add_to_reserve_fund called: user={tree_upline_id}, program={program}, slot={slot_no}, amount={amount}")
             # Get current reserve balance
             current_balance = self.get_reserve_balance(tree_upline_id, program, slot_no)
             new_balance = current_balance + amount
+            print(f"[RESERVE_DEBUG] Balance: current={current_balance}, new={new_balance}")
             
             # Create reserve ledger entry
             reserve_entry = ReserveLedger(
@@ -89,11 +91,15 @@ class TreeUplineReserveService:
             self._update_reserve_wallet(tree_upline_id, program, new_balance)
             
             # Check if reserve is sufficient for next slot activation
+            print(f"[RESERVE_DEBUG] Calling _check_auto_activation")
             self._check_auto_activation(tree_upline_id, program, slot_no, new_balance)
             
             return True, f"Added {amount} to reserve fund. New balance: {new_balance}"
             
         except Exception as e:
+            print(f"[RESERVE_DEBUG] Error in add_to_reserve_fund: {e}")
+            import traceback
+            traceback.print_exc()
             return False, f"Error adding to reserve fund: {str(e)}"
     
     def get_reserve_balance(self, user_id: str, program: str, slot_no: int) -> Decimal:
@@ -144,6 +150,7 @@ class TreeUplineReserveService:
     def _check_auto_activation(self, user_id: str, program: str, current_slot: int, reserve_balance: Decimal):
         """Check if reserve balance is sufficient for next slot activation"""
         try:
+            print(f"[RESERVE_DEBUG] _check_auto_activation: user={user_id}, program={program}, current_slot={current_slot}, balance={reserve_balance}")
             # Get next slot information
             next_slot_no = current_slot + 1
             next_slot_catalog = SlotCatalog.objects(
@@ -153,32 +160,44 @@ class TreeUplineReserveService:
             ).first()
             
             if not next_slot_catalog:
+                print(f"[RESERVE_DEBUG] No catalog found for {program} slot {next_slot_no}")
                 return False
             
-            # Calculate upgrade cost (difference between next slot and current slot)
+            # Calculate upgrade cost
             upgrade_cost = next_slot_catalog.price
+            print(f"[RESERVE_DEBUG] Next slot {next_slot_no} cost: {upgrade_cost}")
             
-            # Try to get current slot price to calculate difference
-            try:
-                current_slot_catalog = SlotCatalog.objects(
-                    program=program,
-                    slot_no=current_slot,
-                    is_active=True
-                ).first()
-                if current_slot_catalog:
-                    upgrade_cost = next_slot_catalog.price - current_slot_catalog.price
-            except Exception:
-                pass
+            # For Binary, use difference logic. For Matrix, use full price.
+            if program == 'binary':
+                try:
+                    current_slot_catalog = SlotCatalog.objects(
+                        program=program,
+                        slot_no=current_slot,
+                        is_active=True
+                    ).first()
+                    if current_slot_catalog:
+                        upgrade_cost = next_slot_catalog.price - current_slot_catalog.price
+                        print(f"[RESERVE_DEBUG] Binary upgrade cost adjusted to: {upgrade_cost}")
+                except Exception:
+                    pass
             
             # Check if reserve is sufficient
+            print(f"[RESERVE_DEBUG] Checking: {reserve_balance} >= {upgrade_cost}? {reserve_balance >= upgrade_cost}")
             if reserve_balance >= upgrade_cost:
                 # Auto-activate next slot
-                return self._auto_activate_slot(user_id, program, next_slot_no, upgrade_cost, reserve_balance)
+                print(f"[RESERVE_DEBUG] Sufficient reserve! Calling _auto_activate_slot")
+                result = self._auto_activate_slot(user_id, program, next_slot_no, upgrade_cost, reserve_balance)
+                print(f"[RESERVE_DEBUG] _auto_activate_slot returned: {result}")
+                return result
+            else:
+                print(f"[RESERVE_DEBUG] Insufficient reserve: {reserve_balance} < {upgrade_cost}")
             
             return False
             
         except Exception as e:
-            print(f"Error checking auto activation: {e}")
+            print(f"[RESERVE_DEBUG] Error in _check_auto_activation: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _auto_activate_slot(self, user_id: str, program: str, slot_no: int, 
@@ -204,6 +223,7 @@ class TreeUplineReserveService:
             ).first()
             
             if not catalog:
+                print(f"[RESERVE_DEBUG] Catalog not found for {program} slot {slot_no}")
                 return False
             
             # Create slot activation
@@ -403,6 +423,8 @@ class TreeUplineReserveService:
             
         except Exception as e:
             print(f"Error in auto activation: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _deduct_reserve_fund(self, user_id: str, program: str, slot_no: int, amount: Decimal, tx_hash: str):

@@ -59,6 +59,7 @@ class MatrixService:
     }
     
     def join_matrix(self, user_id: str, referrer_id: str, tx_hash: str, amount: Decimal) -> Dict[str, Any]:
+        print(f"[MATRIX_SERVICE] join_matrix called for {user_id}", flush=True)
         """
         Join Matrix program with $11 USDT and trigger all auto calculations
         
@@ -99,17 +100,22 @@ class MatrixService:
                 raise ValueError(f"Matrix join amount must be ${expected_amount} USDT")
             
             # Check if user already in Matrix program
+            print(f"[MATRIX_SERVICE] Checking existing tree for {user_id}", flush=True)
             existing_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
             if existing_tree:
+                print(f"[MATRIX_SERVICE] User {user_id} already in Matrix", flush=True)
                 return {"success": False, "error": "User already in Matrix program"}
             
             currency = ensure_currency_for_program('matrix', 'USDT')
             
             # 1. Create MatrixTree for the user
+            print(f"[MATRIX_SERVICE] Creating MatrixTree for {user_id}", flush=True)
             matrix_tree = self._create_matrix_tree(user_id)
+            print(f"[MATRIX_SERVICE] MatrixTree created for {user_id}", flush=True)
             
             # 2. Activate Slot-1 (STARTER) - $11 USDT
             # Check if MatrixActivation already exists
+            print(f"[MATRIX_SERVICE] Checking MatrixActivation for {user_id}", flush=True)
             existing_activation = MatrixActivation.objects(
                 user_id=ObjectId(user_id),
                 slot_no=1,
@@ -117,19 +123,21 @@ class MatrixService:
             ).first()
             
             if existing_activation:
-                print(f"⚠️ MatrixActivation already exists for user {user_id}, slot 1")
+                print(f"MatrixActivation already exists for user {user_id}, slot 1")
                 activation = existing_activation
             else:
-                print(f"🔍 Creating MatrixActivation for user {user_id}, slot 1...")
+                print(f"Creating MatrixActivation for user {user_id}, slot 1...")
                 activation = self._create_matrix_activation(
                     user_id, 1, self.MATRIX_SLOTS[1]['name'], 
                     'initial', amount, tx_hash
                 )
-                print(f"✅ Created MatrixActivation for user {user_id}, slot 1")
+                print(f"Created MatrixActivation for user {user_id}, slot 1")
             
             # 3. Place user in upline tree with sweepover-aware BFS (slot 1 at join)
             # Place under the direct referrer tree, with sweepover escalation as needed
+            print(f"[MATRIX_SERVICE] Placing user {user_id} in matrix tree", flush=True)
             placement_result = self._place_user_in_matrix_tree(user_id, direct_referrer_id, matrix_tree, slot_no=1)
+            print(f"[MATRIX_SERVICE] User {user_id} placed in matrix tree", flush=True)
             
             # 4. Initialize MatrixAutoUpgrade tracking
             self._initialize_matrix_auto_upgrade(user_id)
@@ -164,21 +172,53 @@ class MatrixService:
                     _ref_pl.save()
 
                 # Ensure user has a placement for Matrix slot 1 (idempotent)
+                # CRITICAL FIX: Manually create TreePlacement based on MatrixTree placement result
+                # This ensures TreePlacement (used for funds) matches MatrixTree (used for structure)
                 _existing_user_tp = _TPInit.objects(
                     user_id=ObjectId(user_id),
                     program="matrix",
                     slot_no=1,
                     is_active=True,
                 ).first()
+                
                 if not _existing_user_tp:
-                    _tree_service.place_user_in_tree(
-                        user_id=ObjectId(user_id),
-                        referrer_id=ObjectId(referrer_id),
-                        program="matrix",
-                        slot_no=1,
-                    )
+                    if placement_result and placement_result.get("success"):
+                        # Map integer position to string position
+                        # 0 -> left, 1 -> middle, 2 -> right (modulo 3)
+                        pos_int = placement_result.get("position", 0)
+                        pos_str_map = {0: "left", 1: "middle", 2: "right"}
+                        pos_str = pos_str_map.get(pos_int % 3, "left")
+                        
+                        # Determine parent from placement result
+                        placed_under_id = placement_result.get("placed_under_user_id")
+                        
+                        # Set is_upline_reserve flag for middle positions (pos % 3 == 1)
+                        is_reserve = (pos_int % 3 == 1)
+                        
+                        _TPInit(
+                            user_id=ObjectId(user_id),
+                            program="matrix",
+                            parent_id=ObjectId(placed_under_id) if placed_under_id else ObjectId(referrer_id),
+                            upline_id=ObjectId(placed_under_id) if placed_under_id else ObjectId(referrer_id),
+                            position=pos_str,
+                            level=placement_result.get("level", 1),
+                            slot_no=1,
+                            is_active=True,
+                            is_upline_reserve=is_reserve,
+                            created_at=_DTInit.utcnow(),
+                        ).save()
+                        print(f"[MATRIX_SERVICE] Manually created TreePlacement for {user_id}: parent={placed_under_id}, pos={pos_str}, reserve={is_reserve}")
+                    else:
+                        # Fallback to TreeService if placement result missing (should not happen)
+                        print(f"[MATRIX_SERVICE] Warning: No placement result, falling back to TreeService")
+                        _tree_service.place_user_in_tree(
+                            user_id=ObjectId(user_id),
+                            referrer_id=ObjectId(referrer_id),
+                            program="matrix",
+                            slot_no=1,
+                        )
             except Exception as _e_init:
-                print(f"⚠️ Pre-distribution Matrix TreePlacement ensure failed: {_e_init}")
+                print(f"Pre-distribution Matrix TreePlacement ensure failed: {_e_init}")
             
             # 5. Distribute funds and commissions AFTER TreePlacement so placement_context is accurate
             distribution_result = {"success": False, "error": "skipped"}
@@ -186,8 +226,10 @@ class MatrixService:
             
             # 5c. After TreePlacement, compute accurate placement_context and run distributions
             try:
+                print(f"[MATRIX_SERVICE] Starting distribution block for {user_id}", flush=True)
                 from modules.tree.model import TreePlacement as _TP
                 from modules.fund_distribution.service import FundDistributionService
+                print(f"[MATRIX_SERVICE] Imported FundDistributionService", flush=True)
                 fund_service = FundDistributionService()
                 tp = _TP.objects(user_id=ObjectId(user_id), program='matrix', slot_no=1, is_active=True).first()
                 placement_ctx = None
@@ -201,24 +243,56 @@ class MatrixService:
                         'level': int(getattr(tp, 'level', 0)),
                         'position': pos_idx
                     }
-                distribution_result = fund_service.distribute_matrix_funds(
-                    user_id=user_id,
-                    amount=amount,
-                    slot_no=1,
-                    referrer_id=direct_referrer_id,
-                    tx_hash=tx_hash,
-                    placement_context=placement_ctx
-                )
-                commission_results = self._process_matrix_commissions(
-                    user_id,
-                    direct_referrer_id,
-                    amount,
-                    currency,
-                    placement_context=placement_ctx,
-                    slot_no=1
-                )
+                
+                # --- MIDDLE 3 LOGIC START ---
+                skip_distribution = False
+                if placement_ctx and placement_ctx.get('placed_under_user_id'):
+                    # Resolve Level 2 Upline (Grandparent)
+                    # We use level=1 because the user is placed directly under 'placed_under_user_id' (Level 1 Upline)
+                    l1, l2, l3 = self._resolve_three_tree_uplines(
+                        placement_ctx['placed_under_user_id'],
+                        1, 
+                        placement_ctx['position']
+                    )
+                    
+                    if l2:
+                        print(f"[MATRIX_SERVICE] Checking Middle 3 status for {user_id} relative to {l2}", flush=True)
+                        # Check if I am Middle 3 of l2
+                        success, msg = self.middle_3_service.collect_middle_3_earnings(
+                            l2, 1, amount, user_id, tx_hash
+                        )
+                        if success:
+                            print(f"[MATRIX_SERVICE] Middle 3 earnings collected for {l2}: {msg}", flush=True)
+                            skip_distribution = True
+                        else:
+                            print(f"[MATRIX_SERVICE] Middle 3 check failed: {msg}", flush=True)
+                # --- MIDDLE 3 LOGIC END ---
+
+                if not skip_distribution:
+                    print(f"[MATRIX_SERVICE] Calling distribute_matrix_funds for {user_id}", flush=True)
+                    distribution_result = fund_service.distribute_matrix_funds(
+                        user_id=user_id,
+                        amount=amount,
+                        slot_no=1,
+                        referrer_id=direct_referrer_id,
+                        tx_hash=tx_hash,
+                        placement_context=placement_ctx
+                    )
+                    print(f"[MATRIX_SERVICE] distribute_matrix_funds returned: {distribution_result.get('success')}", flush=True)
+                    print(f"[MATRIX_SERVICE] Calling _process_matrix_commissions", flush=True)
+                    commission_results = self._process_matrix_commissions(
+                        user_id,
+                        direct_referrer_id,
+                        amount,
+                        currency,
+                        placement_context=placement_ctx,
+                        slot_no=1
+                    )
+                    print(f"[MATRIX_SERVICE] _process_matrix_commissions returned", flush=True)
             except Exception as e:
-                print(f" Matrix post-placement distribution error: {e}")
+                print(f" Matrix post-placement distribution error: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
                 pass
 
             # 6. Process special program integrations
@@ -278,7 +352,7 @@ class MatrixService:
                 
                 tree_service = TreeService()
                 
-                print(f"🔍 Creating TreePlacement record for Matrix user {user_id} under {referrer_id}")
+                print(f"Creating TreePlacement record for Matrix user {user_id} under {referrer_id}")
                 
                 # First, ensure referrer has TreePlacement record
                 referrer_placement = TreePlacement.objects(
@@ -289,7 +363,7 @@ class MatrixService:
                 ).first()
                 
                 if not referrer_placement:
-                    print(f"⚠️ Referrer {referrer_id} doesn't have TreePlacement record, creating one...")
+                    print(f"Referrer {referrer_id} doesn't have TreePlacement record, creating one...")
                     # Create TreePlacement for referrer (assuming they are root level)
                     referrer_placement = TreePlacement(
                         user_id=ObjectId(referrer_id),
@@ -303,7 +377,7 @@ class MatrixService:
                         created_at=datetime.utcnow()
                     )
                     referrer_placement.save()
-                    print(f"✅ Created TreePlacement for referrer {referrer_id}")
+                    print(f"Created TreePlacement for referrer {referrer_id}")
                 
                 # Now place user in matrix tree under their referrer
                 matrix_placement = tree_service.place_user_in_tree(
@@ -315,14 +389,14 @@ class MatrixService:
                 
                 if matrix_placement:
                     tree_placement_result = {"success": True, "message": "Matrix tree placement created"}
-                    print(f"✅ Matrix TreePlacement created successfully for user {user_id} under {referrer_id}")
+                    print(f"Matrix TreePlacement created successfully for user {user_id} under {referrer_id}")
                 else:
                     tree_placement_result = {"success": False, "message": "Matrix tree placement failed"}
-                    print(f"⚠️ Matrix TreePlacement creation returned False for user {user_id}")
+                    print(f"Matrix TreePlacement creation returned False for user {user_id}")
                     
             except Exception as e:
                 tree_placement_result = {"success": False, "error": str(e)}
-                print(f"❌ Error creating Matrix TreePlacement: {e}")
+                print(f"Error creating Matrix TreePlacement: {e}")
                 import traceback
                 traceback.print_exc()
                 # Don't fail matrix join if tree placement fails
@@ -412,7 +486,7 @@ class MatrixService:
                 if not unique_tx_hash or unique_tx_hash == "tx":
                     unique_tx_hash = f"matrix_{user_id}_{slot_no}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}_{''.join(random.choices(string.ascii_lowercase+string.digits, k=6))}"
                 
-                print(f"🔍 Creating SlotActivation record for user {user_id}, slot {slot_no}, tx_hash: {unique_tx_hash}")
+                print(f"Creating SlotActivation record for user {user_id}, slot {slot_no}, tx_hash: {unique_tx_hash}")
                 
                 slot_activation = SlotActivation(
                     user_id=ObjectId(user_id),
@@ -429,15 +503,15 @@ class MatrixService:
                     completed_at=datetime.utcnow()
                 )
                 
-                print(f"🔍 SlotActivation object created, validating...")
+                print(f"SlotActivation object created, validating...")
                 slot_activation.validate()
-                print(f"🔍 SlotActivation validation passed, saving...")
+                print(f"SlotActivation validation passed, saving...")
                 slot_activation.save()
-                print(f"✅ SlotActivation record created for Matrix slot {slot_no} with tx_hash: {unique_tx_hash}")
+                print(f"SlotActivation record created for Matrix slot {slot_no} with tx_hash: {unique_tx_hash}")
             except Exception as e:
-                print(f"⚠️ Failed to create SlotActivation record: {str(e)}")
+                print(f"Failed to create SlotActivation record: {str(e)}")
                 import traceback
-                print(f"⚠️ Full error traceback: {traceback.format_exc()}")
+                print(f"Full error traceback: {traceback.format_exc()}")
             
             return activation
         except Exception as e:
@@ -476,16 +550,19 @@ class MatrixService:
                 matrix_tree = suspected_tree
 
             # Resolve target parent via sweepover escalation
+            print(f"[MATRIX_PLACE] Resolving target parent tree for {user_id}", flush=True)
             target_parent_tree = self._resolve_target_parent_tree_for_slot(referrer_id, slot_no)
             if not target_parent_tree:
                 raise ValueError("No eligible parent tree found for placement")
 
             # Find first available position using BFS within the resolved parent tree
+            print(f"[MATRIX_PLACE] Finding BFS position in tree of {target_parent_tree.user_id}", flush=True)
             placement_position = self._find_bfs_placement_position(target_parent_tree)
             used_escalation = (str(target_parent_tree.user_id) != str(referrer_id))
             used_mother = (MATRIX_MOTHER_ID and str(target_parent_tree.user_id) == MATRIX_MOTHER_ID)
             if not placement_position:
                 # escalate one level further: attempt next eligible ancestor if current has no space
+                print(f"[MATRIX_PLACE] No position found, attempting escalation", flush=True)
                 next_parent_tree = self._resolve_next_eligible_ancestor(target_parent_tree.user_id, slot_no, start_from_current=True)
                 if next_parent_tree:
                     placement_position = self._find_bfs_placement_position(next_parent_tree)
@@ -493,8 +570,10 @@ class MatrixService:
                         target_parent_tree = next_parent_tree
                         used_escalation = True
                         used_mother = (MATRIX_MOTHER_ID and str(target_parent_tree.user_id) == MATRIX_MOTHER_ID)
-            if not placement_position:
-                raise ValueError("No available positions in eligible matrix trees for placement")
+                if not placement_position:
+                    raise ValueError("No available positions in eligible matrix trees for placement")
+            
+            print(f"[MATRIX_PLACE] Position found: {placement_position}", flush=True)
             
             # Create matrix node for the new user
             matrix_node = MatrixNode(
@@ -525,12 +604,14 @@ class MatrixService:
             referrer_tree.updated_at = datetime.utcnow()
             try:
                 referrer_tree.save()
+                print(f"[MATRIX_PLACE] Saved referrer tree {referrer_tree.user_id}", flush=True)
             except Exception:
                 # In test scenarios, save might fail with mocked objects
                 pass
 
             # Mirror Level-2 node into the direct upline's tree when a Level-1 child is placed under referrer
             try:
+                print(f"[MATRIX_PLACE] Checking mirroring for level {placement_position['level']}", flush=True)
                 if placement_position['level'] == 1:
                     # Fetch direct upline (owner of parent tree)
                     ref_owner = User.objects(id=referrer_tree.user_id).first()
@@ -790,7 +871,9 @@ class MatrixService:
     def _initialize_matrix_auto_upgrade(self, user_id: str):
         """Initialize MatrixAutoUpgrade tracking"""
         try:
+            print(f"[MATRIX_SERVICE] Initializing MatrixAutoUpgrade for {user_id}", flush=True)
             if not MatrixAutoUpgrade.objects(user_id=ObjectId(user_id)).first():
+                print(f"[MATRIX_SERVICE] Creating new MatrixAutoUpgrade record for {user_id}", flush=True)
                 MatrixAutoUpgrade(
                 user_id=ObjectId(user_id),
                     current_slot_no=1,
@@ -814,6 +897,7 @@ class MatrixService:
             # FundDistributionService.distribute_matrix_funds (matrix_percentages['partner_incentive'])
             # which creates IncomeEvent + WalletLedger entries and credits the upline wallet.
             # To avoid double-crediting, we DO NOT call calculate_partner_incentive here.
+            print(f"[MATRIX_COMM] Calculating joining commission", flush=True)
             joining_result = self.commission_service.calculate_joining_commission(
                 from_user_id=user_id,
                 program='matrix',
@@ -830,10 +914,12 @@ class MatrixService:
             }
             
             # 3. Level Distribution (20/20/60 within the 40% pool)
+            print(f"[MATRIX_COMM] Calculating level distribution", flush=True)
             level_result = self._calculate_level_distribution(user_id, amount, currency, placement_context=placement_context, slot_no=slot_no)
             results['level_distribution'] = level_result
             
             # 4. Spark Bonus (8% contribution to Spark fund)
+            print(f"[MATRIX_COMM] Contributing to Spark fund", flush=True)
             spark_result = self.spark_service.contribute_to_fund(
                 program='matrix',
                 amount=amount,
@@ -845,14 +931,17 @@ class MatrixService:
             results['spark_bonus'] = spark_result
             
             # 5. Royal Captain (4% contribution to Royal Captain fund)
+            print(f"[MATRIX_COMM] Contributing to Royal Captain fund", flush=True)
             royal_captain_result = self._contribute_to_royal_captain_fund(user_id, amount, currency)
             results['royal_captain'] = royal_captain_result
             
             # 6. President Reward (3% contribution to President Reward fund)
+            print(f"[MATRIX_COMM] Contributing to President Reward fund", flush=True)
             president_result = self._contribute_to_president_reward_fund(user_id, amount, currency)
             results['president_reward'] = president_result
             
             # 7. Shareholders (5% contribution to Shareholders fund)
+            print(f"[MATRIX_COMM] Contributing to Shareholders fund", flush=True)
             shareholders_result = self._contribute_to_shareholders_fund(user_id, amount, currency)
             results['shareholders'] = shareholders_result
             
@@ -868,6 +957,7 @@ class MatrixService:
             }
             
             # 9. Mentorship Bonus (10% to super upline - direct-of-direct)
+            print(f"[MATRIX_COMM] Processing Mentorship Bonus", flush=True)
             mentorship_result = self.mentorship_service.process_matrix_mentorship(
                 user_id=user_id,
                 referrer_id=referrer_id,
@@ -876,6 +966,7 @@ class MatrixService:
             )
             results['mentorship_bonus'] = mentorship_result
             
+            print(f"[MATRIX_COMM] Finished _process_matrix_commissions", flush=True)
             return results
             
         except Exception as e:
@@ -3179,20 +3270,20 @@ class MatrixService:
     def trigger_rank_update_automatic(self, user_id: str):
         """Automatically trigger rank update when slots are activated."""
         try:
-            print(f"🎯 Triggering automatic rank update for user {user_id}")
+            print(f"Triggering automatic rank update for user {user_id}")
             
             # Update rank
             rank_result = self.update_user_rank_from_programs(user_id)
             
             if rank_result.get("success"):
-                print(f"✅ Rank updated automatically")
+                print(f"Rank updated automatically")
                 print(f"   - Old rank: {rank_result.get('old_rank')}")
                 print(f"   - New rank: {rank_result.get('new_rank')}")
                 print(f"   - Binary slots: {rank_result.get('binary_slots')}")
                 print(f"   - Matrix slots: {rank_result.get('matrix_slots')}")
                 print(f"   - Total slots: {rank_result.get('total_slots')}")
             else:
-                print(f"❌ Rank update failed: {rank_result.get('error')}")
+                print(f"Rank update failed: {rank_result.get('error')}")
                 
         except Exception as e:
             print(f"Error in automatic rank update: {e}")
@@ -3363,7 +3454,7 @@ class MatrixService:
                     description=f"Global Reserved Upgrade: 30% of Global contribution"
                 )
             
-            print(f"✅ Level Distribution processed: ${level_distribution['total_level']}")
+            print(f"Level Distribution processed: ${level_distribution['total_level']}")
         except Exception as e:
             print(f"Error processing Level Distribution: {e}")
     
@@ -3379,7 +3470,7 @@ class MatrixService:
                     description=f"Global Profit Distribution: 30% of Global contribution"
                 )
             
-            print(f"✅ Profit Distribution processed: ${net_profit}")
+            print(f"Profit Distribution processed: ${net_profit}")
         except Exception as e:
             print(f"Error processing Profit Distribution: {e}")
     
@@ -3427,7 +3518,7 @@ class MatrixService:
                 )
             
             total_special = sum(special_bonuses.values())
-            print(f"✅ Special Bonuses processed: ${total_special}")
+            print(f"Special Bonuses processed: ${total_special}")
         except Exception as e:
             print(f"Error processing Special Bonuses: {e}")
     
@@ -3488,18 +3579,18 @@ class MatrixService:
     def trigger_global_integration_automatic(self, user_id: str):
         """Automatically trigger Global Program integration when Matrix slot is activated."""
         try:
-            print(f"🎯 Triggering automatic Global Program integration for user {user_id}")
+            print(f"Triggering automatic Global Program integration for user {user_id}")
             
             # Integrate with Global Program
             integration_result = self.integrate_with_global_program(user_id)
             
             if integration_result.get("success"):
-                print(f"✅ Global Program integration completed automatically")
+                print(f"Global Program integration completed automatically")
                 print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
                 print(f"   - Global contribution: ${integration_result.get('global_contribution')}")
                 print(f"   - Distribution processed: ${integration_result.get('distribution_result', {}).get('total_distributed', 0)}")
             else:
-                print(f"❌ Global Program integration failed: {integration_result.get('error')}")
+                print(f"Global Program integration failed: {integration_result.get('error')}")
                 
         except Exception as e:
             print(f"Error in automatic Global Program integration: {e}")
@@ -3597,7 +3688,7 @@ class MatrixService:
                     description=f"Leadership Stipend daily return: {user_percentage * 100}% of slot {matrix_slot} contribution"
                 )
             
-            print(f"✅ Leadership Stipend distribution processed: ${user_distribution} for slot {matrix_slot}")
+            print(f"Leadership Stipend distribution processed: ${user_distribution} for slot {matrix_slot}")
             
             return distribution
         except Exception as e:
@@ -3696,18 +3787,18 @@ class MatrixService:
     def trigger_leadership_stipend_integration_automatic(self, user_id: str):
         """Automatically trigger Leadership Stipend integration when Matrix slot is activated."""
         try:
-            print(f"🎯 Triggering automatic Leadership Stipend integration for user {user_id}")
+            print(f"Triggering automatic Leadership Stipend integration for user {user_id}")
             
             # Integrate with Leadership Stipend
             integration_result = self.integrate_with_leadership_stipend(user_id)
             
             if integration_result.get("success"):
-                print(f"✅ Leadership Stipend integration completed automatically")
+                print(f"Leadership Stipend integration completed automatically")
                 print(f"   - Matrix slot: {integration_result.get('matrix_slot', 0)}")
                 print(f"   - Stipend contribution: ${integration_result.get('stipend_contribution', 0)}")
                 print(f"   - Daily return: ${integration_result.get('stipend_status', {}).get('daily_return', 0)}")
             else:
-                print(f"❌ Leadership Stipend integration failed: {integration_result.get('error')}")
+                print(f"Leadership Stipend integration failed: {integration_result.get('error')}")
                 
         except Exception as e:
             print(f"Error in automatic Leadership Stipend integration: {e}")
@@ -3842,7 +3933,7 @@ class MatrixService:
                     description=f"Jackpot Open Pool: 50% of Jackpot contribution"
                 )
             
-            print(f"✅ Open Pool processed: ${amount}")
+            print(f"Open Pool processed: ${amount}")
         except Exception as e:
             print(f"Error processing Open Pool: {e}")
     
@@ -3858,7 +3949,7 @@ class MatrixService:
                     description=f"Jackpot Top Direct Promoters Pool: 30% of Jackpot contribution"
                 )
             
-            print(f"✅ Top Direct Promoters Pool processed: ${amount}")
+            print(f"Top Direct Promoters Pool processed: ${amount}")
         except Exception as e:
             print(f"Error processing Top Direct Promoters Pool: {e}")
     
@@ -3874,7 +3965,7 @@ class MatrixService:
                     description=f"Jackpot Top Buyers Pool: 10% of Jackpot contribution"
                 )
             
-            print(f"✅ Top Buyers Pool processed: ${amount}")
+            print(f"Top Buyers Pool processed: ${amount}")
         except Exception as e:
             print(f"Error processing Top Buyers Pool: {e}")
     
@@ -3890,7 +3981,7 @@ class MatrixService:
                     description=f"Jackpot Binary Contribution: 5% of Jackpot contribution"
                 )
             
-            print(f"✅ Binary Contribution processed: ${amount}")
+            print(f"Binary Contribution processed: ${amount}")
         except Exception as e:
             print(f"Error processing Binary Contribution: {e}")
     
@@ -3928,7 +4019,7 @@ class MatrixService:
                     description=f"Jackpot Free Coupons: {coupons_awarded} free coupons for Binary slot upgrades"
                 )
                 
-                print(f"✅ Free coupons awarded: {coupons_awarded} coupons for slot {matrix_slot}")
+                print(f"Free coupons awarded: {coupons_awarded} coupons for slot {matrix_slot}")
             
             return {
                 "coupons_awarded": coupons_awarded,
@@ -4033,18 +4124,18 @@ class MatrixService:
     def trigger_jackpot_integration_automatic(self, user_id: str):
         """Automatically trigger Jackpot Program integration when Matrix slot is activated."""
         try:
-            print(f"🎯 Triggering automatic Jackpot Program integration for user {user_id}")
+            print(f"Triggering automatic Jackpot Program integration for user {user_id}")
             
             # Integrate with Jackpot Program
             integration_result = self.integrate_with_jackpot_program(user_id)
             
             if integration_result.get("success"):
-                print(f"✅ Jackpot Program integration completed automatically")
+                print(f"Jackpot Program integration completed automatically")
                 print(f"   - Matrix slot: {integration_result.get('matrix_slot', 0)}")
                 print(f"   - Jackpot contribution: ${integration_result.get('jackpot_contribution', 0)}")
                 print(f"   - Coupons awarded: {integration_result.get('coupon_result', {}).get('coupons_awarded', 0)}")
             else:
-                print(f"❌ Jackpot Program integration failed: {integration_result.get('error')}")
+                print(f"Jackpot Program integration failed: {integration_result.get('error')}")
                 
         except Exception as e:
             print(f"Error in automatic Jackpot Program integration: {e}")
@@ -4153,7 +4244,7 @@ class MatrixService:
                     description=f"NGS Instant Bonus: 5% of Matrix slot value - Can be cashed out instantly"
                 )
                 
-                print(f"✅ NGS Instant Bonus processed: ${instant_bonus}")
+                print(f"NGS Instant Bonus processed: ${instant_bonus}")
             
             return {
                 "instant_bonus": instant_bonus,
@@ -4178,7 +4269,7 @@ class MatrixService:
                     description=f"NGS Extra Earning Opportunities: 3% of Matrix slot value - Monthly opportunities based on upline activity"
                 )
                 
-                print(f"✅ NGS Extra Earning processed: ${extra_earning}")
+                print(f"NGS Extra Earning processed: ${extra_earning}")
             
             return {
                 "extra_earning": extra_earning,
@@ -4204,7 +4295,7 @@ class MatrixService:
                     description=f"NGS Upline Rank Bonus: 2% of Matrix slot value - 10% bonus when achieving same rank as upline"
                 )
                 
-                print(f"✅ NGS Upline Rank Bonus processed: ${upline_rank_bonus}")
+                print(f"NGS Upline Rank Bonus processed: ${upline_rank_bonus}")
             
             return {
                 "upline_rank_bonus": upline_rank_bonus,
@@ -4289,20 +4380,20 @@ class MatrixService:
     def trigger_ngs_integration_automatic(self, user_id: str):
         """Automatically trigger NGS integration when Matrix slot is activated."""
         try:
-            print(f"🎯 Triggering automatic NGS integration for user {user_id}")
+            print(f"Triggering automatic NGS integration for user {user_id}")
             
             # Integrate with NGS
             integration_result = self.integrate_with_newcomer_growth_support(user_id)
             
             if integration_result.get("success"):
-                print(f"✅ NGS integration completed automatically")
+                print(f"NGS integration completed automatically")
                 print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
                 print(f"   - Total benefits: ${integration_result.get('ngs_benefits', {}).get('total_benefits', 0)}")
                 print(f"   - Instant bonus: ${integration_result.get('ngs_benefits', {}).get('instant_bonus', 0)}")
                 print(f"   - Extra earning: ${integration_result.get('ngs_benefits', {}).get('extra_earning', 0)}")
                 print(f"   - Upline rank bonus: ${integration_result.get('ngs_benefits', {}).get('upline_rank_bonus', 0)}")
             else:
-                print(f"❌ NGS integration failed: {integration_result.get('error')}")
+                print(f"NGS integration failed: {integration_result.get('error')}")
                 
         except Exception as e:
             print(f"Error in automatic NGS integration: {e}")
@@ -4400,7 +4491,7 @@ class MatrixService:
                     description=f"Mentorship Bonus: 10% commission from direct-of-direct partners' joining fees and slot upgrades"
                 )
                 
-                print(f"✅ Mentorship Bonus distribution processed: ${direct_of_direct_commission}")
+                print(f"Mentorship Bonus distribution processed: ${direct_of_direct_commission}")
             
             return {
                 "direct_of_direct_commission": direct_of_direct_commission,
@@ -4428,7 +4519,7 @@ class MatrixService:
                     description=f"Direct-of-Direct Tracking: 10% commission from direct-of-direct partners"
                 )
                 
-                print(f"✅ Direct-of-Direct tracking processed: ${direct_of_direct_commission}")
+                print(f"Direct-of-Direct tracking processed: ${direct_of_direct_commission}")
             
             return {
                 "direct_of_direct_commission": direct_of_direct_commission,
@@ -4507,18 +4598,18 @@ class MatrixService:
     def trigger_mentorship_bonus_integration_automatic(self, user_id: str):
         """Automatically trigger Mentorship Bonus integration when Matrix slot is activated."""
         try:
-            print(f"🎯 Triggering automatic Mentorship Bonus integration for user {user_id}")
+            print(f"Triggering automatic Mentorship Bonus integration for user {user_id}")
             
             # Integrate with Mentorship Bonus
             integration_result = self.integrate_with_mentorship_bonus(user_id)
             
             if integration_result.get("success"):
-                print(f"✅ Mentorship Bonus integration completed automatically")
+                print(f"Mentorship Bonus integration completed automatically")
                 print(f"   - Matrix slot: {integration_result.get('matrix_slot')}")
                 print(f"   - Total benefits: ${integration_result.get('mentorship_benefits', {}).get('total_benefits', 0)}")
                 print(f"   - Direct-of-Direct commission: ${integration_result.get('mentorship_benefits', {}).get('direct_of_direct_commission', 0)}")
             else:
-                print(f"❌ Mentorship Bonus integration failed: {integration_result.get('error')}")
+                print(f"Mentorship Bonus integration failed: {integration_result.get('error')}")
                 
         except Exception as e:
             print(f"Error in automatic Mentorship Bonus integration: {e}")

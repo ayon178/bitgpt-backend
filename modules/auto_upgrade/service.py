@@ -526,7 +526,7 @@ class AutoUpgradeService:
                     reserve_entry.save()
                     print(f"[BINARY_ROUTING] ✅ ReserveLedger created: user={nth_upline}, slot={slot_no + 1}, amount={slot_value}")
                 except Exception as e:
-                    print(f"[BINARY_ROUTING] ❌ Failed to create ReserveLedger: {e}")
+                    print(f"[BINARY_ROUTING] Failed to create ReserveLedger: {e}")
                     import traceback
                     traceback.print_exc()
 
@@ -1036,7 +1036,7 @@ class AutoUpgradeService:
                                 except Exception as e:
                                     print(f"[BINARY_ROUTING] ⚠️ Cascade auto-upgrade check failed: {e}")
                             except Exception as e:
-                                print(f"[BINARY_ROUTING] ❌ Failed to create cascade ReserveLedger: {e}")
+                                print(f"[BINARY_ROUTING] Failed to create cascade ReserveLedger: {e}")
                         else:
                             # Not first/second: distribute via pools
                             from ..fund_distribution.service import FundDistributionService
@@ -1149,7 +1149,7 @@ class AutoUpgradeService:
             }
             
         except Exception as e:
-            print(f"[BINARY_ROUTING] ❌ Error in _auto_upgrade_from_reserve: {e}")
+            print(f"[BINARY_ROUTING] Error in _auto_upgrade_from_reserve: {e}")
             import traceback
             traceback.print_exc()
             return {
@@ -1364,7 +1364,7 @@ class AutoUpgradeService:
             }
             
         except Exception as e:
-            print(f"[MANUAL_UPGRADE] ❌ Error: {e}")
+            print(f"[MANUAL_UPGRADE] Error: {e}")
             import traceback
             traceback.print_exc()
             return {"success": False, "error": str(e)}
@@ -1467,7 +1467,7 @@ class AutoUpgradeService:
                             except Exception as e:
                                 print(f"[MANUAL_UPGRADE] ⚠️ Cascade auto-upgrade check failed: {e}")
                         except Exception as e:
-                            print(f"[MANUAL_UPGRADE] ❌ Failed to create cascade ReserveLedger: {e}")
+                            print(f"[MANUAL_UPGRADE] Failed to create cascade ReserveLedger: {e}")
                     else:
                         # Not first/second: distribute via pools (with slot N active check)
                         self._distribute_with_slot_check(user_id, slot_no, slot_cost)
@@ -1477,7 +1477,7 @@ class AutoUpgradeService:
                     print(f"[MANUAL_UPGRADE] ✅ Routed slot {slot_no} cost to mother wallet (no Nth upline)")
             
         except Exception as e:
-            print(f"[MANUAL_UPGRADE] ❌ Error routing cost: {e}")
+            print(f"[MANUAL_UPGRADE] Error routing cost: {e}")
             import traceback
             traceback.print_exc()
     
@@ -1542,7 +1542,7 @@ class AutoUpgradeService:
                 print(f"[MANUAL_UPGRADE] ✅ Distributed via pools normally (user has slot {slot_no})")
             
         except Exception as e:
-            print(f"[MANUAL_UPGRADE] ❌ Error in distribution with slot check: {e}")
+            print(f"[MANUAL_UPGRADE] Error in distribution with slot check: {e}")
             import traceback
             traceback.print_exc()
     
@@ -1590,7 +1590,7 @@ class AutoUpgradeService:
             print(f"[MANUAL_UPGRADE] ✅ Distributed non-level funds: {amount} BNB across {len(non_level_percentages)} pools")
             
         except Exception as e:
-            print(f"[MANUAL_UPGRADE] ❌ Error distributing non-level funds: {e}")
+            print(f"[MANUAL_UPGRADE] Error distributing non-level funds: {e}")
             import traceback
             traceback.print_exc()
     

@@ -949,9 +949,9 @@ class GlobalService:
             )
             try:
                 activation.save()
-                print(f"✅ Successfully created SlotActivation record for user {user.id}: program=global, slot_no=1, amount={expected_amount}")
+                print(f"Successfully created SlotActivation record for user {user.id}: program=global, slot_no=1, amount={expected_amount}")
             except Exception as e:
-                print(f"❌ Failed to save SlotActivation record for user {user.id}: {str(e)}")
+                print(f"Failed to save SlotActivation record for user {user.id}: {str(e)}")
                 return {"success": False, "error": f"Failed to create slot activation: {str(e)}"}
 
             # 1.1.3 Global Phase Progression Setup - Section 1.1.3 from GLOBAL_PROGRAM_AUTO_ACTIONS.md
@@ -1942,7 +1942,7 @@ class GlobalService:
             }
             
         except Exception as e:
-            print(f"❌ Failed to distribute Phase-2 completion income: {str(e)}")
+            print(f"Failed to distribute Phase-2 completion income: {str(e)}")
             return {"success": False, "error": str(e)}
 
     def get_phase_seats(self, user_id: str, phase: str) -> Dict[str, Any]:
@@ -4061,8 +4061,10 @@ class GlobalService:
             # Add to shareholders fund pool
             try:
                 # Get or create ShareholdersFund record
+                print(f"[GLOBAL_SHAREHOLDERS] Fetching ShareholdersFund", flush=True)
                 shareholders_fund = ShareholdersFund.objects.first()
                 if not shareholders_fund:
+                    print(f"[GLOBAL_SHAREHOLDERS] Creating new ShareholdersFund", flush=True)
                     shareholders_fund = ShareholdersFund(
                         total_contributed=Decimal('0'),
                         total_distributed=Decimal('0'),
@@ -4072,10 +4074,13 @@ class GlobalService:
                     )
 
                 # Add contribution to fund (convert Decimal to float for FloatField)
+                print(f"[GLOBAL_SHAREHOLDERS] Updating ShareholdersFund", flush=True)
                 shareholders_fund.total_contributed = float(Decimal(str(shareholders_fund.total_contributed or 0.0)) + shareholders_contribution)
                 shareholders_fund.available_amount = float(Decimal(str(shareholders_fund.available_amount or 0.0)) + shareholders_contribution)
                 shareholders_fund.last_updated = datetime.utcnow()
+                print(f"[GLOBAL_SHAREHOLDERS] Saving ShareholdersFund", flush=True)
                 shareholders_fund.save()
+                print(f"[GLOBAL_SHAREHOLDERS] Saved ShareholdersFund", flush=True)
 
                 print(f"Shareholders Fund updated: total_contributed=${shareholders_fund.total_contributed}, available_amount=${shareholders_fund.available_amount}")
 

@@ -38,7 +38,13 @@ class MatrixMiddle3Service:
             # Find Level 2 nodes (positions 4, 5, 6 are middle 3)
             level_2_nodes = []
             for node in matrix_tree.nodes:
-                if node.level == 2 and node.position in [3, 4, 5]:  # 0-based indexing
+                # Generalized logic for infinite levels:
+                # Middle child is always the 2nd child (index 1) of any parent.
+                # In 0-based indexing with 3 children per node:
+                # Level 1: 0, 1(M), 2
+                # Level 2: 0,1,2 | 3,4(M),5 | 6,7,8 -> Middle are 1, 4, 7
+                # Formula: position % 3 == 1
+                if node.level >= 2 and (node.position % 3 == 1):
                     level_2_nodes.append({
                         "user_id": str(node.user_id),
                         "level": node.level,
@@ -85,7 +91,9 @@ class MatrixMiddle3Service:
             
             if success:
                 # Check if reserve is sufficient for next slot upgrade
-                self._check_next_slot_upgrade(main_user_id, slot_no)
+                print(f"[MIDDLE3_DEBUG] Checking auto-upgrade for user {main_user_id} after collecting {earning_amount}")
+                upgrade_result = self._check_next_slot_upgrade(main_user_id, slot_no)
+                print(f"[MIDDLE3_DEBUG] Auto-upgrade check returned: {upgrade_result}")
                 return True, f"Collected {earning_amount} from middle 3 user for next slot upgrade"
             else:
                 return False, message
@@ -170,6 +178,7 @@ class MatrixMiddle3Service:
     def _check_next_slot_upgrade(self, user_id: str, current_slot: int):
         """Check if reserve balance is sufficient for next slot upgrade"""
         try:
+            print(f"[MIDDLE3_DEBUG] _check_next_slot_upgrade called: user={user_id}, current_slot={current_slot}")
             # Get next slot information
             next_slot_no = current_slot + 1
             next_slot_catalog = SlotCatalog.objects(
@@ -179,15 +188,23 @@ class MatrixMiddle3Service:
             ).first()
             
             if not next_slot_catalog:
+                print(f"[MIDDLE3_DEBUG] No catalog found for slot {next_slot_no}")
                 return False
             
             next_slot_cost = next_slot_catalog.price
             reserve_balance = self._get_reserve_balance(user_id, 'matrix', current_slot)
             
+            print(f"[MIDDLE3_DEBUG] Reserve check: balance={reserve_balance}, cost={next_slot_cost}, sufficient={reserve_balance >= next_slot_cost}")
+            
             # Check if reserve is sufficient
             if reserve_balance >= next_slot_cost:
                 # Auto-upgrade next slot
-                return self._auto_upgrade_slot(user_id, next_slot_no, next_slot_cost, reserve_balance)
+                print(f"[MIDDLE3_DEBUG] Calling _auto_upgrade_slot for slot {next_slot_no}")
+                result = self._auto_upgrade_slot(user_id, next_slot_no, next_slot_cost, reserve_balance)
+                print(f"[MIDDLE3_DEBUG] _auto_upgrade_slot returned: {result}")
+                return result
+            else:
+                print(f"[MIDDLE3_DEBUG] Insufficient reserve: {reserve_balance} < {next_slot_cost}")
             
             return False
             
@@ -199,6 +216,7 @@ class MatrixMiddle3Service:
                           available_reserve: Decimal) -> bool:
         """Automatically upgrade to next slot using reserve funds"""
         try:
+            print(f"[MIDDLE3_DEBUG] _auto_upgrade_slot started: user={user_id}, slot={slot_no}, cost={slot_cost}")
             # Check if user already has this slot activated
             existing_activation = SlotActivation.objects(
                 user_id=ObjectId(user_id),
@@ -208,6 +226,7 @@ class MatrixMiddle3Service:
             ).first()
             
             if existing_activation:
+                print(f"[MIDDLE3_DEBUG] Slot {slot_no} already activated for user {user_id}")
                 return False  # Already activated
             
             # Get slot catalog
@@ -218,6 +237,7 @@ class MatrixMiddle3Service:
             ).first()
             
             if not catalog:
+                print(f"[MIDDLE3_DEBUG] No catalog found for slot {slot_no}")
                 return False
             
             # Create slot activation
@@ -226,8 +246,8 @@ class MatrixMiddle3Service:
                 program='matrix',
                 slot_no=slot_no,
                 slot_name=catalog.name,
-                activation_type='auto_upgrade',
-                upgrade_source='middle_3_reserve',
+                activation_type='auto',
+                upgrade_source='reserve',
                 amount_paid=slot_cost,
                 currency='USDT',
                 tx_hash=f"MIDDLE3-AUTO-{user_id}-S{slot_no}",
@@ -235,13 +255,16 @@ class MatrixMiddle3Service:
                 status='completed'
             )
             activation.save()
+            print(f"[MIDDLE3_DEBUG] SlotActivation created successfully")
             
             # Deduct from reserve fund
             remaining_reserve = available_reserve - slot_cost
+            print(f"[MIDDLE3_DEBUG] Deducting {slot_cost} from reserve, remaining: {remaining_reserve}")
             self._deduct_reserve_fund(user_id, 'matrix', slot_no - 1, slot_cost, 
                                     f"MIDDLE3-AUTO-{user_id}-S{slot_no}")
             
             # Update user's slot information
+            print(f"[MIDDLE3_DEBUG] Updating user matrix slot info")
             self._update_user_matrix_slot(user_id, catalog, slot_cost)
             
             # Create blockchain event
@@ -280,10 +303,13 @@ class MatrixMiddle3Service:
             except Exception:
                 pass
             
+            print(f"[MIDDLE3_DEBUG] ✅ Auto-upgrade completed successfully for slot {slot_no}")
             return True
             
         except Exception as e:
-            print(f"Error in auto upgrade: {e}")
+            print(f"[MIDDLE3_DEBUG] ❌ Error in auto upgrade: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _deduct_reserve_fund(self, user_id: str, program: str, slot_no: int, amount: Decimal, tx_hash: str):

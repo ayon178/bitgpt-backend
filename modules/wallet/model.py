@@ -1,4 +1,4 @@
-from mongoengine import Document, StringField, ObjectIdField, DecimalField, DateTimeField, IntField
+from mongoengine import Document, StringField, ObjectIdField, DecimalField, DateTimeField, IntField, BooleanField
 from datetime import datetime
 from decimal import Decimal
 
@@ -8,6 +8,14 @@ class UserWallet(Document):
     wallet_type = StringField(choices=['main', 'reserve', 'matrix', 'global'], required=True)
     balance = DecimalField(default=Decimal('0.00'), precision=8)
     currency = StringField(default='USDT')
+    
+    # Additional fields required by system
+    total_earnings = DecimalField(default=Decimal('0.00'), precision=8)
+    total_withdrawals = DecimalField(default=Decimal('0.00'), precision=8)
+    is_frozen = BooleanField(default=False)
+    
+    created_at = DateTimeField(default=datetime.utcnow)
+    updated_at = DateTimeField(default=datetime.utcnow)
     last_updated = DateTimeField(default=datetime.utcnow)
     
     meta = {
