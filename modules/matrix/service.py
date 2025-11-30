@@ -1811,6 +1811,9 @@ class MatrixService:
             except Exception as e:
                 print(f"Error creating MatrixActivation for auto-upgrade: {e}")
 
+            # Ensure tree placement for the new slot so user appears in earnings API
+            self._ensure_matrix_tree_placement_for_slot(user_id, next_slot_no)
+
             # Create upgrade log
             self._create_matrix_upgrade_log(
                 user_id=user_id,
