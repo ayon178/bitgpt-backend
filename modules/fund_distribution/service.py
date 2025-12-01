@@ -848,12 +848,26 @@ class FundDistributionService:
         """
         try:
             from modules.slot.model import SlotActivation
+            
+            # DEBUG: Print what we are looking for
+            print(f"[DEBUG_ACTIVATION] Checking activation for user={user_id}, program={program}, slot={slot_no}")
+            
             activation = SlotActivation.objects(
                 user_id=user_id,
                 program=program,
                 slot_no=slot_no,
                 status='completed'
             ).first()
+            
+            if not activation:
+                # DEBUG: Print all activations for this user to see what exists
+                all_acts = SlotActivation.objects(user_id=user_id)
+                print(f"[DEBUG_ACTIVATION] No activation found. Existing activations for user {user_id}:")
+                for act in all_acts:
+                    print(f" - Program: {act.program}, Slot: {act.slot_no}, Status: {act.status}, ID: {act.id}")
+            else:
+                print(f"[DEBUG_ACTIVATION] Found activation: {activation.id}")
+                
             return activation is not None
         except Exception as e:
             print(f"[BINARY_LEVEL_DIST] Error checking slot activation for user {user_id}, slot {slot_no}: {e}")

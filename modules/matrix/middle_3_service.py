@@ -267,6 +267,28 @@ class MatrixMiddle3Service:
             print(f"[MIDDLE3_DEBUG] Updating user matrix slot info")
             self._update_user_matrix_slot(user_id, catalog, slot_cost)
             
+            # --- FIX: Ensure TreePlacement for the new slot ---
+            try:
+                from .service import MatrixService
+                matrix_service = MatrixService()
+                
+                # We need referrer_id to place the user.
+                user = User.objects(id=ObjectId(user_id)).first()
+                referrer_id = str(user.refered_by) if user and user.refered_by else None
+                
+                if referrer_id:
+                    print(f"[MIDDLE3_DEBUG] Placing user {user_id} in Matrix Slot {slot_no} tree under {referrer_id}")
+                    matrix_service._ensure_tp(user_id, referrer_id, slot_no)
+                    print(f"[MIDDLE3_DEBUG] ✅ User placed in Slot {slot_no} tree")
+                else:
+                    print(f"[MIDDLE3_DEBUG] ⚠️ No referrer found for user {user_id}, skipping placement")
+                    
+            except Exception as e:
+                print(f"[MIDDLE3_DEBUG] ❌ Error placing user in tree: {e}")
+                import traceback
+                traceback.print_exc()
+            # --------------------------------------------------
+            
             # Create blockchain event
             try:
                 BlockchainEvent(

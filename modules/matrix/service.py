@@ -133,22 +133,15 @@ class MatrixService:
                 )
                 print(f"Created MatrixActivation for user {user_id}, slot 1")
             
-            # 3. Place user in upline tree with sweepover-aware BFS (slot 1 at join)
-            # Place under the direct referrer tree, with sweepover escalation as needed
+            # 3. Place user in upline tree and ensure TreePlacement record
             print(f"[MATRIX_SERVICE] Placing user {user_id} in matrix tree", flush=True)
-            placement_result = self._place_user_in_matrix_tree(user_id, direct_referrer_id, matrix_tree, slot_no=1)
-            print(f"[MATRIX_SERVICE] User {user_id} placed in matrix tree", flush=True)
             
             # 4. Initialize MatrixAutoUpgrade tracking
             self._initialize_matrix_auto_upgrade(user_id)
             
-            # 4a. Ensure Matrix TreePlacement exists before fund distribution so placement_context is accurate
             try:
-                from modules.tree.service import TreeService as _TreeServiceInit
                 from modules.tree.model import TreePlacement as _TPInit
                 from datetime import datetime as _DTInit
-
-                _tree_service = _TreeServiceInit()
 
                 # Ensure referrer has a root placement for Matrix slot 1
                 _ref_pl = _TPInit.objects(
@@ -171,54 +164,19 @@ class MatrixService:
                     )
                     _ref_pl.save()
 
-                # Ensure user has a placement for Matrix slot 1 (idempotent)
-                # CRITICAL FIX: Manually create TreePlacement based on MatrixTree placement result
-                # This ensures TreePlacement (used for funds) matches MatrixTree (used for structure)
-                _existing_user_tp = _TPInit.objects(
-                    user_id=ObjectId(user_id),
-                    program="matrix",
-                    slot_no=1,
-                    is_active=True,
-                ).first()
+                # Place user and create TreePlacement using helper
+                ensure_result = self._ensure_tp(user_id, direct_referrer_id, 1)
                 
-                if not _existing_user_tp:
-                    if placement_result and placement_result.get("success"):
-                        # Map integer position to string position
-                        # 0 -> left, 1 -> middle, 2 -> right (modulo 3)
-                        pos_int = placement_result.get("position", 0)
-                        pos_str_map = {0: "left", 1: "middle", 2: "right"}
-                        pos_str = pos_str_map.get(pos_int % 3, "left")
-                        
-                        # Determine parent from placement result
-                        placed_under_id = placement_result.get("placed_under_user_id")
-                        
-                        # Set is_upline_reserve flag for middle positions (pos % 3 == 1)
-                        is_reserve = (pos_int % 3 == 1)
-                        
-                        _TPInit(
-                            user_id=ObjectId(user_id),
-                            program="matrix",
-                            parent_id=ObjectId(placed_under_id) if placed_under_id else ObjectId(referrer_id),
-                            upline_id=ObjectId(placed_under_id) if placed_under_id else ObjectId(referrer_id),
-                            position=pos_str,
-                            level=placement_result.get("level", 1),
-                            slot_no=1,
-                            is_active=True,
-                            is_upline_reserve=is_reserve,
-                            created_at=_DTInit.utcnow(),
-                        ).save()
-                        print(f"[MATRIX_SERVICE] Manually created TreePlacement for {user_id}: parent={placed_under_id}, pos={pos_str}, reserve={is_reserve}")
-                    else:
-                        # Fallback to TreeService if placement result missing (should not happen)
-                        print(f"[MATRIX_SERVICE] Warning: No placement result, falling back to TreeService")
-                        _tree_service.place_user_in_tree(
-                            user_id=ObjectId(user_id),
-                            referrer_id=ObjectId(referrer_id),
-                            program="matrix",
-                            slot_no=1,
-                        )
+                if ensure_result.get("success"):
+                    placement_result = ensure_result.get("placement_result")
+                    print(f"[MATRIX_SERVICE] User {user_id} placed in matrix tree", flush=True)
+                else:
+                    print(f"[MATRIX_SERVICE] Failed to place user {user_id} in matrix tree: {ensure_result.get('error')}", flush=True)
+                    placement_result = None
+                    
             except Exception as _e_init:
                 print(f"Pre-distribution Matrix TreePlacement ensure failed: {_e_init}")
+                placement_result = None
             
             # 5. Distribute funds and commissions AFTER TreePlacement so placement_context is accurate
             distribution_result = {"success": False, "error": "skipped"}
@@ -421,6 +379,85 @@ class MatrixService:
         except Exception as e:
             return {"success": False, "error": str(e)}
     
+    def _ensure_tp(self, user_id: str, referrer_id: str, slot_no: int) -> Dict[str, Any]:
+        print(f"[MATRIX_SERVICE] _ensure_matrix_tree_placement_for_slot called for {user_id}, slot {slot_no}")
+        try:
+            from modules.tree.model import TreePlacement
+            from modules.matrix.model import MatrixTree
+            from datetime import datetime
+            from bson import ObjectId
+            
+            # Check if user already has placement
+            existing_tp = TreePlacement.objects(
+                user_id=ObjectId(user_id),
+                program="matrix",
+                slot_no=slot_no,
+                is_active=True,
+            ).first()
+            
+            if existing_tp:
+                print(f"[MATRIX_SERVICE] User {user_id} already has placement in matrix slot {slot_no}")
+                return {"success": True, "message": "Already placed"}
+
+            # Get User's MatrixTree
+            matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+            
+            # Place user in matrix tree (updates MatrixTree nodes)
+            placement_result = self._place_user_in_matrix_tree(user_id, referrer_id, matrix_tree, slot_no=slot_no)
+            
+            if placement_result and placement_result.get("success"):
+                # Map integer position to string position
+                pos_int = placement_result.get("position", 0)
+                pos_str_map = {0: "left", 1: "middle", 2: "right"}
+                pos_str = pos_str_map.get(pos_int % 3, "left")
+                
+                # Determine parent from placement result
+                placed_under_id = placement_result.get("placed_under_user_id")
+                level = placement_result.get("level", 1)
+                
+                # Fix: If level > 1, placed_under_id is the tree owner (Grandparent+), not immediate parent.
+                immediate_parent_id = placed_under_id
+                if level > 1 and placed_under_id:
+                    try:
+                        mt = MatrixTree.objects(user_id=ObjectId(placed_under_id)).first()
+                        if mt:
+                            parent_pos = pos_int // 3
+                            parent_level = level - 1
+                            parent_node = next((n for n in mt.nodes if n.level == parent_level and n.position == parent_pos), None)
+                            if parent_node:
+                                immediate_parent_id = str(parent_node.user_id)
+                                print(f"[MATRIX_SERVICE] Resolved immediate parent for Level {level} User {user_id}: {immediate_parent_id} (Tree Owner: {placed_under_id})")
+                    except Exception as e:
+                        print(f"[MATRIX_SERVICE] Error resolving immediate parent: {e}")
+
+                # Set is_upline_reserve flag
+                is_reserve = (pos_int % 3 == 1)
+                
+                # Create TreePlacement
+                TreePlacement(
+                    user_id=ObjectId(user_id),
+                    program="matrix",
+                    parent_id=ObjectId(immediate_parent_id) if immediate_parent_id else ObjectId(referrer_id),
+                    upline_id=ObjectId(immediate_parent_id) if immediate_parent_id else ObjectId(referrer_id),
+                    position=pos_str,
+                    level=placement_result.get("level", 1),
+                    slot_no=slot_no,
+                    is_active=True,
+                    is_upline_reserve=is_reserve,
+                    created_at=datetime.utcnow(),
+                ).save()
+                print(f"[MATRIX_SERVICE] Matrix TreePlacement created successfully for user {user_id} under {immediate_parent_id or referrer_id}")
+                return {"success": True, "placement_result": placement_result}
+            else:
+                print(f"[MATRIX_SERVICE] Warning: _place_user_in_matrix_tree failed or returned no success")
+                return {"success": False, "error": "Placement failed"}
+                
+        except Exception as e:
+            print(f"[MATRIX_SERVICE] Error ensuring matrix tree placement: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"success": False, "error": str(e)}
+
     def _get_direct_upline_user_id(self, user_id: str) -> Optional[str]:
         """Return the direct upline (referrer) for a user, without using tree placement."""
         try:
