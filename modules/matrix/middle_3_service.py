@@ -267,6 +267,18 @@ class MatrixMiddle3Service:
             print(f"[MIDDLE3_DEBUG] Updating user matrix slot info")
             self._update_user_matrix_slot(user_id, catalog, slot_cost)
             
+            # --- FIX: Update MatrixTree.current_slot ---
+            try:
+                from .model import MatrixTree
+                mt = MatrixTree.objects(user_id=ObjectId(user_id)).first()
+                if mt:
+                    mt.current_slot = slot_no
+                    mt.save()
+                    print(f"[MIDDLE3_DEBUG] Updated MatrixTree.current_slot to {slot_no} for user {user_id}")
+            except Exception as e:
+                print(f"[MIDDLE3_DEBUG] Error updating MatrixTree.current_slot: {e}")
+            # -------------------------------------------
+            
             # --- FIX: Ensure TreePlacement for the new slot ---
             try:
                 from .service import MatrixService
