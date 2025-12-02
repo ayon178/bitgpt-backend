@@ -17,6 +17,7 @@ from ..blockchain.model import BlockchainEvent
 from .sweepover_service import SweepoverService
 from .middle_3_service import MatrixMiddle3Service
 from .recycle_service import MatrixRecycleService
+from ..missed_profit.service import MissedProfitService
 from .model import (
     MatrixTree, MatrixNode, MatrixActivation, MatrixUpgradeLog,
     MatrixEarningHistory, MatrixCommission, MatrixRecycleInstance, MatrixRecycleNode
@@ -38,6 +39,7 @@ class MatrixService:
         self.sweepover_service = SweepoverService()
         self.middle_3_service = MatrixMiddle3Service()
         self.recycle_service = MatrixRecycleService()
+        self.missed_profit_service = MissedProfitService()
     
     # Matrix slot definitions per PROJECT_DOCUMENTATION.md
     MATRIX_SLOTS = {
@@ -591,6 +593,38 @@ class MatrixService:
             target_parent_tree = self._resolve_target_parent_tree_for_slot(referrer_id, slot_no)
             if not target_parent_tree:
                 raise ValueError("No eligible parent tree found for placement")
+
+            # Check for pass-up (Missed Profit / Missed Partner)
+            # If the resolved target parent is NOT the direct referrer (and direct referrer is not None/Root)
+            # Then the direct referrer was skipped due to inactivity in this slot.
+            try:
+                target_parent_id = str(target_parent_tree.user_id)
+                direct_referrer_str = str(referrer_id) if referrer_id else None
+                
+                # Only check if we have a valid direct referrer and they are different from target
+                if direct_referrer_str and target_parent_id != direct_referrer_str:
+                    print(f"[MATRIX_PLACE] Pass-up detected! User {user_id} passed up from {direct_referrer_str} to {target_parent_id}", flush=True)
+                    
+                    # Calculate potential missed profit amount
+                    # For matrix, it's the slot value (or a portion if we want to be specific about commissions)
+                    # But usually "Missed Profit" implies the full potential benefit of having the partner.
+                    # Here we use the slot value as the "missed volume" or potential.
+                    slot_value = float(self.MATRIX_SLOTS.get(slot_no, {}).get('value', 0))
+                    
+                    self.missed_profit_service.create_missed_profit(
+                        user_id=direct_referrer_str,  # The user who MISSED the profit (the inactive upline)
+                        upline_user_id=user_id,       # The user who caused the miss (the downline upgrading)
+                        missed_profit_type="upgrade_reward", # or commission
+                        missed_profit_amount=slot_value,
+                        primary_reason="level_advancement", # or account_inactivity regarding the slot
+                        reason_description=f"Missed Matrix Slot {slot_no} partner (User {user_id}) due to inactivity. Partner passed up to {target_parent_id}.",
+                        user_level=0, # Not strictly level based in this context
+                        upgrade_slot_level=slot_no,
+                        program_type="matrix",
+                        currency="USDT"
+                    )
+            except Exception as mp_err:
+                print(f"[MATRIX_PLACE] Error recording missed profit: {mp_err}", flush=True)
 
             # Find first available position using BFS within the resolved parent tree
             print(f"[MATRIX_PLACE] Finding BFS position in tree of {target_parent_tree.user_id}", flush=True)
@@ -2021,6 +2055,31 @@ class MatrixService:
                 return None
             
             oid_upline = ObjectId(eligible_upline_id)
+
+            # Check for pass-up (Missed Profit)
+            # If the found eligible upline is NOT the direct referrer, then the direct referrer was skipped.
+            if referrer_id and eligible_upline_id != referrer_id:
+                try:
+                    print(f"[MATRIX_PLACE] Pass-up detected in _ensure_matrix_tree_placement! User {user_id} passed up from {referrer_id} to {eligible_upline_id}", flush=True)
+                    
+                    # Calculate potential missed profit amount (slot value)
+                    slot_costs = self._get_matrix_slot_costs()
+                    slot_value = float(slot_costs.get(slot_no, 0))
+                    
+                    self.missed_profit_service.create_missed_profit(
+                        user_id=referrer_id,          # The user who MISSED the profit (the inactive upline)
+                        upline_user_id=user_id,       # The user who caused the miss (the downline upgrading)
+                        missed_profit_type="upgrade_reward",
+                        missed_profit_amount=slot_value,
+                        primary_reason="level_advancement",
+                        reason_description=f"Missed Matrix Slot {slot_no} partner (User {user_id}) due to inactivity. Partner passed up to {eligible_upline_id}.",
+                        user_level=0,
+                        upgrade_slot_level=slot_no,
+                        program_type="matrix",
+                        currency="USDT"
+                    )
+                except Exception as mp_err:
+                    print(f"[MATRIX_PLACE] Error recording missed profit in _ensure_matrix_tree_placement: {mp_err}", flush=True)
 
             # 2. Ensure root placement for the eligible upline on this slot
             ref_pl = _TP.objects(
