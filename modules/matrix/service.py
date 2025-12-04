@@ -2081,15 +2081,33 @@ class MatrixService:
                 except Exception as mp_err:
                     print(f"[MATRIX_PLACE] Error recording missed profit in _ensure_matrix_tree_placement: {mp_err}", flush=True)
 
-            # 2. Ensure root placement for the eligible upline on this slot
+            # 2. Ensure placement for the eligible upline on this slot
+            # Check if upline has ANY placement (not just root)
             ref_pl = _TP.objects(
                 user_id=oid_upline,
                 program="matrix",
                 slot_no=slot_no,
                 is_active=True,
-                level=0,
             ).first()
+            
             if not ref_pl:
+                # Upline is active but not in tree. Try to place them first.
+                # Avoid infinite recursion if user_id == eligible_upline_id (shouldn't happen)
+                if str(oid_upline) != str(user_id):
+                    print(f"[MATRIX_TREE_PLACEMENT] Upline {eligible_upline_id} active but missing placement for slot {slot_no}. Recursively ensuring placement.")
+                    self._ensure_matrix_tree_placement_for_slot(str(eligible_upline_id), slot_no)
+                    
+                    # Re-fetch placement after recursive call
+                    ref_pl = _TP.objects(
+                        user_id=oid_upline,
+                        program="matrix",
+                        slot_no=slot_no,
+                        is_active=True,
+                    ).first()
+
+            # If still no placement (e.g. they are top of chain or recursion failed), create root
+            if not ref_pl:
+                print(f"[MATRIX_TREE_PLACEMENT] Creating ROOT placement for {eligible_upline_id} slot {slot_no}")
                 ref_pl = _TP(
                     user_id=oid_upline,
                     program="matrix",
