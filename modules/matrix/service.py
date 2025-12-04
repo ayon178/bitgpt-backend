@@ -2026,6 +2026,28 @@ class MatrixService:
                         tree = None
                     if tree and (getattr(tree, "current_slot", None) or 1) >= slot_no:
                         has_tree_slot = True
+                
+
+
+                # Priority 4: Optimistic Placement for Direct Referrer
+                # If the candidate is the Direct Referrer and has the PREVIOUS slot active,
+                # we consider them eligible. This allows the downline's payment to fund
+                # the referrer's upgrade (Circular Dependency Resolution).
+                if not act and not has_tree_slot and candidate_id == referrer_id and slot_no > 1:
+                    try:
+                        # Check if referrer has previous slot active
+                        prev_slot_act = _SA.objects(
+                            user_id=ObjectId(candidate_id),
+                            program="matrix",
+                            slot_no=slot_no - 1,
+                            status="completed",
+                        ).first()
+                        
+                        if prev_slot_act:
+                            eligible_upline_id = candidate_id
+                            break
+                    except Exception:
+                        pass
 
                 if act or has_tree_slot:
                     eligible_upline_id = candidate_id
