@@ -16,6 +16,7 @@ from ..tree.model import TreePlacement
 from ..blockchain.model import BlockchainEvent
 from ..income.model import IncomeEvent
 from .sequence_service import ProgramSequenceService
+from ..matrix.service import MatrixService
 
 
 class TreeUplineReserveService:
@@ -282,10 +283,11 @@ class TreeUplineReserveService:
                     # 1. Ensure TreePlacement exists for this slot (critical for placement_context)
                     # We do this BEFORE distribution so we can find the user's position
                     try:
-                        from modules.matrix.service import MatrixService
                         MatrixService()._ensure_matrix_tree_placement_for_slot(user_id, slot_no)
                     except Exception as e:
                         print(f"[MATRIX_AUTO_RESERVE] Error ensuring TreePlacement before distribution: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                     # 2. Build placement_context
                     placement_ctx = None
@@ -414,10 +416,11 @@ class TreeUplineReserveService:
                     print(f"[MATRIX_AUTO_RESERVE] Error updating MatrixTree/Activation for auto-upgrade slot {slot_no}: {e}")
 
                 try:
-                    from modules.matrix.service import MatrixService
                     MatrixService()._ensure_matrix_tree_placement_for_slot(user_id, slot_no)
                 except Exception as e:
                     print(f"[MATRIX_AUTO_RESERVE] Error ensuring TreePlacement for auto-upgrade slot {slot_no}: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             return True
             
