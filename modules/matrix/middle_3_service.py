@@ -199,9 +199,7 @@ class MatrixMiddle3Service:
             # Check if reserve is sufficient
             if reserve_balance >= next_slot_cost:
                 # Auto-upgrade next slot
-                print(f"[MIDDLE3_DEBUG] Calling _auto_upgrade_slot for slot {next_slot_no}")
                 result = self._auto_upgrade_slot(user_id, next_slot_no, next_slot_cost, reserve_balance)
-                print(f"[MIDDLE3_DEBUG] _auto_upgrade_slot returned: {result}")
                 return result
             else:
                 print(f"[MIDDLE3_DEBUG] Insufficient reserve: {reserve_balance} < {next_slot_cost}")
@@ -216,7 +214,6 @@ class MatrixMiddle3Service:
                           available_reserve: Decimal) -> bool:
         """Automatically upgrade to next slot using reserve funds"""
         try:
-            print(f"[MIDDLE3_DEBUG] _auto_upgrade_slot started: user={user_id}, slot={slot_no}, cost={slot_cost}")
             # Check if user already has this slot activated
             existing_activation = SlotActivation.objects(
                 user_id=ObjectId(user_id),
@@ -255,16 +252,34 @@ class MatrixMiddle3Service:
                 status='completed'
             )
             activation.save()
-            print(f"[MIDDLE3_DEBUG] SlotActivation created successfully")
+            
+            # Create MatrixActivation (Required for MatrixService checks)
+            try:
+                from .model import MatrixActivation
+                MatrixActivation(
+                    user_id=ObjectId(user_id),
+                    slot_no=slot_no,
+                    slot_name=catalog.name,
+                    activation_type='upgrade',
+                    upgrade_source='auto',
+                    amount_paid=slot_cost,
+                    currency='USDT',
+                    tx_hash=f"MIDDLE3-AUTO-{user_id}-S{slot_no}",
+                    is_auto_upgrade=True,
+                    status='completed',
+                    activated_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow()
+                ).save()
+            except Exception as e:
+                print(f"Error creating MatrixActivation: {e}")
+
             
             # Deduct from reserve fund
             remaining_reserve = available_reserve - slot_cost
-            print(f"[MIDDLE3_DEBUG] Deducting {slot_cost} from reserve, remaining: {remaining_reserve}")
             self._deduct_reserve_fund(user_id, 'matrix', slot_no - 1, slot_cost, 
                                     f"MIDDLE3-AUTO-{user_id}-S{slot_no}")
             
             # Update user's slot information
-            print(f"[MIDDLE3_DEBUG] Updating user matrix slot info")
             self._update_user_matrix_slot(user_id, catalog, slot_cost)
             
             # --- FIX: Update MatrixTree.current_slot ---
@@ -274,9 +289,8 @@ class MatrixMiddle3Service:
                 if mt:
                     mt.current_slot = slot_no
                     mt.save()
-                    print(f"[MIDDLE3_DEBUG] Updated MatrixTree.current_slot to {slot_no} for user {user_id}")
             except Exception as e:
-                print(f"[MIDDLE3_DEBUG] Error updating MatrixTree.current_slot: {e}")
+                print(f"Error updating MatrixTree.current_slot: {e}")
             # -------------------------------------------
             
             # --- FIX: Ensure TreePlacement for the new slot ---
@@ -289,14 +303,10 @@ class MatrixMiddle3Service:
                 referrer_id = str(user.refered_by) if user and user.refered_by else None
                 
                 if referrer_id:
-                    print(f"[MIDDLE3_DEBUG] Placing user {user_id} in Matrix Slot {slot_no} tree under {referrer_id}")
                     matrix_service._ensure_tp(user_id, referrer_id, slot_no)
-                    print(f"[MIDDLE3_DEBUG] ✅ User placed in Slot {slot_no} tree")
-                else:
-                    print(f"[MIDDLE3_DEBUG] ⚠️ No referrer found for user {user_id}, skipping placement")
                     
             except Exception as e:
-                print(f"[MIDDLE3_DEBUG] ❌ Error placing user in tree: {e}")
+                print(f"Error placing user in tree: {e}")
                 import traceback
                 traceback.print_exc()
             # --------------------------------------------------
@@ -337,11 +347,10 @@ class MatrixMiddle3Service:
             except Exception:
                 pass
             
-            print(f"[MIDDLE3_DEBUG] ✅ Auto-upgrade completed successfully for slot {slot_no}")
             return True
             
         except Exception as e:
-            print(f"[MIDDLE3_DEBUG] ❌ Error in auto upgrade: {e}")
+            print(f"Error in auto upgrade: {e}")
             import traceback
             traceback.print_exc()
             return False

@@ -22,6 +22,7 @@ from .model import (
     MatrixTree, MatrixNode, MatrixActivation, MatrixUpgradeLog,
     MatrixEarningHistory, MatrixCommission, MatrixRecycleInstance, MatrixRecycleNode
 )
+from ..tree.model import TreePlacement
 from utils import ensure_currency_for_program
 from core.config import MATRIX_MAX_ESCALATION_DEPTH, MATRIX_MOTHER_ID
 
@@ -382,7 +383,6 @@ class MatrixService:
             return {"success": False, "error": str(e)}
     
     def _ensure_tp(self, user_id: str, referrer_id: str, slot_no: int) -> Dict[str, Any]:
-        print(f"[MATRIX_SERVICE] _ensure_matrix_tree_placement_for_slot called for {user_id}, slot {slot_no}")
         try:
             from modules.tree.model import TreePlacement
             from modules.matrix.model import MatrixTree
@@ -398,7 +398,6 @@ class MatrixService:
             ).first()
             
             if existing_tp:
-                print(f"[MATRIX_SERVICE] User {user_id} already has placement in matrix slot {slot_no}")
                 return {"success": True, "message": "Already placed"}
 
             # Get User's MatrixTree
@@ -428,9 +427,8 @@ class MatrixService:
                             parent_node = next((n for n in mt.nodes if n.level == parent_level and n.position == parent_pos), None)
                             if parent_node:
                                 immediate_parent_id = str(parent_node.user_id)
-                                print(f"[MATRIX_SERVICE] Resolved immediate parent for Level {level} User {user_id}: {immediate_parent_id} (Tree Owner: {placed_under_id})")
                     except Exception as e:
-                        print(f"[MATRIX_SERVICE] Error resolving immediate parent: {e}")
+                        print(f"Error resolving immediate parent: {e}")
 
                 # Set is_upline_reserve flag
                 is_reserve = (pos_int % 3 == 1)
@@ -448,14 +446,15 @@ class MatrixService:
                     is_upline_reserve=is_reserve,
                     created_at=datetime.utcnow(),
                 ).save()
-                print(f"[MATRIX_SERVICE] Matrix TreePlacement created successfully for user {user_id} under {immediate_parent_id or referrer_id}")
-                return {"success": True, "placement_result": placement_result}
-            else:
-                print(f"[MATRIX_SERVICE] Warning: _place_user_in_matrix_tree failed or returned no success")
-                return {"success": False, "error": "Placement failed"}
+
+            return {"success": True, "placement_result": placement_result}
+
+            error_msg = placement_result.get("error") if placement_result else "Unknown error"
+            print(f"Warning: _place_user_in_matrix_tree failed: {error_msg}")
+            return {"success": False, "error": f"Placement failed: {error_msg}"}
                 
         except Exception as e:
-            print(f"[MATRIX_SERVICE] Error ensuring matrix tree placement: {e}")
+            print(f"Error ensuring matrix tree placement: {e}")
             import traceback
             traceback.print_exc()
             return {"success": False, "error": str(e)}
@@ -603,7 +602,6 @@ class MatrixService:
                 
                 # Only check if we have a valid direct referrer and they are different from target
                 if direct_referrer_str and target_parent_id != direct_referrer_str:
-                    print(f"[MATRIX_PLACE] Pass-up detected! User {user_id} passed up from {direct_referrer_str} to {target_parent_id}", flush=True)
                     
                     # Calculate potential missed profit amount
                     # For matrix, it's the slot value (or a portion if we want to be specific about commissions)
@@ -624,19 +622,17 @@ class MatrixService:
                         currency="USDT"
                     )
             except Exception as mp_err:
-                print(f"[MATRIX_PLACE] Error recording missed profit: {mp_err}", flush=True)
+                print(f"Error recording missed profit: {mp_err}", flush=True)
 
             # Find first available position using BFS within the resolved parent tree
-            print(f"[MATRIX_PLACE] Finding BFS position in tree of {target_parent_tree.user_id}", flush=True)
-            placement_position = self._find_bfs_placement_position(target_parent_tree)
+            placement_position = self._find_bfs_placement_position(target_parent_tree, slot_no)
             used_escalation = (str(target_parent_tree.user_id) != str(referrer_id))
             used_mother = (MATRIX_MOTHER_ID and str(target_parent_tree.user_id) == MATRIX_MOTHER_ID)
             if not placement_position:
                 # escalate one level further: attempt next eligible ancestor if current has no space
-                print(f"[MATRIX_PLACE] No position found, attempting escalation", flush=True)
                 next_parent_tree = self._resolve_next_eligible_ancestor(target_parent_tree.user_id, slot_no, start_from_current=True)
                 if next_parent_tree:
-                    placement_position = self._find_bfs_placement_position(next_parent_tree)
+                    placement_position = self._find_bfs_placement_position(next_parent_tree, slot_no)
                     if placement_position:
                         target_parent_tree = next_parent_tree
                         used_escalation = True
@@ -644,7 +640,6 @@ class MatrixService:
                 if not placement_position:
                     raise ValueError("No available positions in eligible matrix trees for placement")
             
-            print(f"[MATRIX_PLACE] Position found: {placement_position}", flush=True)
             
             # Create matrix node for the new user
             matrix_node = MatrixNode(
@@ -675,14 +670,12 @@ class MatrixService:
             referrer_tree.updated_at = datetime.utcnow()
             try:
                 referrer_tree.save()
-                print(f"[MATRIX_PLACE] Saved referrer tree {referrer_tree.user_id}", flush=True)
             except Exception:
                 # In test scenarios, save might fail with mocked objects
                 pass
 
             # Mirror Level-2 node into the direct upline's tree when a Level-1 child is placed under referrer
             try:
-                print(f"[MATRIX_PLACE] Checking mirroring for level {placement_position['level']}", flush=True)
                 if placement_position['level'] == 1:
                     # Fetch direct upline (owner of parent tree)
                     ref_owner = User.objects(id=referrer_tree.user_id).first()
@@ -861,14 +854,14 @@ class MatrixService:
             current_user_id = start_user_id if not start_from_current else User.objects(id=start_user_id).first().refered_by
             while current_user_id and visited <= MATRIX_MAX_ESCALATION_DEPTH:
                 tree = MatrixTree.objects(user_id=current_user_id).first()
-                if tree and (tree.current_slot or 1) >= slot_no and self._find_bfs_placement_position(tree) is not None:
+                if tree and (tree.current_slot or 1) >= slot_no and self._find_bfs_placement_position(tree, slot_no) is not None:
                     return tree
                 next_user = User.objects(id=current_user_id).first()
                 current_user_id = getattr(next_user, 'refered_by', None)
                 visited += 1
             if MATRIX_MOTHER_ID:
                 mother_tree = MatrixTree.objects(user_id=ObjectId(MATRIX_MOTHER_ID)).first()
-                if mother_tree and self._find_bfs_placement_position(mother_tree) is not None:
+                if mother_tree and self._find_bfs_placement_position(mother_tree, slot_no) is not None:
                     return mother_tree
             return None
         except Exception:
@@ -897,7 +890,7 @@ class MatrixService:
         except Exception:
             pass
     
-    def _find_bfs_placement_position(self, matrix_tree: MatrixTree) -> Optional[Dict[str, int]]:
+    def _find_bfs_placement_position(self, matrix_tree: MatrixTree, slot_no: int = 1) -> Optional[Dict[str, int]]:
         """Find first available position using SWEEPOVER BFS algorithm.
         
         Sweepover Logic (Wave Placement):
@@ -909,9 +902,23 @@ class MatrixService:
         - Level 3: Fill in waves across all L2 parents (same pattern)
         """
         try:
+            # Filter nodes that belong to this slot using TreePlacement
+            tree_user_ids = [node.user_id for node in matrix_tree.nodes]
+            valid_user_ids = set()
+            if tree_user_ids:
+                tps = TreePlacement.objects(
+                    user_id__in=tree_user_ids,
+                    program='matrix',
+                    slot_no=slot_no,
+                    is_active=True
+                ).only('user_id')
+                valid_user_ids = {tp.user_id for tp in tps}
+            
+            current_slot_nodes = [node for node in matrix_tree.nodes if node.user_id in valid_user_ids]
+
             # Level 1: Check positions 0, 1, 2 (left, middle, right) - Sequential
             for pos in range(3):
-                if not any(node.level == 1 and node.position == pos for node in matrix_tree.nodes):
+                if not any(node.level == 1 and node.position == pos for node in current_slot_nodes):
                     return {"level": 1, "position": pos}
             
             # Level 2: Check positions 0-8 using SWEEPOVER (wave across L1 parents)
@@ -921,7 +928,7 @@ class MatrixService:
             for child_index in range(3):  # 0, 1, 2 (first, second, third child)
                 for parent_index in range(3):  # 0, 1, 2 (L1 positions)
                     pos = parent_index * 3 + child_index
-                    if not any(node.level == 2 and node.position == pos for node in matrix_tree.nodes):
+                    if not any(node.level == 2 and node.position == pos for node in current_slot_nodes):
                         return {"level": 2, "position": pos}
             
             # Level 3: Check positions 0-26 using SWEEPOVER (wave across L2 parents)
@@ -931,7 +938,7 @@ class MatrixService:
             for child_index in range(3):  # 0, 1, 2 (first, second, third child)
                 for parent_index in range(9):  # 0-8 (L2 positions)
                     pos = parent_index * 3 + child_index
-                    if not any(node.level == 3 and node.position == pos for node in matrix_tree.nodes):
+                    if not any(node.level == 3 and node.position == pos for node in current_slot_nodes):
                         return {"level": 3, "position": pos}
             
             return None  # No available positions
