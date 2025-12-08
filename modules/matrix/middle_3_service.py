@@ -297,54 +297,170 @@ class MatrixMiddle3Service:
                 print(f"Error updating MatrixTree.current_slot: {e}")
             # -------------------------------------------
             
-            # --- FIX: Ensure TreePlacement for the new slot ---
-            # --- FIX: Ensure TreePlacement (Direct logic to avoid circular dependency) ---
+            # --- FIX: Ensure TreePlacement (Direct logic with BFS and MatrixTree update) ---
             try:
-                # 1. Get referrer
-                user = User.objects(id=ObjectId(user_id)).first()
-                referrer_id = str(user.refered_by) if user and user.refered_by else None
+                from modules.tree.model import TreePlacement
+                from modules.matrix.model import MatrixTree, MatrixNode
                 
-                if referrer_id:
-                    # 2. Update MatrixTree nodes (simulated placement)
-                    matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
-                    
-                    # 3. Create TreePlacement manually - bypasses complex MatrixService logic
-                    from modules.tree.model import TreePlacement
-                    
-                    # Find upline/parent placement for this slot
-                    # Simple strategy: place under referrer if they have slot active, else root
-                    ref_tp = TreePlacement.objects(
-                        user_id=ObjectId(referrer_id),
+                # 1. Resolve Active Upline (Pass-up logic)
+                user = User.objects(id=ObjectId(user_id)).first()
+                curr_referrer_id = str(user.refered_by) if user and user.refered_by else None
+                target_upline_id = "692d90730267e8d5a4693567" # Default to ROOT
+                
+                # Validation loop to find nearest upline with this slot active
+                while curr_referrer_id:
+                    # Check if referrer has this slot active
+                    # We can check MatrixActivation or TreePlacement. TreePlacement is source of truth for tree.
+                    is_active = TreePlacement.objects(
+                        user_id=ObjectId(curr_referrer_id),
                         program="matrix",
                         slot_no=slot_no,
                         is_active=True
-                    ).first()
+                    ).count() > 0
                     
-                    parent_id = referrer_id if ref_tp else "692d90730267e8d5a4693567" # Fallback to ROOT ID
+                    if is_active:
+                        target_upline_id = curr_referrer_id
+                        break
                     
-                    # Check if already exists
-                    existing = TreePlacement.objects(
+                    # Move up
+                    ref_user = User.objects(id=ObjectId(curr_referrer_id)).first()
+                    curr_referrer_id = str(ref_user.refered_by) if ref_user and ref_user.refered_by else None
+                    if curr_referrer_id == target_upline_id:
+                        break # Reached ROOT/Loop
+                
+                print(f"[MIDDLE3] Resolved upline for slot {slot_no}: {target_upline_id}", flush=True)
+
+                # 2. Find position under target_upline using BFS on MatrixTree
+                upline_tree = MatrixTree.objects(user_id=ObjectId(target_upline_id)).first()
+                
+                # Default initialization
+                immediate_parent_id = target_upline_id
+                position = "left" 
+                
+                if not upline_tree:
+                     # Should not happen for active upline, but handle safely
+                     print(f"[MIDDLE3] Warning: Upline {target_upline_id} has no MatrixTree", flush=True)
+                     # Fallback: Just place under them directly (Level 1)
+                     immediate_parent_id = target_upline_id
+                     position = "left"
+                     # Create a MatrixTree for them if missing? 
+                     # Better to just proceed with TreePlacement as that's what we need.
+                else:
+                    # BFS to find first node with < 3 children
+                    queue = []
+                    # Root of the sub-tree is the upline themselves (Level 0 relative)
+                    # We need to find nodes in checking order.
+                    # Simplification: MatrixTree.nodes stores flattened list. 
+                    # We can reconstruct or just find the first available spot.
+                    # Standard Matrix fills: Level 1 (3 nodes), Level 2 (9 nodes)...
+                    
+                    # Let's use a simple map to count children
+                    # node_id -> children_count
+                    children_map = {}
+                    # Also map to find node objects
+                    nodes_map = {target_upline_id: {'level': 0, 'id': target_upline_id}}
+                    
+                    # Filter nodes relevant to this slot (if MatrixTree shares slots? Usually MatrixTree is program-wide)
+                    # Assuming MatrixTree.nodes contains ALL nodes for ALL slots? Or is MatrixTree specific to slot?
+                    # The model usually has `current_slot`. Nodes might be slot-agnostic or filtered?
+                    # Checking Service: it usually re-uses the tree structure or creates new?
+                    # For Matrix, usually structure is permanent per slot? No, slots are independent trees.
+                    # If slots are independent trees, MatrixTree needs to filter by slot or we rely on TreePlacement.
+                    
+                    # RE-CHECK: TreePlacement IS the source of truth for positions.
+                    # _place_user_in_matrix_tree uses MatrixTree.nodes. 
+                    # If we can't reliably use MatrixTree (complex), let's use TreePlacement BFS.
+                    
+                    # strategy: Check Level 1 spots under upline.
+                    # If full, check Level 2 spots (children of Level 1).
+                    
+                    # Fetch all placements in this sub-tree? Too expensive.
+                    # We will implement a localized BFS querying TreePlacement.
+                    
+                    q = [(target_upline_id, 1)] # (user_id, relative_level)
+                    found_spot = None
+                    
+                    while q:
+                        curr_id, curr_level = q.pop(0)
+                        
+                        # Get children of curr_id for this slot
+                        children = list(TreePlacement.objects(
+                            parent_id=ObjectId(curr_id),
+                            program="matrix",
+                            slot_no=slot_no
+                        ))
+                        
+                        if len(children) < 3:
+                            # Found spot!
+                            immediate_parent_id = curr_id
+                            level = curr_level # relative to search start? No, we need absolute tree level logic or just relative?
+                            # TreePlacement.level is usually relative to root? Or uniform?
+                            # Let's trust parent_id link is sufficient.
+                            
+                            # Determine position string
+                            existing_positions = [c.position for c in children]
+                            if "left" not in existing_positions: position = "left"
+                            elif "middle" not in existing_positions: position = "middle"
+                            else: position = "right"
+                            
+                            found_spot = True
+                            break
+                        else:
+                            # Add children to queue to search next level
+                            # Sort by position to ensure Left->Mid->Right filling order of subtrees? 
+                            # Matrix fill order: usually fill bucket 1, then bucket 2...
+                            # We just append to queue.
+                             # Ordered children: Left, Middle, Right
+                            sorted_children = sorted(children, key=lambda x: {"left":0, "middle":1, "right":2}.get(x.position, 99))
+                            for child in sorted_children:
+                                q.append((str(child.user_id), curr_level + 1))
+                    
+                    if not found_spot:
+                        # Fallback (should not happen in infinite tree)
+                        immediate_parent_id = target_upline_id
+                        position = "left"
+
+                # 3. Create TreePlacement
+                existing_tp = TreePlacement.objects(
+                    user_id=ObjectId(user_id),
+                    program="matrix",
+                    slot_no=slot_no
+                ).first()
+
+                if not existing_tp:
+                    tp = TreePlacement(
                         user_id=ObjectId(user_id),
                         program="matrix",
-                        slot_no=slot_no
-                    ).first()
+                        slot_no=slot_no,
+                        parent_id=ObjectId(immediate_parent_id),
+                        upline_id=ObjectId(target_upline_id), # The "Root" of this 3x3 structure (Sponsor)
+                        position=position,
+                        level=1, # Todo: fetch parent level + 1 if strictly tracking
+                        is_active=True,
+                        is_upline_reserve=(position == "middle"),
+                        created_at=datetime.utcnow()
+                    )
+                    tp.save()
+                    print(f"[MIDDLE3] Created TreePlacement for {user_id} slot {slot_no} under {immediate_parent_id}", flush=True)
                     
-                    if not existing:
-                        TreePlacement(
+                    # 4. Update MatrixTree of the UPLINE (target_upline_id) to track this new node
+                    if upline_tree:
+                        # Create MatrixNode (simplified)
+                        new_node = MatrixNode(
                             user_id=ObjectId(user_id),
-                            program="matrix",
-                            slot_no=slot_no,
-                            parent_id=ObjectId(parent_id),
-                            upline_id=ObjectId(parent_id),
-                            position="left", # Default placement
-                            level=1,
-                            is_active=True,
-                            created_at=datetime.utcnow()
-                        ).save()
-                        print(f"[MIDDLE3] Created TreePlacement for {user_id} slot {slot_no}")
+                            upline_id=ObjectId(immediate_parent_id),
+                            referrer_id=ObjectId(referrer_id) if referrer_id else None,
+                            level=0, # Relative level
+                            position=0 if position=="left" else 1 if position=="middle" else 2,
+                            creation_date=datetime.utcnow()
+                        )
+                        upline_tree.nodes.append(new_node)
+                        upline_tree.save()
 
             except Exception as e:
                 print(f"Error placing user in tree (middle3 fix): {e}")
+                import traceback
+                traceback.print_exc()
             # --------------------------------------------------
             
             # Create blockchain event
