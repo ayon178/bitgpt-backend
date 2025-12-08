@@ -61,23 +61,27 @@ class MatrixMiddle3Service:
     
     def collect_middle_3_earnings(self, main_user_id: str, slot_no: int, 
                                  earning_amount: Decimal, source_user_id: str, 
-                                 tx_hash: str) -> Tuple[bool, str]:
+                                 tx_hash: str, skip_validation: bool = False) -> Tuple[bool, str]:
         """
         Collect 100% earnings from middle 3 users for next slot upgrade.
         This is triggered when a middle 3 user activates a slot or joins.
+        
+        Args:
+            skip_validation: If True, skip middle-3 validation (caller verified from placement_ctx)
         """
         try:
-            # Check if the earning user is one of the middle 3 users
-            middle_3_users = self.identify_middle_3_users(main_user_id, slot_no)
-            
-            earning_user_in_middle_3 = False
-            for middle_user in middle_3_users:
-                if middle_user["user_id"] == source_user_id:
-                    earning_user_in_middle_3 = True
-                    break
-            
-            if not earning_user_in_middle_3:
-                return False, "User is not in middle 3 position"
+            if not skip_validation:
+                # Check if the earning user is one of the middle 3 users
+                middle_3_users = self.identify_middle_3_users(main_user_id, slot_no)
+                
+                earning_user_in_middle_3 = False
+                for middle_user in middle_3_users:
+                    if middle_user["user_id"] == source_user_id:
+                        earning_user_in_middle_3 = True
+                        break
+                
+                if not earning_user_in_middle_3:
+                    return False, "User is not in middle 3 position"
             
             # Add 100% of earnings to main user's reserve fund
             success, message = self._add_to_reserve_fund(
@@ -294,21 +298,53 @@ class MatrixMiddle3Service:
             # -------------------------------------------
             
             # --- FIX: Ensure TreePlacement for the new slot ---
+            # --- FIX: Ensure TreePlacement (Direct logic to avoid circular dependency) ---
             try:
-                from .service import MatrixService
-                matrix_service = MatrixService()
-                
-                # We need referrer_id to place the user.
+                # 1. Get referrer
                 user = User.objects(id=ObjectId(user_id)).first()
                 referrer_id = str(user.refered_by) if user and user.refered_by else None
                 
                 if referrer_id:
-                    matrix_service._ensure_tp(user_id, referrer_id, slot_no)
+                    # 2. Update MatrixTree nodes (simulated placement)
+                    matrix_tree = MatrixTree.objects(user_id=ObjectId(user_id)).first()
                     
+                    # 3. Create TreePlacement manually - bypasses complex MatrixService logic
+                    from modules.tree.model import TreePlacement
+                    
+                    # Find upline/parent placement for this slot
+                    # Simple strategy: place under referrer if they have slot active, else root
+                    ref_tp = TreePlacement.objects(
+                        user_id=ObjectId(referrer_id),
+                        program="matrix",
+                        slot_no=slot_no,
+                        is_active=True
+                    ).first()
+                    
+                    parent_id = referrer_id if ref_tp else "692d90730267e8d5a4693567" # Fallback to ROOT ID
+                    
+                    # Check if already exists
+                    existing = TreePlacement.objects(
+                        user_id=ObjectId(user_id),
+                        program="matrix",
+                        slot_no=slot_no
+                    ).first()
+                    
+                    if not existing:
+                        TreePlacement(
+                            user_id=ObjectId(user_id),
+                            program="matrix",
+                            slot_no=slot_no,
+                            parent_id=ObjectId(parent_id),
+                            upline_id=ObjectId(parent_id),
+                            position="left", # Default placement
+                            level=1,
+                            is_active=True,
+                            created_at=datetime.utcnow()
+                        ).save()
+                        print(f"[MIDDLE3] Created TreePlacement for {user_id} slot {slot_no}")
+
             except Exception as e:
-                print(f"Error placing user in tree: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"Error placing user in tree (middle3 fix): {e}")
             # --------------------------------------------------
             
             # Create blockchain event

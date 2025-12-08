@@ -38,9 +38,16 @@ class MatrixService:
         self.mentorship_service = MentorshipService()
         self.dream_matrix_service = DreamMatrixService()
         self.sweepover_service = SweepoverService()
-        self.middle_3_service = MatrixMiddle3Service()
+        self._middle_3_service = None  # Lazy init to avoid circular dependency
         self.recycle_service = MatrixRecycleService()
         self.missed_profit_service = MissedProfitService()
+
+    @property
+    def middle_3_service(self):
+        if self._middle_3_service is None:
+            from .middle_3_service import MatrixMiddle3Service
+            self._middle_3_service = MatrixMiddle3Service()
+        return self._middle_3_service
     
     # Matrix slot definitions per PROJECT_DOCUMENTATION.md
     MATRIX_SLOTS = {
@@ -206,27 +213,49 @@ class MatrixService:
                     }
                 
                 # --- MIDDLE 3 LOGIC START ---
+                # Direct check using placement_ctx (bypasses MatrixTree.nodes dependency)
+                # Middle earnings: user in middle position → earnings go to 2nd upline's reserve
                 skip_distribution = False
                 if placement_ctx and placement_ctx.get('placed_under_user_id'):
-                    # Resolve Level 2 Upline (Grandparent)
-                    # We use level=1 because the user is placed directly under 'placed_under_user_id' (Level 1 Upline)
-                    l1, l2, l3 = self._resolve_three_tree_uplines(
-                        placement_ctx['placed_under_user_id'],
-                        1, 
-                        placement_ctx['position']
-                    )
-                    
-                    if l2:
-                        print(f"[MATRIX_SERVICE] Checking Middle 3 status for {user_id} relative to {l2}", flush=True)
-                        # Check if I am Middle 3 of l2
-                        success, msg = self.middle_3_service.collect_middle_3_earnings(
-                            l2, 1, amount, user_id, tx_hash
-                        )
-                        if success:
-                            print(f"[MATRIX_SERVICE] Middle 3 earnings collected for {l2}: {msg}", flush=True)
-                            skip_distribution = True
-                        else:
-                            print(f"[MATRIX_SERVICE] Middle 3 check failed: {msg}", flush=True)
+                    try:
+                        position = placement_ctx.get('position', -1)
+                        
+                        # Check if in middle position (index 1 in ternary tree)
+                        if position == 1:
+                            print(f"[MIDDLE3] User {user_id} in middle position (index {position})", flush=True)
+                            
+                            # Get parent (1st upline)
+                            parent_id = placement_ctx.get('placed_under_user_id')
+                            
+                            if parent_id:
+                                # Query parent's TreePlacement to find 2nd upline (grandparent)
+                                from modules.tree.model import TreePlacement
+                                parent_tp = TreePlacement.objects(
+                                    user_id=ObjectId(parent_id),
+                                    program='matrix',
+                                    slot_no=1
+                                ).first()
+                                
+                                if parent_tp and parent_tp.upline_id:
+                                    grandparent_id = str(parent_tp.upline_id)
+                                    print(f"[MIDDLE3] Found 2nd upline: {grandparent_id}", flush=True)
+                                    
+                                    # Collect middle-3 earnings (skip validation - already verified position)
+                                    success, msg = self.middle_3_service.collect_middle_3_earnings(
+                                        grandparent_id, 1, amount, user_id, tx_hash, skip_validation=True
+                                    )
+                                    
+                                    if success:
+                                        print(f"[MIDDLE3] Earnings collected for {grandparent_id}", flush=True)
+                                        skip_distribution = True
+                                    else:
+                                        print(f"[MIDDLE3] Collection failed: {msg}", flush=True)
+                                else:
+                                    print(f"[MIDDLE3] Parent {parent_id} has no upline", flush=True)
+                    except Exception as e:
+                        print(f"[MIDDLE3] Error: {e}", flush=True)
+                        import traceback
+                        traceback.print_exc()
                 # --- MIDDLE 3 LOGIC END ---
 
                 if not skip_distribution:
