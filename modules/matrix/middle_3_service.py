@@ -445,14 +445,12 @@ class MatrixMiddle3Service:
                     
                     # 4. Update MatrixTree of the UPLINE (target_upline_id) to track this new node
                     if upline_tree:
-                        # Create MatrixNode (simplified)
                         new_node = MatrixNode(
                             user_id=ObjectId(user_id),
-                            upline_id=ObjectId(immediate_parent_id),
-                            referrer_id=ObjectId(referrer_id) if referrer_id else None,
                             level=0, # Relative level
                             position=0 if position=="left" else 1 if position=="middle" else 2,
-                            creation_date=datetime.utcnow()
+                            placed_at=datetime.utcnow(),
+                            is_active=True
                         )
                         upline_tree.nodes.append(new_node)
                         upline_tree.save()
@@ -498,6 +496,92 @@ class MatrixMiddle3Service:
                 ).save()
             except Exception:
                 pass
+            
+            # --- FIX: Distribute Matrix Funds (Level, Middle 3, etc.) ---
+            # The user PAID for this slot (via reserve), so the network must be compensated.
+            # This triggers Middle-3 earnings for the upline if applicable.
+            try:
+                from ..fund_distribution.service import FundDistributionService
+                fds = FundDistributionService()
+                
+                # Get upline/referrer for distribution context
+                dist_referrer_id = str(user.refered_by) if user and user.refered_by else None
+                
+                # Map position string to integer for service compatibility
+                pos_map = {"left": 0, "middle": 1, "right": 2}
+                pos_int = pos_map.get(position, 0) # Fallback to 0 if unknown
+                
+                # Construct Placement Context
+                dist_placement_context = {
+                    "placed_under_user_id": str(immediate_parent_id),
+                    "level": 1, # Relative to immediate_parent_id, it is always level 1 (direct child)
+                    "position": pos_int
+                }
+                
+                print(f"[MIDDLE3-AUTO] Triggering distribution for {user_id} slot {slot_no}. Context: {dist_placement_context}", flush=True)
+
+                fds.distribute_matrix_funds(
+                    user_id=str(user_id),
+                    amount=slot_cost,
+                    slot_no=slot_no,
+                    referrer_id=dist_referrer_id,
+                    tx_hash=f"MIDDLE3-AUTO-DIST-{user_id}-S{slot_no}",
+                    currency='USDT',
+                    placement_context=dist_placement_context
+                )
+            except Exception as e:
+                print(f"Error distributing funds for auto-upgrade: {e}")
+                import traceback
+                traceback.print_exc()
+            # ------------------------------------------------------------
+
+            # --- CRITICAL FIX: Update MatrixTree and MatrixActivation ---
+            # Ensure the system recognizes the user is now at the new slot level
+            try:
+                from .model import MatrixTree as _MatrixTree
+                from .model import MatrixActivation as _MatrixActivation
+
+                # 1. Create MatrixActivation
+                ma_exists = _MatrixActivation.objects(
+                    user_id=ObjectId(user_id),
+                    slot_no=slot_no,
+                    status='completed'
+                ).first()
+                
+                if not ma_exists:
+                    _MatrixActivation(
+                        user_id=ObjectId(user_id),
+                        slot_no=slot_no,
+                        slot_name=catalog.name,
+                        activation_type='upgrade',
+                        upgrade_source='auto_middle3',
+                        amount_paid=slot_cost,
+                        currency='USDT',
+                        tx_hash=f"MIDDLE3-AUTO-{user_id}-S{slot_no}",
+                        is_auto_upgrade=True,
+                        status='completed',
+                        activated_at=datetime.utcnow(),
+                        completed_at=datetime.utcnow()
+                    ).save()
+                    print(f"[MIDDLE3_AUTO] Created MatrixActivation for user {user_id} slot {slot_no}")
+
+                # 2. Update MatrixTree.current_slot
+                mt = _MatrixTree.objects(user_id=ObjectId(user_id)).first()
+                if mt:
+                    if not getattr(mt, "current_slot", None) or mt.current_slot < slot_no:
+                        mt.current_slot = slot_no
+                        mt.updated_at = datetime.utcnow()
+                        mt.save()
+                        print(f"[MIDDLE3_AUTO] Updated MatrixTree current_slot to {slot_no} for user {user_id}")
+                else:
+                    # Should unlikely exist without MatrixTree, but responsible to create if missing
+                    pass 
+
+            except Exception as e:
+                print(f"[MIDDLE3_AUTO] Error updating MatrixTree/Activation: {e}")
+                import traceback
+                traceback.print_exc()
+            # ------------------------------------------------------------
             
             return True
             

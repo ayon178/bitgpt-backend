@@ -252,68 +252,64 @@ class FundDistributionService:
                         except Exception as e:
                             print(f"[MATRIX ROUTING] Error finding grandparent: {e}")
 
-                        if grandparent_id:
-                            print(f"[MATRIX ROUTING] Found grandparent: {grandparent_id}")
-                            next_slot_no = slot_no + 1
-                            already_active = False
-                            try:
-                                act = SlotActivation.objects(user_id=ObjectId(grandparent_id), program='matrix', slot_no=next_slot_no, status='completed').first()
-                                already_active = bool(act)
-                            except Exception:
-                                already_active = False
-                            
-                            # Use Slot 1 Tree to find the "Intended" Grandparent for Missed Profit check
-                            # The user might be Middle in Slot N, but we pay the Slot 1 Grandparent if they have Slot N.
-                            # If Slot 1 Grandparent doesn't have Slot N, it's Missed Profit.
-                            
-                            # Find Grandparent in Slot 1
-                            grandparent_id = self._traverse_matrix_upline_upward(ObjectId(user_id), 2, slot_no=1)
-                            
-                            if not grandparent_id:
-                                print(f"[MATRIX ROUTING] No Slot 1 Grandparent found for {user_id}. Defaulting to Mother Account.")
-                                # Route to Mother Account (No Missed Profit if no user exists)
-                                self._create_mother_account_income_event(
-                                    source_id=user_id,
-                                    program='matrix',
-                                    slot_no=slot_no,
-                                    amount=amount,
-                                    tx_hash=tx_hash,
-                                    description=f"Matrix Slot {slot_no} Middle Position (No S1 Grandparent) - Mother Account",
-                                    currency=currency
-                                )
-                                return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
 
-                            grandparent_id = str(grandparent_id)
-                            print(f"[MATRIX ROUTING] Slot 1 Grandparent: {grandparent_id}")
+                        if not grandparent_id:
+                             # Fallback: Use Slot 1 Tree to find the "Intended" Grandparent
+                             # This handles cases where the current slot tree isn't fully built yet (e.g. simultaneous upgrades)
+                             # or if we are relying on the rigid matrix structure.
+                             try:
+                                 grandparent_id = self._traverse_matrix_upline_upward(ObjectId(user_id), 2, slot_no=1)
+                                 if grandparent_id:
+                                     print(f"[MATRIX ROUTING] Found grandparent via Slot 1 fallback: {grandparent_id}")
+                             except Exception as e:
+                                 print(f"[MATRIX ROUTING] Error in Slot 1 fallback traversal: {e}")
+                            
+                        if not grandparent_id:
+                            print(f"[MATRIX ROUTING] No Grandparent found (checked Slot {slot_no} and Slot 1). Defaulting to Mother Account.")
+                            # Route to Mother Account
+                            self._create_mother_account_income_event(
+                                source_id=user_id,
+                                program='matrix',
+                                slot_no=slot_no,
+                                amount=amount,
+                                tx_hash=tx_hash,
+                                description=f"Matrix Slot {slot_no} Middle Position (No Upline) - Mother Account",
+                                currency=currency
+                            )
+                            return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
 
+                        grandparent_id = str(grandparent_id)
+                        print(f"[MATRIX ROUTING] Resolved Grandparent: {grandparent_id}")
+
+                        has_current_slot = False
+                        try:
+                            # Check if Grandparent has the CURRENT slot activated (so they can receive funds)
+                            act_curr = SlotActivation.objects(user_id=ObjectId(grandparent_id), program='matrix', slot_no=slot_no, status='completed').first()
+                            has_current_slot = bool(act_curr)
+                        except Exception:
                             has_current_slot = False
-                            try:
-                                act_curr = SlotActivation.objects(user_id=ObjectId(grandparent_id), program='matrix', slot_no=slot_no, status='completed').first()
-                                has_current_slot = bool(act_curr)
-                            except Exception:
-                                has_current_slot = False
-                            
-                            if has_current_slot:
-                                # Eligible! Route to reserve
-                                reserve_service = TreeUplineReserveService()
-                                ok, msg = reserve_service.add_to_reserve_fund(
-                                    tree_upline_id=grandparent_id,
-                                    program='matrix',
-                                    slot_no=slot_no,
-                                    amount=Decimal(str(amount)),
-                                    source_user_id=str(user_id),
-                                    tx_hash=tx_hash
-                                )
-                                distributions.append({
-                                    "type": "super_upline_middle_reserve",
-                                    "to_user_id": grandparent_id,
-                                    "amount": float(amount),
-                                    "slot_no": slot_no,
-                                    "message": msg,
-                                    "success": ok
-                                })
-                                return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
-                            else:
+                        
+                        if has_current_slot:
+                            # Eligible! Route to reserve
+                            reserve_service = TreeUplineReserveService()
+                            ok, msg = reserve_service.add_to_reserve_fund(
+                                tree_upline_id=grandparent_id,
+                                program='matrix',
+                                slot_no=slot_no,
+                                amount=Decimal(str(amount)),
+                                source_user_id=str(user_id),
+                                tx_hash=tx_hash
+                            )
+                            distributions.append({
+                                "type": "super_upline_middle_reserve",
+                                "to_user_id": grandparent_id,
+                                "amount": float(amount),
+                                "slot_no": slot_no,
+                                "message": msg,
+                                "success": ok
+                            })
+                            return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
+                        else:
                                 # Ineligible (Missed Profit) -> Mother Account
                                 print(f"[MATRIX ROUTING] Grandparent {grandparent_id} does NOT have slot {slot_no}. Missed Profit.")
                                 
@@ -356,10 +352,7 @@ class FundDistributionService:
                                     "message": "Transferred to Mother Account due to inactive upline"
                                 })
                                 return {"success": True, "data": distributions, "total_distributed": float(amount), "routed_to_reserve": True}
-                        else:
-                            print(f"[MATRIX ROUTING] No grandparent found logic skipped (using S1 tree now)")
-                            # Fallback if needed, but we handled it above
-                            pass
+
 
                     # Case B: placement is Level-1 under a child... (This logic is complex, let's assume Case A covers most)
                     # Actually, Case B is for "derived" middle.

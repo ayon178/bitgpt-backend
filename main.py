@@ -298,6 +298,7 @@ async def startup_initializer():
         try:
             from modules.newcomer_support.service import NewcomerSupportService
             import asyncio
+            from modules.indexer.service import BlockchainIndexer  # [NEW] Import Indexer
 
             async def _run_ngs_cron():
                 svc = NewcomerSupportService()
@@ -313,11 +314,18 @@ async def startup_initializer():
                         print(f"[NGS_CRON] Error: {cron_err}")
                     # Sleep 24 hours between runs (once per day)
                     await asyncio.sleep(24 * 60 * 60)
-
+            
+            # Start existing scheduled tasks
             loop = asyncio.get_event_loop()
             loop.create_task(_run_ngs_cron())
+
+            # [NEW] Start Blockchain Event Indexer (Non-blocking)
+            # This runs the polling loop forever in the background
+            loop.create_task(BlockchainIndexer().start_worker())
+            print("[Startup] Blockchain Indexer worker task created.")
+
         except Exception as e:
-            print(f"[NGS_CRON] Failed to start background task: {e}")
+            print(f"[Startup] Failed to start background tasks: {e}")
 
     except Exception:
         # Startup should not crash app if seeding fails; logs are preferred in real env
